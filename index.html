@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#6c63ff">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="납품관리">
+  <link rel="apple-touch-icon" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAALQAAAC0CAYAAAA9zQYyAAADgElEQVR4nO3csXEUQRCG0RVFEjgkgUEQhAEmRAMeEAZBYJAEDmEI6+C4UgmdNDPd++97pgzd3aan1lyVStsGAAAAAAAAAAAAAAAAI91UH2CF929vb6vP0MWnrzfRM497c+K9XlLkEW9ExOPsPe7dHl7E8+0x7t0dWMjr7Sns3RxUyPX2EHb7Awq5n85hP6s+wH3E3FPnubT8Sev8wPhXt23dbkOLeV+6zatV0N0eDg/TaW4tfl10eiA8TfUVpHxDizlL9TxLg65+88xROdeyoMWcrWq+JUGL+Rgq5lx+h4aRlgdtOx/L6nkvDVrMx7Ry7suCFvOxrZq/OzRRlgRtO7NtazqYHrSYOTe7B1cOokwN2nbmLjO7sKGJMi1o25n7zOrDhibKlKBtZx5iRic2NFEETZThQbtucI3RvdjQRBE0UYYG7brBY4zsxoYmiqCJImiiCJoogiaKIAmiiAJoogiaKoIkiaKIImijxf8uxfX8V+3cLj/ej+gDT2NBEETRRBE0UQRMl/0Ph6x+/Kl/+w7vt5+XXPn7ZXlac5Y/P24vS15/IhiaKoIkiaKIImiiCJoqgiSJoogiaKIImiqCJImiiCJoogiaKoIkiaKIImiiCJoqgiSJoogiaKIImiqCJImiiCJoogiaKoIkiaKIImiiCJoqgiSJoogiaKIImiqCJImiiCJoogiaKoIkiaKLcjPpG79/e3o76XhzTp683T+7RhiaKoIkiaKIImijDgh5xoee4RvVjQxNF0EQRNFEETZShQftgyGOM7MaGJoqgiTI8aNcOrjG6FxuaKIImypSgXTt4iBmd2NBEmRa0Lc19ZvVhQxNlatC2NHeZ2YUNTZTpQdvSnJvdw5INLWq2bU0HrhxEWRa0LX1sq+a/dEOL+phWzn35lUPUx7J63u7QRCkJ2pY+hoo5l21oUWermm/plUPUmSrnWn6HFnWW6nm2isk/Td+v6pBPyjf0uS4Phet0mluroLet18Ph/7rNq9VhLrmC9NUt5JN2G/pc14d2dJ3n0vZgl2zrep1DPml/wEvCXm8PIZ/s5qCXhD3fnkI+2d2B7yLucfYY8bldH/4u4r7e3iM+F/NG7iPyv5LiBQAAAAAAAAAAAAAAmvoNL57jyrjjuqMAAAAASUVORK5CYII=">
+  <title>납품 관리 Pro</title>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body {
+      font-family: 'Noto Sans KR', sans-serif;
+      background: #0c0c13;
+      color: #eaeaf4;
+      height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 20px;
+    }
+    .icon {
+      width: 88px;
+      height: 88px;
+      border-radius: 24px;
+      background: linear-gradient(135deg, #6c63ff, #9d94ff);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 44px;
+      box-shadow: 0 8px 32px rgba(108,99,255,.45);
+      animation: pulse 2s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { box-shadow: 0 8px 32px rgba(108,99,255,.45); }
+      50%       { box-shadow: 0 8px 48px rgba(108,99,255,.75); }
+    }
+    .title  { font-size: 22px; font-weight: 900; letter-spacing: -.5px; }
+    .sub    { font-size: 13px; color: #7878a0; }
+    .bar-wrap {
+      width: 180px;
+      height: 4px;
+      background: #1a1a25;
+      border-radius: 99px;
+      overflow: hidden;
+      margin-top: 8px;
+    }
+    .bar {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #6c63ff, #9d94ff);
+      border-radius: 99px;
+      animation: load 1.2s ease-in-out forwards;
+    }
+    @keyframes load {
+      0%   { width: 0%; }
+      60%  { width: 75%; }
+      100% { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <div class="icon">📦</div>
+  <div>
+    <div class="title">납품 관리 Pro</div>
+    <div class="sub" style="text-align:center;margin-top:4px;">v58 · 잠시 후 시작됩니다…</div>
+  </div>
+  <div class="bar-wrap"><div class="bar" id="bar"></div></div>
+
+  <script>
+    // 로딩 바 완료 후 메인 앱으로 이동
+    document.getElementById('bar').addEventListener('animationend', () => {
+      location.replace('거래장완성_v58.html');
+    });
+    // 혹시 애니메이션 이벤트 미발생 시 폴백
+    setTimeout(() => location.replace('거래장완성_v58.html'), 1400);
+  </script>
+</body>
+</html>
