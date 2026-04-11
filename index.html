@@ -1693,10 +1693,10 @@ button, a, input, select, textarea,
             <div class="sparkline-wrap" id="sparkUnpaid"></div>
         </div>
         <!-- 일주일 매출 바차트 카드 (2칸 전체) -->
-        <div class="stat-card purple" style="grid-column:1/-1;padding-bottom:14px;background:linear-gradient(145deg,rgba(90,82,213,.28),rgba(123,110,246,.18));border:1.5px solid rgba(123,110,246,.38);">
+        <div class="stat-card pink" style="grid-column:1/-1;padding-bottom:14px;background:linear-gradient(145deg,rgba(220,50,90,.22),rgba(240,78,78,.14));border:1.5px solid rgba(240,78,78,.35);">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
                 <div class="stat-label" style="margin-bottom:0;">최근 7일 매출</div>
-                <div style="font-size:12px;color:#c4b5fd;font-weight:800;font-family:'DM Mono',monospace;" id="dashWeekTotal"></div>
+                <div style="font-size:12px;color:#fca5a5;font-weight:800;font-family:'DM Mono',monospace;" id="dashWeekTotal"></div>
             </div>
             <div id="dashWeekBarChart" style="display:flex;align-items:flex-end;gap:5px;height:80px;"></div>
         </div>
@@ -5084,8 +5084,8 @@ function deleteOrder(id) {
                     si.qty = before + (Number(it.qty)||0);
                     (si.log = si.log||[]).unshift({
                         type:'restore', qty: si.qty-before, before, after:si.qty,
-                        reason:'납품삭제복구('+o.clientName+')',
-                        date: todayKST(), at: new Date().toISOString()
+                        reason:`납품삭제복구(${o.clientName}·${o.date})`,
+                        date: todayKST(), originalDate: o.date, at: new Date().toISOString()
                     });
                     si.log = _trimLogByDate(si.log);
                 });
@@ -6686,7 +6686,6 @@ function renderDashboard() {
     const month = todayKST().slice(0,7);
     const curr  = orders.filter(o=>o.date.startsWith(month));
     const sales  = curr.reduce((s,o)=>s+o.total,0);
-    const paid   = curr.reduce((s,o)=>s+_actualPaid(o),0);
     // 미수금: 전체 기간 누적 미수금
     const totalUnpaid = orders.reduce((s, o) => {
         const remain = Math.max(0, o.total - _actualPaid(o));
@@ -6789,9 +6788,9 @@ function _renderWeekBarChart() {
         const barH = Math.max(pct * 0.62, d.sales > 0 ? 4 : 0); // max 62px
         const isToday = d.isToday;
         const barColor = isToday
-            ? 'linear-gradient(180deg,#a78bfa,#7b6ef6)'
-            : 'linear-gradient(180deg,rgba(167,139,250,.75),rgba(123,110,246,.5))';
-        const labelColor = isToday ? '#c4b5fd' : 'rgba(167,139,250,.75)';
+            ? 'linear-gradient(180deg,#f87171,#ef4444)'
+            : 'linear-gradient(180deg,rgba(248,113,113,.75),rgba(239,68,68,.5))';
+        const labelColor = isToday ? '#fca5a5' : 'rgba(248,113,113,.8)';
         const amtLabel = d.sales >= 1000000
             ? (d.sales/1000000).toFixed(1)+'M'
             : d.sales >= 1000
@@ -6800,10 +6799,10 @@ function _renderWeekBarChart() {
         return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;min-width:0;">
             <div style="font-size:9px;font-weight:700;color:${labelColor};height:13px;line-height:13px;overflow:hidden;white-space:nowrap;">${amtLabel}</div>
             <div style="width:100%;flex:1;display:flex;align-items:flex-end;">
-                <div style="width:100%;height:${barH}px;background:${barColor};border-radius:4px 4px 2px 2px;transition:height .4s cubic-bezier(.4,0,.2,1);min-height:${d.sales>0?'3px':'0'};box-shadow:${isToday?'0 0 8px rgba(123,110,246,.5)':'none'};"></div>
+                <div style="width:100%;height:${barH}px;background:${barColor};border-radius:4px 4px 2px 2px;transition:height .4s cubic-bezier(.4,0,.2,1);min-height:${d.sales>0?'3px':'0'};box-shadow:${isToday?'0 0 8px rgba(239,68,68,.5)':'none'};"></div>
             </div>
-            <div style="font-size:9px;font-weight:${isToday?'900':'600'};color:${isToday?'#c4b5fd':'rgba(167,139,250,.6)'};line-height:1;">${d.day}</div>
-            <div style="font-size:8px;color:rgba(167,139,250,.45);line-height:1;">${d.label}</div>
+            <div style="font-size:9px;font-weight:${isToday?'900':'600'};color:${isToday?'#fca5a5':'rgba(248,113,113,.6)'};line-height:1;">${d.day}</div>
+            <div style="font-size:8px;color:rgba(248,113,113,.45);line-height:1;">${d.label}</div>
         </div>`;
     }).join('');
 }
@@ -6953,7 +6952,6 @@ function getLast7DaysData(type) {
     return days.map(d => {
         const dayOrders = orders.filter(o => o.date === d);
         if (type === 'sales') return dayOrders.reduce((s, o) => s + o.total, 0);
-        if (type === 'count') return dayOrders.length;
         if (type === 'paid')  return dayOrders.reduce((s, o) => s + _actualPaid(o), 0);
         if (type === 'unpaid') return dayOrders.filter(o => !o.isPaid).reduce((s, o) => s + o.total, 0);
         return 0;
@@ -7106,11 +7104,14 @@ function getInOutAtDate(si, targetDateStr) {
     const startUTC = new Date(targetDateStr + 'T00:00:00+09:00').getTime();
     const endUTC   = new Date(targetDateStr + 'T23:59:59+09:00').getTime();
     const dayLogs  = (si.log || []).filter(l => {
+        if (l.type === 'auto') return l.date === targetDateStr; // 납품차감은 납품날짜 기준
         const t = l.at ? new Date(l.at).getTime() : 0;
         return t >= startUTC && t <= endUTC;
     });
     const inQty  = dayLogs.filter(l => l.type === 'in').reduce((s, l) => s + Math.abs(l.qty), 0);
-    const restoreQty = dayLogs.filter(l => l.type === 'restore' || (l.type === 'edit_adj' && (l.qty||0) > 0)).reduce((s, l) => s + Math.abs(l.qty), 0);
+    // restore는 originalDate가 targetDate인 것만 해당 날짜 출고 상쇄
+    const restoreQty = dayLogs.filter(l => (l.type === 'restore' && (l.originalDate || l.date) === targetDateStr)
+                                        || (l.type === 'edit_adj' && (l.qty||0) > 0)).reduce((s, l) => s + Math.abs(l.qty), 0);
     const logOutQty = Math.max(0, dayLogs.filter(l => l.type === 'out' || l.type === 'auto' || (l.type === 'edit_adj' && l.qty < 0)).reduce((s, l) => s + Math.abs(l.qty), 0) - restoreQty);
     const outQty = logOutQty;
     return { inQty, outQty, logOutQty };
@@ -7169,6 +7170,7 @@ function getTodayInOut(si) {
     const todayStartUTC    = new Date(today + 'T00:00:00+09:00').getTime();
     const tomorrowStartUTC = todayStartUTC + 86400000;
     const todayLogs = (si.log || []).filter(l => {
+        if (l.type === 'auto') return l.date === today; // 납품차감은 납품날짜 기준
         const t = l.at ? new Date(l.at).getTime() : 0;
         return t >= todayStartUTC && t < tomorrowStartUTC;
     });
@@ -7177,9 +7179,10 @@ function getTodayInOut(si) {
         .filter(l => l.type === 'in')
         .reduce((s, l) => s + Math.abs(l.qty), 0);
     // 출고 상쇄: 납품삭제복구(restore) + 납품수정보정 증가(edit_adj>0)
-    // → 잘못 입력한 납품을 수정하면 해당 수량이 출고에서 빠져야 함
+    // restore는 originalDate가 오늘인 것만 상쇄 (이전 날짜 전표 삭제는 오늘 출고에 영향 없음)
     const restoreQty = todayLogs
-        .filter(l => l.type === 'restore' || (l.type === 'edit_adj' && (l.qty||0) > 0))
+        .filter(l => (l.type === 'restore' && (l.originalDate || l.date) === today)
+                  || (l.type === 'edit_adj' && (l.qty||0) > 0))
         .reduce((s, l) => s + Math.abs(l.qty), 0);
     // 출고: type=out(수동), auto(납품차감), edit_adj(수정보정 감소)
     const logOutQty = Math.max(0, todayLogs
@@ -7644,13 +7647,14 @@ function refreshStockCarryover(silent = false) {
         const todayStartUTC    = new Date(today + 'T00:00:00+09:00').getTime();
         const tomorrowStartUTC = todayStartUTC + 86400000;
         const todayLogs = (si.log || []).filter(l => {
+            if (l.type === 'auto') return l.date === today; // 납품차감은 납품날짜 기준
             const t = l.at ? new Date(l.at).getTime() : 0;
             return t >= todayStartUTC && t < tomorrowStartUTC;
         });
         const todayDeduct = Math.max(0, todayLogs
             .filter(l => l.type === 'auto' || l.type === 'out' || (l.type === 'edit_adj' && l.qty < 0))
             .reduce((s, l) => s + Math.abs(l.qty), 0)
-            - todayLogs.filter(l => l.type === 'restore').reduce((s, l) => s + Math.abs(l.qty), 0));
+            - todayLogs.filter(l => l.type === 'restore' && (l.originalDate || l.date) === today).reduce((s, l) => s + Math.abs(l.qty), 0));
         const todayIn = todayLogs
             .filter(l => l.type === 'in' || (l.type === 'edit_adj' && l.qty > 0))
             .reduce((s, l) => s + Math.abs(l.qty), 0);
@@ -7936,7 +7940,10 @@ function openStockLog(id) {
     // 날짜별 그룹핑
     const dayMap = {};
     log.forEach(l => {
-        const d = (l.at || l.date || '').slice(0, 10) || '날짜미상';
+        // auto(납품차감)는 납품 날짜 기준, 나머지는 등록 시각 기준
+        const d = l.type === 'auto'
+            ? (l.date || (l.at||'').slice(0,10) || '날짜미상')
+            : ((l.at || l.date || '').slice(0, 10) || '날짜미상');
         if (!dayMap[d]) dayMap[d] = [];
         dayMap[d].push(l);
     });
@@ -7950,7 +7957,7 @@ function openStockLog(id) {
         const dayClosing = lastLog ? lastLog.after : '?';
         const inSum  = dayLogs.filter(l => l.type === 'in').reduce((s, l) => s + Math.abs(l.qty||0), 0);
         const outSum = Math.max(0, dayLogs.filter(l => l.type === 'out' || l.type === 'auto' || (l.type === 'edit_adj' && (l.qty||0) < 0)).reduce((s, l) => s + Math.abs(l.qty||0), 0)
-                     - dayLogs.filter(l => l.type === 'restore' || (l.type === 'edit_adj' && (l.qty||0) > 0)).reduce((s, l) => s + Math.abs(l.qty||0), 0));
+                     - dayLogs.filter(l => (l.type === 'restore' && (l.originalDate || l.date) === day) || (l.type === 'edit_adj' && (l.qty||0) > 0)).reduce((s, l) => s + Math.abs(l.qty||0), 0));
         return `
 <div style="margin-bottom:10px;">
   <div style="display:flex;justify-content:space-between;align-items:center;
