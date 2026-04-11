@@ -3152,7 +3152,6 @@ function _buildClientStatsCache() {
         if (!m[key]) m[key] = { count:0, total:0, unpaid:0, lastDate:'' };
         m[key].count++;
         m[key].total += o.total;
-        // 미수금: 타인거래도 포함 (거래는 실제로 이루어진 것)
         if (!o.isPaid) m[key].unpaid += Math.max(0, (o.total - (o.paidAmount||0)));
         if (o.date > m[key].lastDate) m[key].lastDate = o.date;
     }
@@ -4741,7 +4740,7 @@ function setHistPayFilter(f, btn) {
 // ── 오늘 거래 건수 위젯 독립 업데이트 (항상 전체 orders 기준) ──
 function _updateTodayCountWidget() {
     const todayStr = todayKST();
-    const todayOrders = orders.filter(o => o.date === todayStr);
+    const todayOrders = orders.filter(o => o.date === todayStr && !o.isVoid);
     const todayCount  = todayOrders.length;
     const todayAmt    = todayOrders.reduce((s, o) => s + o.total, 0);
     const numEl = document.getElementById('todayCountNum');
