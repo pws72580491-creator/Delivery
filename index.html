@@ -4766,12 +4766,12 @@ function renderOrders() {
         return mSearch && mDate && mPay;
     });
 
-    const totalAmt  = filtered.reduce((s,o)=>s+o.total,0);
-    const paidAmt     = filtered.reduce((s,o)=>s+_actualPaid(o),0);
+    const totalAmt  = filtered.filter(o=>!o.isVoid).reduce((s,o)=>s+o.total,0);
+    const paidAmt     = filtered.filter(o=>!o.isVoid).reduce((s,o)=>s+_actualPaid(o),0);
     const unpaidAmt   = Math.max(0, totalAmt - paidAmt);
     // 수금방법별 집계 (paidAmount 기준)
     let cashAmt = 0, transferAmt = 0, otherPaidAmt = 0;
-    filtered.forEach(o => {
+    filtered.filter(o=>!o.isVoid).forEach(o => {
         const got = _actualPaid(o);
         if (got <= 0) return;
         if (o.paidMethod === 'transfer') transferAmt += got;
