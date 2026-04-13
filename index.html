@@ -4766,7 +4766,8 @@ function renderOrders() {
         return mSearch && mDate && mPay;
     });
 
-    const totalAmt  = filtered.filter(o=>!o.isVoid).reduce((s,o)=>s+o.total,0);
+    const _et       = o => o.isPaid && o.discount > 0 ? o.total - o.discount : o.total;
+    const totalAmt  = filtered.filter(o=>!o.isVoid).reduce((s,o)=>s+_et(o),0);
     const paidAmt     = filtered.filter(o=>!o.isVoid).reduce((s,o)=>s+_actualPaid(o),0);
     const unpaidAmt   = Math.max(0, totalAmt - paidAmt);
     // 수금방법별 집계 (paidAmount 기준)
@@ -4866,7 +4867,8 @@ function renderOrders() {
         g.lastDate = g.orders[0]?.date || '';
         g.lastAt   = g.orders[0]?.createdAt || '';
         g.unpaid   = g.orders.filter(o=>!o.isPaid).reduce((s,o)=>s+o.total,0);
-        g.total    = g.orders.reduce((s,o)=>s+o.total,0);
+        const _et  = o => o.isPaid && o.discount > 0 ? o.total - o.discount : o.total;
+        g.total    = g.orders.reduce((s,o)=>s+_et(o),0);
     });
     const groups = Object.values(groupMap);
     if (histSortMode === 'recent') {
@@ -5507,7 +5509,8 @@ function renderSettlement() {
     const month = document.getElementById('settlementMonth').value;
     if (!month) return;
     let filtered = applyPayFilter(orders.filter(o=>o.date.startsWith(month)));
-    const totalSales   = filtered.reduce((s,o)=>s+o.total,0);
+    const _et = o => o.isPaid && o.discount > 0 ? o.total - o.discount : o.total;
+    const totalSales   = filtered.reduce((s,o)=>s+_et(o),0);
     const paidAmount   = filtered.reduce((s,o)=>s+_actualPaid(o),0);
     const unpaidAmount = totalSales - paidAmount;
     renderSummaryBox(totalSales, paidAmount, unpaidAmount);
@@ -5540,7 +5543,8 @@ function renderSettlementDaily() {
     const dateLabel = `${yr}년 ${parseInt(mo)}월 ${parseInt(dd)}일 (${dow})`;
 
     let dayOrders = applyPayFilter(orders.filter(o => o.date === date));
-    const totalSales  = dayOrders.reduce((s,o)=>s+o.total,0);
+    const _et = o => o.isPaid && o.discount > 0 ? o.total - o.discount : o.total;
+    const totalSales  = dayOrders.reduce((s,o)=>s+_et(o),0);
     const paidAmount  = dayOrders.reduce((s,o)=>s+_actualPaid(o),0);
     const unpaidAmt   = totalSales - paidAmount;
 
@@ -5569,7 +5573,8 @@ function renderSettlementDaily() {
     el.innerHTML = `
         <div style="font-size:11px;color:var(--text2);margin-bottom:8px;">총 ${dayOrders.length}건 · ${Object.keys(clientMap).length}개 거래처</div>
         ${Object.entries(clientMap).map(([cname, list]) => {
-            const cTotal  = list.reduce((s,o)=>s+o.total,0);
+            const _et = o => o.isPaid && o.discount > 0 ? o.total - o.discount : o.total;
+            const cTotal  = list.reduce((s,o)=>s+_et(o),0);
             const cPaid   = list.reduce((s,o)=>s+_actualPaid(o),0);
             return `
             <div class="card" style="margin-bottom:10px;padding:12px;">
@@ -5610,19 +5615,20 @@ function renderSettlementQuarterly() {
     ];
 
     let allYearOrders = applyPayFilter(orders.filter(o=>o.date.startsWith(String(year))));
-    const yearTotal  = allYearOrders.reduce((s,o)=>s+o.total,0);
+    const _et = o => o.isPaid && o.discount > 0 ? o.total - o.discount : o.total;
+    const yearTotal  = allYearOrders.reduce((s,o)=>s+_et(o),0);
     const yearPaid   = allYearOrders.reduce((s,o)=>s+_actualPaid(o),0);
     renderSummaryBox(yearTotal, yearPaid, yearTotal-yearPaid);
 
     const qData = quarters.map(q => {
         const mos = q.months.map(m=>`${year}-${m}`);
         const list = applyPayFilter(orders.filter(o=> mos.some(m=>o.date.startsWith(m))));
-        const sales  = list.reduce((s,o)=>s+o.total,0);
+        const sales  = list.reduce((s,o)=>s+_et(o),0);
         const paid   = list.reduce((s,o)=>s+_actualPaid(o),0);
         // 월별 세부
         const monthRows = q.months.map(m => {
             const ml = applyPayFilter(orders.filter(o=>o.date.startsWith(`${year}-${m}`)));
-            const ms = ml.reduce((s,o)=>s+o.total,0);
+            const ms = ml.reduce((s,o)=>s+_et(o),0);
             const mp = ml.reduce((s,o)=>s+_actualPaid(o),0);
             return { month:`${year}-${m}`, sales:ms, paid:mp, count:ml.length };
         });
@@ -5774,7 +5780,9 @@ async function shareStatement() {
 function showClientStatement(clientName, month) {
     const monthStart = month+'-01';
     const filt = orders.filter(o=>o.clientName===clientName&&o.date.startsWith(month)).sort((a,b)=>a.date.localeCompare(b.date));
-    const monthTotal  = filt.reduce((s,o)=>s+o.total,0);
+    // 할인 완납된 전표는 실청구액(total - discount)으로 집계
+    const _effectiveTotal = o => o.isPaid && o.discount > 0 ? o.total - o.discount : o.total;
+    const monthTotal  = filt.reduce((s,o)=>s+_effectiveTotal(o),0);
     // 수금액 = 완납전표 합산 + 부분입금 누적액
     const monthPaid   = filt.reduce((s,o)=>s+_actualPaid(o),0);
     const monthUnpaid = monthTotal - monthPaid;
@@ -5784,7 +5792,7 @@ function showClientStatement(clientName, month) {
     // ── 오늘 이전까지(어제까지) 해당 거래처 전체 납품 합계 ──
     const todayStr = todayKST();
     const beforeTodayOrders = orders.filter(o=>o.clientName===clientName && o.date < todayStr && o.date.startsWith(month));
-    const beforeTodayTotal  = beforeTodayOrders.reduce((s,o)=>s+o.total,0);
+    const beforeTodayTotal  = beforeTodayOrders.reduce((s,o)=>s+_effectiveTotal(o),0);
     const client = clients.find(c=>c.name===clientName);
     const phone  = client?.phone||'';
     const smsText = `[${clientName}님 거래명세표]\n기간: ${month}\n전월이월: ${fmt(carryAmt)}원\n당월매출: ${fmt(monthTotal)}원\n수금액: ${fmt(monthPaid)}원\n청구금액: ${fmt(grandUnpaid)}원`;
@@ -5942,7 +5950,8 @@ function saveStatementJPG(clientName, month) {
     const monthStart = month + '-01';
     const filt = orders.filter(o => o.clientName === clientName && o.date.startsWith(month))
                        .sort((a, b) => a.date.localeCompare(b.date));
-    const monthTotal  = filt.reduce((s, o) => s + o.total, 0);
+    const _effectiveTotal = o => o.isPaid && o.discount > 0 ? o.total - o.discount : o.total;
+    const monthTotal  = filt.reduce((s, o) => s + _effectiveTotal(o), 0);
     const monthPaid   = filt.reduce((s,o)=>s+_actualPaid(o),0);
     const monthUnpaid = monthTotal - monthPaid;
     const carryOrders = orders.filter(o => o.clientName === clientName && o.date < monthStart && !o.isPaid)
@@ -6684,7 +6693,8 @@ function _doBulkPay(selectedMethod) {
 function renderDashboard() {
     const month = todayKST().slice(0,7);
     const curr  = orders.filter(o=>o.date.startsWith(month));
-    const sales  = curr.reduce((s,o)=>s+o.total,0);
+    const _et   = o => o.isPaid && o.discount > 0 ? o.total - o.discount : o.total;
+    const sales  = curr.reduce((s,o)=>s+_et(o),0);
     // 미수금: 전체 기간 누적 미수금
     const totalUnpaid = orders.reduce((s, o) => {
         const remain = Math.max(0, o.total - _actualPaid(o));
@@ -6773,11 +6783,12 @@ function _renderWeekBarChart() {
     const today = todayKST();
     const days = [];
     for (let i = 6; i >= 0; i--) days.push(kstAddDays(today, -i));
+    const _et = o => o.isPaid && o.discount > 0 ? o.total - o.discount : o.total;
     const data = days.map(d => ({
-        label: d.slice(5),          // MM-DD
+        label: d.slice(5),
         day: ['일','월','화','수','목','금','토'][new Date(d).getDay()],
         isToday: d === today,
-        sales: orders.filter(o => o.date === d).reduce((s, o) => s + o.total, 0)
+        sales: orders.filter(o => o.date === d && !o.isVoid).reduce((s, o) => s + _et(o), 0)
     }));
     const maxVal = Math.max(...data.map(d => d.sales), 1);
     const weekTotal = data.reduce((s, d) => s + d.sales, 0);
@@ -6950,7 +6961,8 @@ function getLast7DaysData(type) {
     }
     return days.map(d => {
         const dayOrders = orders.filter(o => o.date === d);
-        if (type === 'sales') return dayOrders.reduce((s, o) => s + o.total, 0);
+        const _et = o => o.isPaid && o.discount > 0 ? o.total - o.discount : o.total;
+        if (type === 'sales') return dayOrders.reduce((s, o) => s + _et(o), 0);
         if (type === 'paid')  return dayOrders.reduce((s, o) => s + _actualPaid(o), 0);
         if (type === 'unpaid') return dayOrders.filter(o => !o.isPaid).reduce((s, o) => s + o.total, 0);
         return 0;
@@ -6981,7 +6993,8 @@ function renderSettleBarChart(monthKey) {
         while (m > 12) { m -= 12; y++; }
         const ym = `${y}-${String(m).padStart(2,'0')}`;
         const mos = orders.filter(o => o.date.startsWith(ym));
-        const total = mos.reduce((s, o) => s + o.total, 0);
+        const _et  = o => o.isPaid && o.discount > 0 ? o.total - o.discount : o.total;
+        const total = mos.reduce((s, o) => s + _et(o), 0);
         const paid  = mos.reduce((s, o) => s + _actualPaid(o), 0);
         const unpaid = total - paid;
         months.push({ label: ym.slice(5) + '월', total, paid, unpaid });
