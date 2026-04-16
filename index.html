@@ -4407,6 +4407,20 @@ function addItemToGroup() {
     let group = tempGroups.find(g => g.date===date);
     if (!group) { group={date,items:[]}; tempGroups.push(group); tempGroups.sort((a,b)=>a.date.localeCompare(b.date)); }
     group.items.push({ name, qty, price, total:qty*price });
+
+    // ── 재고 부족 경고 (자동차감 ON이고 재고 등록된 품목일 때) ──
+    if (stockAutoDeduct && !_deliveryIsVoid) {
+        const si = findStockByName(name);
+        if (si) {
+            // tempGroups 전체에서 해당 품목 누적 수량 계산
+            const totalNeeded = tempGroups.reduce((s, g) =>
+                s + g.items.filter(i => normItemName(i.name) === normItemName(name))
+                           .reduce((ss, i) => ss + i.qty, 0), 0);
+            if (totalNeeded > si.qty) {
+                toast(`⚠️ ${name} 재고 부족 — 현재 ${si.qty}${si.unit||'개'}, 필요 ${totalNeeded}${si.unit||'개'}`, 'var(--orange)', 3000);
+            }
+        }
+    }
     document.getElementById('itemName').value  = '';
     document.getElementById('itemQty').value   = '';
     document.getElementById('itemPrice').value = '';
@@ -4487,6 +4501,35 @@ function openDeliveryConfirm() {
     const client = clients.find(c => c.id === clientId);
     if (!client) return toast('❗ 거래처를 다시 선택하세요');
 
+    // ── 재고 부족 검사 (자동차감 ON이고 타인거래 아닐 때) ──
+    if (stockAutoDeduct && !_deliveryIsVoid) {
+        // 품목별 총 필요 수량 집계
+        const needed = {};
+        tempGroups.forEach(g => {
+            g.items.forEach(it => {
+                const key = normItemName(it.name);
+                needed[key] = (needed[key] || { name: it.name, qty: 0 });
+                needed[key].qty += it.qty;
+            });
+        });
+        const shortages = [];
+        Object.values(needed).forEach(({ name, qty }) => {
+            const si = findStockByName(name);
+            if (si && qty > si.qty) {
+                shortages.push({ name, need: qty, have: si.qty, unit: si.unit || '개' });
+            }
+        });
+        if (shortages.length > 0) {
+            const msg = shortages.map(s =>
+                `· ${s.name}: 필요 ${s.need}${s.unit} / 현재 ${s.have}${s.unit} (${s.need - s.have}${s.unit} 부족)`
+            ).join('\n');
+            const proceed = confirm(
+                `⚠️ 재고가 부족한 품목이 있습니다.\n\n${msg}\n\n그래도 납품을 진행할까요?`
+            );
+            if (!proceed) return;
+        }
+    }
+
     // 요약 정보 구성
     const totalAmt = tempGroups.reduce((s, g) => s + g.items.reduce((a, i) => a + i.total, 0), 0);
     const dateCount = tempGroups.length;
@@ -4500,10 +4543,13 @@ function openDeliveryConfirm() {
     tempGroups.forEach(g => {
         html += `<div style="font-weight:700;color:var(--accent);margin-bottom:4px;">📅 ${g.date}</div>`;
         g.items.forEach(it => {
-            html += `<div style="display:flex;justify-content:space-between;align-items:baseline;color:var(--text2);padding-left:8px;margin-bottom:3px;gap:8px;">
-                <span style="flex:1;min-width:0;">${it.name}</span>
+            const si = stockAutoDeduct && !_deliveryIsVoid ? findStockByName(it.name) : null;
+            const isShort = si && it.qty > si.qty;
+            const stockHint = si ? `<span style="font-size:10px;color:${isShort?'var(--red)':'var(--green)'};margin-left:4px;">(재고 ${si.qty}${si.unit||'개'}${isShort?' ⚠부족':''})</span>` : '';
+            html += `<div style="display:flex;justify-content:space-between;align-items:baseline;color:${isShort?'var(--red)':'var(--text2)'};padding-left:8px;margin-bottom:3px;gap:8px;">
+                <span style="flex:1;min-width:0;">${it.name}${stockHint}</span>
                 <span style="font-size:11px;white-space:nowrap;color:var(--text3);">${it.qty}개 × ${fmt(it.price)}원</span>
-                <span style="font-family:'DM Mono',monospace;font-weight:700;color:var(--text);white-space:nowrap;">= ${fmt(it.total)}원</span>
+                <span style="font-family:'DM Mono',monospace;font-weight:700;color:${isShort?'var(--red)':'var(--text)'};white-space:nowrap;">= ${fmt(it.total)}원</span>
             </div>`;
         });
     });
