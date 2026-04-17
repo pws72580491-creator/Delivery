@@ -2888,6 +2888,28 @@ button, a, input, select, textarea,
             <label class="form-label">메모</label>
             <textarea class="form-input" id="oeditNote" rows="2" placeholder="메모 (선택)"></textarea>
         </div>
+        <!-- ③ 타인거래 토글 -->
+        <div id="oeditVoidToggleWrap" style="
+            display:flex; align-items:center; justify-content:space-between;
+            padding:13px 14px; margin-bottom:14px;
+            background:var(--surf2); border:1.5px solid var(--border);
+            border-radius:var(--radius-s); cursor:pointer;"
+            onclick="toggleOeditVoid()">
+            <div>
+                <div style="font-size:13px;font-weight:700;">👤 타인거래</div>
+                <div style="font-size:11px;color:var(--text2);margin-top:2px;">재고 차감 제외 · 매출은 정상 집계</div>
+            </div>
+            <div id="oeditVoidSwitch" style="
+                width:44px; height:24px; border-radius:12px;
+                background:var(--surf3); border:1.5px solid var(--border);
+                position:relative; transition:background .2s, border-color .2s; flex-shrink:0;">
+                <div id="oeditVoidKnob" style="
+                    position:absolute; top:2px; left:2px;
+                    width:18px; height:18px; border-radius:50%;
+                    background:var(--text3); transition:transform .2s, background .2s;">
+                </div>
+            </div>
+        </div>
         <div style="display:flex;gap:8px;">
             <button class="btn btn-primary" style="flex:2;" onclick="saveOrderEdit()">💾 저장</button>
             <button class="btn btn-ghost"   style="flex:1;" onclick="closeModal('orderEditModal')">취소</button>
@@ -4875,7 +4897,7 @@ function renderOrders() {
             <div class="order-actions">
                 <button class="btn btn-ghost btn-sm" onclick="showOrderDetail('${oId}')">🔍<span class="btn-label">상세</span></button>
                 ${voided
-                    ? `<button class="btn btn-ghost btn-sm" onclick="toggleVoidOrder('${oId}')" style="color:var(--green);border-color:rgba(32,192,92,.4);">↩<span class="btn-label">내거래로</span></button>`
+                    ? `<button class="btn btn-primary btn-sm" onclick="openOrderEdit('${oId}')">✏️<span class="btn-label">수정</span></button><button class="btn btn-ghost btn-sm" onclick="toggleVoidOrder('${oId}')" style="color:var(--green);border-color:rgba(32,192,92,.4);">↩<span class="btn-label">내거래로</span></button>`
                     : `<button class="btn btn-primary btn-sm" onclick="openOrderEdit('${oId}')">✏️<span class="btn-label">수정</span></button>`
                 }
                 <button class="btn btn-ghost btn-sm" onclick="openClientEditFromHistory('${cId}','${cName}')">🏪<span class="btn-label">거래처</span></button>
@@ -5243,13 +5265,43 @@ let _oeditItems = [];   // 현재 편집 중인 품목 배열
 function openOrderEdit(id) {
     const o = orders.find(o => o.id === id);
     if (!o) return toast('❗ 전표를 찾을 수 없습니다');
-    document.getElementById('oeditOrderId').value   = id;
+    document.getElementById('oeditOrderId').value    = id;
     document.getElementById('oeditClientName').value = o.clientName || '';
     document.getElementById('oeditDate').value       = o.date || '';
     document.getElementById('oeditNote').value       = o.note || '';
     _oeditItems = (o.items || []).map(it => ({ ...it }));  // 깊은 복사
+    // ③ 타인거래 토글 초기화
+    _applyOeditVoidUI(!!o.isVoid);
     renderOeditItems();
     openModal('orderEditModal');
+}
+
+// ③ 타인거래 토글 UI 적용
+function _applyOeditVoidUI(isVoid) {
+    const sw   = document.getElementById('oeditVoidSwitch');
+    const knob = document.getElementById('oeditVoidKnob');
+    if (!sw || !knob) return;
+    if (isVoid) {
+        sw.style.background   = 'rgba(245,166,35,0.25)';
+        sw.style.borderColor  = 'rgba(245,166,35,0.6)';
+        knob.style.background = 'var(--orange)';
+        knob.style.transform  = 'translateX(20px)';
+    } else {
+        sw.style.background   = 'var(--surf3)';
+        sw.style.borderColor  = 'var(--border)';
+        knob.style.background = 'var(--text3)';
+        knob.style.transform  = 'translateX(0)';
+    }
+}
+
+// ③ 토글 클릭 시 상태 전환
+function toggleOeditVoid() {
+    const sw   = document.getElementById('oeditVoidSwitch');
+    if (!sw) return;
+    // 현재 ON 여부: knob이 오른쪽으로 이동해 있으면 ON
+    const knob = document.getElementById('oeditVoidKnob');
+    const isCurrentlyVoid = knob.style.transform === 'translateX(20px)';
+    _applyOeditVoidUI(!isCurrentlyVoid);
 }
 
 function renderOeditItems() {
@@ -5368,6 +5420,13 @@ function saveOrderEdit() {
     o.totalAmount = total;
     o.note  = note;
     o.updatedAt = new Date().toISOString();
+    // ③ 타인거래 토글 반영
+    const knob = document.getElementById('oeditVoidKnob');
+    const newIsVoid = knob ? knob.style.transform === 'translateX(20px)' : !!o.isVoid;
+    const wasVoid = !!o.isVoid;
+    o.isVoid = newIsVoid;
+    // 타인거래 → 내거래 전환 시 자동 재고 차감 보정 (위 품목 차이 보정과 별도로 처리됨)
+    // 내거래 → 타인거래 전환 시 이미 차감된 재고는 복구하지 않음 (데이터 일관성 유지)
     // ── paidAmount 캡핑: 새 합계보다 초과 지불된 경우 조정 ──
     let _autoCompleted = false;
     if (!o.isPaid) {
@@ -5414,9 +5473,12 @@ function saveOrderEdit() {
         showClientStatement(o.clientName, o.date.slice(0, 7));
     }
     closeModal('orderEditModal');
+    const voidMsg = newIsVoid !== wasVoid
+        ? (newIsVoid ? ' · 👤 타인거래로 변경' : ' · ↩ 내거래로 변경')
+        : '';
     toast(_autoCompleted
-        ? '💚 수정 완료 — 단가 감소로 완납 처리되었습니다'
-        : '✅ 납품 내역이 수정되었습니다', 'var(--green)');
+        ? '💚 수정 완료 — 단가 감소로 완납 처리되었습니다' + voidMsg
+        : '✅ 납품 내역이 수정되었습니다' + voidMsg, 'var(--green)');
 }
 
 function showOrderDetail(id) {
