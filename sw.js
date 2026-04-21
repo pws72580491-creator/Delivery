@@ -1,8 +1,10 @@
-// 납품 관리 Pro - Service Worker v58
-const CACHE = 'delivery-pro-v59';
+// 납품 관리 Pro - Service Worker v60
+const CACHE = 'delivery-pro-v60';
 const OFFLINE_ASSETS = [
     './',
-    './index.html'
+    './index.html',
+    './style.css',
+    './app.js'
 ];
 
 self.addEventListener('install', e => {
