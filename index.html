@@ -2769,6 +2769,35 @@ button, a, input, select, textarea,
     </div>
 </div>
 
+<!-- ─── 거래처 메모 팝업 ─── -->
+<div id="clientMemoOverlay" onclick="closeClientMemo()"></div>
+<div id="clientMemoPopup">
+    <div class="memo-popup-handle"></div>
+    <div class="memo-popup-title" id="memoPopupTitle">📝 메모</div>
+    <div class="memo-popup-sub"  id="memoPopupSub"></div>
+    <input type="hidden" id="memoClientId">
+    <!-- 빠른 메모 칩 -->
+    <div class="memo-chips" id="memoChips">
+        <button class="memo-chip" onclick="insertMemoChip('VIP')">⭐ VIP</button>
+        <button class="memo-chip" onclick="insertMemoChip('주의')">⚠️ 주의</button>
+        <button class="memo-chip" onclick="insertMemoChip('단골')">🏆 단골</button>
+        <button class="memo-chip" onclick="insertMemoChip('현금만')">💵 현금만</button>
+        <button class="memo-chip" onclick="insertMemoChip('계좌이체')">🏦 계좌이체</button>
+        <button class="memo-chip" onclick="insertMemoChip('격주납품')">📅 격주납품</button>
+        <button class="memo-chip" onclick="insertMemoChip('매주납품')">🔁 매주납품</button>
+        <button class="memo-chip" onclick="insertMemoChip('연락주의')">📵 연락주의</button>
+    </div>
+    <textarea class="memo-textarea" id="memoTextarea"
+        placeholder="거래처 관련 메모를 입력하세요&#10;(예: 매주 화요일 납품, 현금 결제 선호 등)"
+        oninput="updateMemoCharCount(this)"
+        maxlength="200"></textarea>
+    <div class="memo-char-count"><span id="memoCharCount">0</span> / 200</div>
+    <div style="display:flex;gap:8px;">
+        <button class="btn btn-ghost" style="flex:1;" onclick="closeClientMemo()">취소</button>
+        <button class="btn btn-primary" style="flex:2;" onclick="saveClientMemo()">💾 저장</button>
+    </div>
+</div>
+
 <!-- 토스트 -->
 <div class="toast" id="toast"></div>
 
@@ -3576,6 +3605,62 @@ function saveData() {
     _renderActiveIfDirty();
 }
 
+// ╔══════════════════════════════════════════════════════════════╗
+// ║  거래처 메모 팝업                                                    ║
+// ╚══════════════════════════════════════════════════════════════╝
+
+function openClientMemo(clientId) {
+    const c = clients.find(c => c.id === clientId);
+    if (!c) return;
+    document.getElementById('memoClientId').value   = clientId;
+    document.getElementById('memoPopupTitle').textContent = `📝 ${c.name} 메모`;
+    document.getElementById('memoPopupSub').textContent   = c.note ? '메모를 수정하거나 삭제할 수 있습니다' : '이 거래처에 대한 메모를 남겨보세요';
+    const ta = document.getElementById('memoTextarea');
+    ta.value = c.note || '';
+    updateMemoCharCount(ta);
+    document.getElementById('clientMemoOverlay').classList.add('open');
+    document.getElementById('clientMemoPopup').classList.add('open');
+    // 히스토리 push (뒤로가기 지원)
+    history.pushState({ memoOpen: true }, '');
+    setTimeout(() => ta.focus(), 150);
+}
+
+function closeClientMemo() {
+    document.getElementById('clientMemoOverlay').classList.remove('open');
+    document.getElementById('clientMemoPopup').classList.remove('open');
+}
+
+function saveClientMemo() {
+    const clientId = document.getElementById('memoClientId').value;
+    const c = clients.find(c => c.id === clientId);
+    if (!c) return;
+    const memo = document.getElementById('memoTextarea').value.trim();
+    c.note = memo;
+    c.updatedAt = new Date().toISOString();
+    saveData();
+    renderClients();
+    closeClientMemo();
+    toast(memo ? '📝 메모가 저장되었습니다' : '🗑️ 메모가 삭제되었습니다', 'var(--accent)');
+}
+
+function updateMemoCharCount(ta) {
+    const el = document.getElementById('memoCharCount');
+    if (el) el.textContent = ta.value.length;
+}
+
+function insertMemoChip(text) {
+    const ta = document.getElementById('memoTextarea');
+    const cur = ta.value;
+    // 이미 있는 칩이면 제거, 없으면 추가
+    if (cur.includes(text)) {
+        ta.value = cur.replace(text, '').replace(/^[,\s]+|[,\s]+$/g, '').trim();
+    } else {
+        ta.value = cur ? cur + ', ' + text : text;
+    }
+    updateMemoCharCount(ta);
+    ta.focus();
+}
+
 // ─── 토스트 ───
 
 // ╔══════════════════════════════════════════════════════════════╗
@@ -3781,6 +3866,8 @@ function closeModal(id) {
 // 브라우저/안드로이드 이전(뒤로가기) 버튼 → 최상위 모달 닫기
 window.addEventListener('popstate', () => {
     _modalHistoryPushed = false;
+    // 메모 팝업
+    if (document.getElementById('clientMemoPopup')?.classList.contains('open')) { closeClientMemo(); return; }
     // 퀵페이 팝업류 전용 처리
     if (document.getElementById('bulkPayPopup')?.classList.contains('open'))      { closeBulkPayPopup(); return; }
     if (document.getElementById('deliveryConfirmPopup')?.classList.contains('open')) { closeDeliveryConfirm(); return; }
@@ -4120,11 +4207,12 @@ function _clientCardHTML(c, statsMap, q) {
                 ${c.address ? `<div class="client-phone" style="font-size:11px;">📍 ${escapeHtml(c.address)}</div>` : ''}
                 <div class="client-stats">거래 ${stats.count}건 · ${fmt(stats.total)}원</div>
                 ${unpaidAmt > 0 ? `<div><span class="client-unpaid-badge ${badgeCls}">💸 미수 ${fmt(unpaidAmt)}원 ${ageLabel}</span></div>` : ''}
-                ${c.note ? `<div class="client-stats" style="color:var(--text3);">📝 ${escapeHtml(c.note)}</div>` : ''}
+                ${c.note ? `<div class="memo-note-badge" onclick="openClientMemo('${safeId}')">📝 ${escapeHtml(c.note)}</div>` : ''}
             </div>
             <div class="client-actions">
                 ${c.phone ? `<a href="tel:${escapeHtml(c.phone)}" class="btn-call">📞</a>` : ''}
                 <button class="btn-deliver" onclick="quickDeliver('${safeId}','${safeName}')">🚚</button>
+                <button class="btn btn-ghost btn-sm" onclick="openClientMemo('${safeId}')" title="메모" style="font-size:14px;padding:7px 9px;">📝</button>
                 <button class="btn btn-ghost btn-sm" onclick="editClient('${safeId}')">수정</button>
                 <button class="btn btn-danger btn-sm" onclick="deleteClient('${safeId}')">삭제</button>
             </div>
@@ -6232,6 +6320,85 @@ function saveStatementJPG(clientName, month) {
 .dash-unpaid-days.warn   { color: var(--orange); }
 .dash-unpaid-days.danger { color: #ef4444; }
 .dash-unpaid-days.severe { color: #fca5a5; }
+
+/* ══ 거래처 메모 팝업 ══ */
+#clientMemoPopup {
+    position:fixed; bottom:0; left:50%; transform:translateX(-50%);
+    width:100%; max-width:520px;
+    background:var(--surf);
+    border-radius:22px 22px 0 0;
+    border:1.5px solid var(--border-s);
+    padding:20px 20px calc(20px + env(safe-area-inset-bottom,0px));
+    z-index:3000;
+    box-shadow:0 -8px 40px rgba(0,0,0,.5);
+    display:none;
+    animation:slideUp .25s cubic-bezier(.4,0,.2,1);
+}
+#clientMemoPopup.open { display:block; }
+#clientMemoOverlay {
+    display:none; position:fixed; inset:0;
+    background:rgba(0,0,0,.6);
+    backdrop-filter:blur(3px);
+    -webkit-backdrop-filter:blur(3px);
+    z-index:2999;
+}
+#clientMemoOverlay.open { display:block; }
+.memo-popup-handle {
+    width:36px; height:4px; border-radius:2px;
+    background:var(--border-s); margin:0 auto 16px;
+}
+.memo-popup-title {
+    font-size:16px; font-weight:900;
+    margin-bottom:4px; letter-spacing:-.3px;
+}
+.memo-popup-sub {
+    font-size:12px; color:var(--text2);
+    margin-bottom:14px;
+}
+.memo-chips { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px; }
+.memo-chip {
+    padding:6px 13px; border-radius:99px;
+    border:1.5px solid var(--border);
+    background:var(--surf2); color:var(--text2);
+    font-size:12px; font-weight:600; cursor:pointer;
+    transition:all .15s;
+}
+.memo-chip:hover  { border-color:var(--accent); color:var(--accent); background:var(--accent-dim); }
+.memo-chip:active { transform:scale(.95); }
+.memo-textarea {
+    width:100%; min-height:90px;
+    padding:12px 14px;
+    background:var(--surf3);
+    border:1.5px solid var(--border);
+    border-radius:var(--radius-s);
+    color:var(--text); font-family:'Noto Sans KR',sans-serif;
+    font-size:14px; line-height:1.6;
+    outline:none; resize:none;
+    transition:border-color .2s, box-shadow .2s;
+    margin-bottom:6px;
+}
+.memo-textarea:focus {
+    border-color:var(--accent);
+    box-shadow:0 0 0 3px var(--accent-dim);
+}
+.memo-textarea::placeholder { color:var(--text3); }
+.memo-char-count {
+    text-align:right; font-size:11px;
+    color:var(--text3); margin-bottom:12px;
+}
+.memo-note-badge {
+    display:inline-flex; align-items:center; gap:4px;
+    font-size:11px; color:var(--text2);
+    background:var(--surf2);
+    border:1.5px solid var(--border);
+    border-left:3px solid var(--accent);
+    border-radius:var(--radius-xs); padding:5px 9px;
+    margin-top:5px; max-width:100%;
+    cursor:pointer; transition:all .15s;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+.memo-note-badge:hover { border-color:var(--accent); color:var(--accent); background:var(--accent-dim); }
+/* ══ /거래처 메모 팝업 ══ */
 
 /* ── 수금 방법 선택 ── */
 .pay-method-group { display:flex; gap:8px; margin-bottom:14px; }
@@ -9230,6 +9397,9 @@ document.addEventListener('keydown', e => {
     if (qp && qp.classList.contains('open')) { closeQuickPay(); return; }
     const bp = document.getElementById('bulkPayPopup');
     if (bp && bp.classList.contains('open')) { closeBulkPayPopup(); return; }
+    // 메모 팝업
+    const mp = document.getElementById('clientMemoPopup');
+    if (mp && mp.classList.contains('open')) { closeClientMemo(); return; }
     const modals = [
         'firebaseModal','detailModal','statementModal','partialPayModal','payEditModal',
         'clientEditModal','orderEditModal','stockEditModal','stockAdjModal','stockLogModal'
