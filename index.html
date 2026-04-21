@@ -1309,6 +1309,21 @@
 </div>
 
 
+<!-- ─── 메모 팝업 ─── -->
+<div id="memoPopup" onclick="if(event.target===this)closeMemoPopup()">
+    <div class="memo-popup-box">
+        <div class="memo-popup-title">
+            📝 메모
+            <span id="memoPopupClient"></span>
+        </div>
+        <textarea id="memoTextarea" placeholder="메모를 입력하세요…"></textarea>
+        <div class="memo-popup-btns">
+            <button class="btn btn-primary" style="flex:1;" onclick="saveMemoPopup()">💾 저장</button>
+            <button class="btn btn-ghost"   style="flex:1;" onclick="closeMemoPopup()">취소</button>
+        </div>
+    </div>
+</div>
+
 <!-- ─── 앱 스크립트 ─── -->
 <script src="./app.js" defer></script>
 

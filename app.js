@@ -1961,11 +1961,14 @@ function renderOrders() {
         const badgeHtml = voided
             ? `<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;"><span class="void-badge">👤 타인거래</span>${payBadge}</div>`
             : payBadge;
+        const memoLabel = o.note ? escapeHtml(o.note.length>12 ? o.note.slice(0,12)+'…' : o.note) : '메모';
+        const memoClass = o.note ? 'memo-btn has-memo' : 'memo-btn';
         return `<div class="${cardClass}">
             <div class="order-top">
-                <div>
+                <div style="display:flex;flex-direction:column;gap:4px;">
                     <div class="order-client-name" onclick="showClientStatement('${cName}','${o.date.slice(0,7)}')">${highlight(o.clientName||'(거래처없음)', q)}</div>
                     <div class="order-date">${escapeHtml(o.date)}</div>
+                    <button class="${memoClass}" onclick="openMemoPopup('${oId}')">📝 ${memoLabel}</button>
                 </div>
                 ${badgeHtml}
             </div>
@@ -6485,5 +6488,48 @@ window.addEventListener('DOMContentLoaded', () => {
     // 이미 설치된 경우 (standalone 모드)
     if (window.matchMedia('(display-mode: standalone)').matches) {
         console.log('PWA 모드로 실행 중');
+    }
+});
+
+// ╔══════════════════════════════════════════════════════════════╗
+// ║  § MEMO  전표 메모 팝업                                           ║
+// ╚══════════════════════════════════════════════════════════════╝
+
+let _memoTargetId = null;
+
+function openMemoPopup(orderId) {
+    const o = orders.find(x => x.id === orderId);
+    if (!o) return;
+    _memoTargetId = orderId;
+    document.getElementById('memoPopupClient').textContent = o.clientName || '';
+    document.getElementById('memoTextarea').value = o.note || '';
+    document.getElementById('memoPopup').classList.add('open');
+    setTimeout(() => document.getElementById('memoTextarea').focus(), 120);
+}
+
+function closeMemoPopup() {
+    document.getElementById('memoPopup').classList.remove('open');
+    _memoTargetId = null;
+}
+
+function saveMemoPopup() {
+    if (!_memoTargetId) return;
+    const o = orders.find(x => x.id === _memoTargetId);
+    if (!o) return;
+    const text = document.getElementById('memoTextarea').value.trim();
+    o.note = text;
+    o.updatedAt = new Date().toISOString();
+    saveData();
+    debouncedSync();
+    closeMemoPopup();
+    renderOrders();
+    toast(text ? '📝 메모 저장됨' : '🗑️ 메모 삭제됨', 'var(--accent)');
+}
+
+// Escape 키로 메모 팝업 닫기 (기존 keydown 핸들러에 추가)
+document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+        const mp = document.getElementById('memoPopup');
+        if (mp && mp.classList.contains('open')) { closeMemoPopup(); }
     }
 });
