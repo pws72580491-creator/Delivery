@@ -3882,7 +3882,7 @@ function renderDashboard() {
     const month = todayKST().slice(0,7);
     const curr  = orders.filter(o=>o.date.startsWith(month));
     const _et   = o => o.isPaid && o.discount > 0 ? o.total - o.discount : o.total;
-    const sales  = curr.reduce((s,o)=>s+_et(o),0);
+    const sales  = curr.filter(o=>!o.isVoid).reduce((s,o)=>s+_et(o),0); // 타인거래 제외
     // 미수금: 전체 기간 누적 미수금
     const totalUnpaid = orders.reduce((s, o) => {
         const remain = Math.max(0, o.total - _actualPaid(o));
@@ -4150,7 +4150,7 @@ function getLast7DaysData(type) {
     return days.map(d => {
         const dayOrders = orders.filter(o => o.date === d);
         const _et = o => o.isPaid && o.discount > 0 ? o.total - o.discount : o.total;
-        if (type === 'sales') return dayOrders.reduce((s, o) => s + _et(o), 0);
+        if (type === 'sales') return dayOrders.filter(o => !o.isVoid).reduce((s, o) => s + _et(o), 0); // 타인거래 제외
         if (type === 'paid')  return dayOrders.reduce((s, o) => s + _actualPaid(o), 0);
         if (type === 'unpaid') return dayOrders.filter(o => !o.isPaid).reduce((s, o) => s + o.total, 0);
         return 0;
