@@ -1337,6 +1337,15 @@
     </div>
 </div>
 
+<!-- 말풍선 팝업 -->
+<div id="memoBubble" onclick="closeMemoBubble()" style="display:none;position:fixed;inset:0;z-index:4000;">
+    <div class="memo-bubble-box" id="memoBubbleBox" onclick="event.stopPropagation()">
+        <div class="memo-bubble-client" id="memoBubbleClient"></div>
+        <div class="memo-bubble-list" id="memoBubbleList"></div>
+        <button class="memo-bubble-close" onclick="closeMemoBubble()">✕ 닫기</button>
+    </div>
+</div>
+
 <!-- ─── 메모 팝업 ─── -->
 <div id="memoPopup" onclick="if(event.target===this)closeMemoPopup()">
     <div class="memo-popup-box">

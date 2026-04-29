@@ -1765,3 +1765,86 @@ button, a, input, select, textarea,
     font-size:11px; color:var(--text3);
     text-align:right; margin-bottom:6px;
 }
+
+/* ═══════════════════════════════════════
+   말풍선 팝업
+═══════════════════════════════════════ */
+#memoBubble {
+    background: rgba(0,0,0,.35);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px 16px;
+}
+.memo-bubble-box {
+    background: var(--surf);
+    border-radius: 18px;
+    width: 100%;
+    max-width: 420px;
+    padding: 0;
+    box-shadow: 0 12px 48px rgba(0,0,0,.45);
+    overflow: hidden;
+    animation: fadeUp .18s cubic-bezier(.4,0,.2,1);
+    position: relative;
+}
+/* 말풍선 꼬리 */
+.memo-bubble-box::after {
+    content: '';
+    position: absolute;
+    bottom: -14px;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 8px solid transparent;
+    border-top-color: var(--surf);
+    filter: drop-shadow(0 4px 4px rgba(0,0,0,.15));
+}
+.memo-bubble-client {
+    background: var(--accent);
+    color: #fff;
+    font-size: 14px; font-weight: 800;
+    padding: 14px 18px;
+    display: flex; align-items: center; gap:8px;
+}
+.memo-bubble-list {
+    max-height: 52dvh;
+    overflow-y: auto;
+    padding: 6px 0;
+}
+.memo-bubble-item {
+    padding: 12px 18px;
+    border-bottom: 1px solid var(--border);
+    display: flex; flex-direction: column; gap: 5px;
+}
+.memo-bubble-item:last-child { border-bottom: none; }
+.memo-bubble-date {
+    font-size: 11px; color: var(--text3);
+    font-family: 'DM Mono', monospace;
+}
+.memo-bubble-text {
+    font-size: 14px; color: var(--text);
+    line-height: 1.55;
+}
+.memo-bubble-edit {
+    margin-top: 4px;
+    font-size: 11px; font-weight: 700;
+    color: var(--accent);
+    background: var(--accent-dim);
+    border: none; border-radius: 8px;
+    padding: 4px 10px;
+    cursor: pointer;
+    align-self: flex-start;
+    transition: opacity .15s;
+}
+.memo-bubble-edit:active { opacity: .7; }
+.memo-bubble-close {
+    width: 100%;
+    padding: 12px;
+    background: var(--surf2);
+    border: none;
+    border-top: 1px solid var(--border);
+    color: var(--text3);
+    font-size: 13px; font-weight: 700;
+    cursor: pointer;
+    transition: background .15s;
+}
+.memo-bubble-close:active { background: var(--surf3); }

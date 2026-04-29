@@ -6640,23 +6640,42 @@ function renderMemoBoard() {
     list.innerHTML = `<div class="memo-board-count">총 ${total}건</div>` +
         clientNames.map(name => `
         <div class="memo-board-client">
-            <div class="memo-board-client-name">
+            <div class="memo-board-client-name" onclick="openMemoBubble('${escapeHtml(name).replace(/'/g,"\\'")}')">
                 🏪 ${escapeHtml(name)}
                 <span style="font-size:11px;font-weight:500;color:var(--text3);">${grouped[name].length}건</span>
+                <span style="margin-left:auto;font-size:13px;">›</span>
             </div>
-            ${grouped[name].map(o => `
-                <div class="memo-board-row" onclick="closeMemoBoard();openMemoPopup('${o.id}')">
-                    <div class="memo-board-date">${escapeHtml(o.date || '')}</div>
-                    <div class="memo-board-text">${escapeHtml(o.note)}</div>
-                </div>
-            `).join('')}
         </div>
     `).join('');
+}
+
+function openMemoBubble(clientName) {
+    const items = (orders || [])
+        .filter(o => o.note && o.note.trim() && (o.clientName || '') === clientName)
+        .filter(o => _memoPeriodFilter(o))
+        .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+
+    document.getElementById('memoBubbleClient').innerHTML = `🏪 ${escapeHtml(clientName)} <span style="font-size:12px;opacity:.8;">${items.length}건</span>`;
+    document.getElementById('memoBubbleList').innerHTML = items.map(o => `
+        <div class="memo-bubble-item">
+            <div class="memo-bubble-date">${escapeHtml(o.date || '')}</div>
+            <div class="memo-bubble-text">${escapeHtml(o.note)}</div>
+            <button class="memo-bubble-edit" onclick="closeMemoBubble();closeMemoBoard();openMemoPopup('${o.id}')">✏️ 수정</button>
+        </div>
+    `).join('');
+
+    document.getElementById('memoBubble').style.display = 'flex';
+}
+
+function closeMemoBubble() {
+    document.getElementById('memoBubble').style.display = 'none';
 }
 
 // ESC 키로 닫기
 document.addEventListener('keydown', e => {
     if (e.key === 'Escape') {
+        const bubble = document.getElementById('memoBubble');
+        if (bubble && bubble.style.display === 'flex') { closeMemoBubble(); return; }
         const mb = document.getElementById('memoBoardOverlay');
         if (mb && mb.style.display === 'flex') closeMemoBoard();
     }
