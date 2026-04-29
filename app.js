@@ -6637,16 +6637,26 @@ function renderMemoBoard() {
     const clientNames = Object.keys(grouped).sort((a, b) => a.localeCompare(b, 'ko'));
 
     const total = memoOrders.length;
-    list.innerHTML = `<div class="memo-board-count">총 ${total}건</div>` +
-        clientNames.map(name => `
-        <div class="memo-board-client">
-            <div class="memo-board-client-name" onclick="openMemoBubble('${escapeHtml(name).replace(/'/g,"\\'")}')">
-                🏪 ${escapeHtml(name)}
-                <span style="font-size:11px;font-weight:500;color:var(--text3);">${grouped[name].length}건</span>
-                <span style="margin-left:auto;font-size:13px;">›</span>
-            </div>
-        </div>
-    `).join('');
+    // 안전하게 DOM으로 직접 빌드
+    list.innerHTML = '';
+    const countEl = document.createElement('div');
+    countEl.className = 'memo-board-count';
+    countEl.textContent = `총 ${total}건`;
+    list.appendChild(countEl);
+
+    clientNames.forEach(name => {
+        const wrap = document.createElement('div');
+        wrap.className = 'memo-board-client';
+
+        const header = document.createElement('div');
+        header.className = 'memo-board-client-name';
+        header.style.cssText = 'cursor:pointer;';
+        header.innerHTML = `<span>🏪</span><span class="memo-bn-name">${escapeHtml(name)}</span><span class="memo-bn-cnt">${grouped[name].length}건</span><span class="memo-bn-arr">›</span>`;
+        header.addEventListener('click', () => openMemoBubble(name));
+
+        wrap.appendChild(header);
+        list.appendChild(wrap);
+    });
 }
 
 function openMemoBubble(clientName) {
