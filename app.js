@@ -6660,16 +6660,17 @@ function openMemoBubble(clientName, items) {
             openMemoPopup(btn.dataset.oid);
         });
     });
-    document.getElementById('memoBubble').classList.add('open');
+    const mb = document.getElementById('memoBubble');
+    mb.style.display = 'flex';
 }
 function closeMemoBubble() {
-    document.getElementById('memoBubble').classList.remove('open');
+    document.getElementById('memoBubble').style.display = 'none';
 }
 
 // ESC 키
 document.addEventListener('keydown', e => {
     if (e.key !== 'Escape') return;
-    if (document.getElementById('memoBubble').classList.contains('open')) { closeMemoBubble(); return; }
+    if (document.getElementById('memoBubble').style.display === 'flex') { closeMemoBubble(); return; }
     if (document.getElementById('memoBoardOverlay').style.display === 'flex') { closeMemoBoard(); return; }
     if (document.getElementById('memoPopup').classList.contains('open')) { closeMemoPopup(); }
 });
