@@ -1761,11 +1761,17 @@ button, a, input, select, textarea,
 
 /* 메모 모아보기 - 기간 필터 칩 */
 .memo-board-chips {
-    display:flex; gap:6px; flex-wrap:wrap;
+    display:flex; gap:6px;
+    flex-wrap:nowrap;
+    overflow-x:auto;
+    -webkit-overflow-scrolling:touch;
+    scrollbar-width:none;
     margin-bottom:10px;
+    padding-bottom:2px;
 }
+.memo-board-chips::-webkit-scrollbar { display:none; }
 .memo-chip {
-    padding:5px 13px;
+    padding:5px 12px;
     border-radius:20px;
     border:1.5px solid var(--border);
     background:transparent;
@@ -1774,6 +1780,7 @@ button, a, input, select, textarea,
     cursor:pointer;
     transition:all .15s;
     white-space:nowrap;
+    flex-shrink:0;
 }
 .memo-chip.active {
     background:var(--accent);
