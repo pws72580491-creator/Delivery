@@ -3882,7 +3882,7 @@ function renderDashboard() {
     const month = todayKST().slice(0,7);
     const curr  = orders.filter(o=>o.date.startsWith(month));
     const _et   = o => o.isPaid && o.discount > 0 ? o.total - o.discount : o.total;
-    const sales  = curr.filter(o=>!o.isVoid).reduce((s,o)=>s+_et(o),0); // 타인거래 제외
+    const sales  = curr.reduce((s,o)=>s+_et(o),0);
     // 미수금: 전체 기간 누적 미수금
     const totalUnpaid = orders.reduce((s, o) => {
         const remain = Math.max(0, o.total - _actualPaid(o));
@@ -4150,7 +4150,7 @@ function getLast7DaysData(type) {
     return days.map(d => {
         const dayOrders = orders.filter(o => o.date === d);
         const _et = o => o.isPaid && o.discount > 0 ? o.total - o.discount : o.total;
-        if (type === 'sales') return dayOrders.filter(o => !o.isVoid).reduce((s, o) => s + _et(o), 0); // 타인거래 제외
+        if (type === 'sales') return dayOrders.reduce((s, o) => s + _et(o), 0);
         if (type === 'paid')  return dayOrders.reduce((s, o) => s + _actualPaid(o), 0);
         if (type === 'unpaid') return dayOrders.filter(o => !o.isPaid).reduce((s, o) => s + o.total, 0);
         return 0;
@@ -6526,10 +6526,138 @@ function saveMemoPopup() {
     toast(text ? '📝 메모 저장됨' : '🗑️ 메모 삭제됨', 'var(--accent)');
 }
 
-// Escape 키로 메모 팝업 닫기 (기존 keydown 핸들러에 추가)
 document.addEventListener('keydown', e => {
     if (e.key === 'Escape') {
         const mp = document.getElementById('memoPopup');
         if (mp && mp.classList.contains('open')) { closeMemoPopup(); }
+    }
+});
+
+// ╔══════════════════════════════════════════════════════════════╗
+// ║  § MEMO BOARD  메모 모아보기                                      ║
+// ╚══════════════════════════════════════════════════════════════╝
+
+let _memoPeriod = 'all';
+
+function setMemoPeriod(period) {
+    _memoPeriod = period;
+    // 칩 active 상태 업데이트
+    document.querySelectorAll('.memo-chip').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.period === period);
+    });
+    // 월 직접 선택 표시/숨김
+    const monthWrap = document.getElementById('memoBoardMonthWrap');
+    if (period === 'lmonth') {
+        monthWrap.style.display = 'block';
+        // 지난달 기본값
+        const d = new Date();
+        d.setMonth(d.getMonth() - 1);
+        document.getElementById('memoBoardMonth').value =
+            `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+    } else {
+        monthWrap.style.display = 'none';
+    }
+    renderMemoBoard();
+}
+
+function _memoPeriodFilter(o) {
+    const date = o.date || '';
+    const today = new Date();
+    const d = new Date(date);
+
+    if (_memoPeriod === 'all') return true;
+
+    if (_memoPeriod === 'week') {
+        const start = new Date(today);
+        start.setDate(today.getDate() - today.getDay()); // 이번주 일요일
+        start.setHours(0,0,0,0);
+        const end = new Date(start);
+        end.setDate(start.getDate() + 6);
+        return d >= start && d <= end;
+    }
+    if (_memoPeriod === 'lweek') {
+        const start = new Date(today);
+        start.setDate(today.getDate() - today.getDay() - 7);
+        start.setHours(0,0,0,0);
+        const end = new Date(start);
+        end.setDate(start.getDate() + 6);
+        return d >= start && d <= end;
+    }
+    if (_memoPeriod === 'month') {
+        const ym = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}`;
+        return date.startsWith(ym);
+    }
+    if (_memoPeriod === 'lmonth') {
+        const sel = document.getElementById('memoBoardMonth').value;
+        return sel ? date.startsWith(sel) : false;
+    }
+    return true;
+}
+
+function openMemoBoard() {
+    _memoPeriod = 'all';
+    const el = document.getElementById('memoBoardOverlay');
+    el.style.display = 'flex';
+    document.querySelectorAll('.memo-chip').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.period === 'all');
+    });
+    document.getElementById('memoBoardMonthWrap').style.display = 'none';
+    document.getElementById('memoBoardSearch').value = '';
+    renderMemoBoard();
+}
+
+function closeMemoBoard() {
+    document.getElementById('memoBoardOverlay').style.display = 'none';
+}
+
+function renderMemoBoard() {
+    const q    = (document.getElementById('memoBoardSearch').value || '').trim().toLowerCase();
+    const list = document.getElementById('memoBoardList');
+
+    const memoOrders = (orders || [])
+        .filter(o => o.note && o.note.trim())
+        .filter(o => _memoPeriodFilter(o))
+        .filter(o => !q || (o.clientName || '').toLowerCase().includes(q));
+
+    if (!memoOrders.length) {
+        list.innerHTML = `<div class="memo-board-empty">📭 ${q ? '검색 결과 없음' : '해당 기간에 메모가 없습니다'}</div>`;
+        return;
+    }
+
+    // 거래처별 그룹핑
+    const grouped = {};
+    memoOrders.forEach(o => {
+        const name = o.clientName || '(거래처 없음)';
+        if (!grouped[name]) grouped[name] = [];
+        grouped[name].push(o);
+    });
+    Object.keys(grouped).forEach(name => {
+        grouped[name].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    });
+    const clientNames = Object.keys(grouped).sort((a, b) => a.localeCompare(b, 'ko'));
+
+    const total = memoOrders.length;
+    list.innerHTML = `<div class="memo-board-count">총 ${total}건</div>` +
+        clientNames.map(name => `
+        <div class="memo-board-client">
+            <div class="memo-board-client-name">
+                🏪 ${escapeHtml(name)}
+                <span style="font-size:11px;font-weight:500;color:var(--text3);">${grouped[name].length}건</span>
+            </div>
+            ${grouped[name].map(o => `
+                <div class="memo-board-row" onclick="closeMemoBoard();openMemoPopup('${o.id}')">
+                    <div class="memo-board-date">${escapeHtml(o.date || '')}</div>
+                    <div class="memo-board-text">${escapeHtml(o.note)}</div>
+                </div>
+            `).join('')}
+        </div>
+    `).join('');
+}
+
+// ESC 키로 닫기
+document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+        const mb = document.getElementById('memoBoardOverlay');
+        if (mb && mb.style.display === 'flex') closeMemoBoard();
     }
 });
