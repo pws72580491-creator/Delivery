@@ -1,5 +1,5 @@
-// 납품 관리 Pro - Service Worker v61
-const CACHE = 'delivery-pro-v61';
+// 납품 관리 Pro - Service Worker v62
+const CACHE = 'delivery-pro-v62';
 const OFFLINE_ASSETS = [
     './',
     './index.html',
