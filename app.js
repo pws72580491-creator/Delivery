@@ -5730,7 +5730,7 @@ function exportSettlementExcel() {
 }
 
 function exportJSON() {
-    const data = { clients, orders, prices, stockItems, exportDate:new Date().toISOString(), version:'58' };
+    const data = { clients, orders, prices, stockItems, exportDate:new Date().toISOString(), version:'67' };
     const blob = new Blob([JSON.stringify(data,null,2)], { type:'application/json' });
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement('a');
@@ -6491,10 +6491,9 @@ window.addEventListener('DOMContentLoaded', () => {
     }
 });
 
-// ╔══════════════════════════════════════════════════════════════╗
-// ║  § MEMO  전표 메모 팝업                                           ║
-// ╚══════════════════════════════════════════════════════════════╝
-
+// ═══════════════════════════════════════
+// 메모 팝업
+// ═══════════════════════════════════════
 let _memoTargetId = null;
 
 function openMemoPopup(orderId) {
@@ -6506,12 +6505,10 @@ function openMemoPopup(orderId) {
     document.getElementById('memoPopup').classList.add('open');
     setTimeout(() => document.getElementById('memoTextarea').focus(), 120);
 }
-
 function closeMemoPopup() {
     document.getElementById('memoPopup').classList.remove('open');
     _memoTargetId = null;
 }
-
 function saveMemoPopup() {
     if (!_memoTargetId) return;
     const o = orders.find(x => x.id === _memoTargetId);
@@ -6526,36 +6523,25 @@ function saveMemoPopup() {
     toast(text ? '📝 메모 저장됨' : '🗑️ 메모 삭제됨', 'var(--accent)');
 }
 
-document.addEventListener('keydown', e => {
-    if (e.key === 'Escape') {
-        const mp = document.getElementById('memoPopup');
-        if (mp && mp.classList.contains('open')) { closeMemoPopup(); }
-    }
-});
-
-// ╔══════════════════════════════════════════════════════════════╗
-// ║  § MEMO BOARD  메모 모아보기                                      ║
-// ╚══════════════════════════════════════════════════════════════╝
-
+// ═══════════════════════════════════════
+// 메모 모아보기
+// ═══════════════════════════════════════
 let _memoPeriod = 'all';
 
 function setMemoPeriod(period) {
     _memoPeriod = period;
-    // 칩 active 상태 업데이트
     document.querySelectorAll('.memo-chip').forEach(btn => {
         btn.classList.toggle('active', btn.dataset.period === period);
     });
-    // 월 직접 선택 표시/숨김
-    const monthWrap = document.getElementById('memoBoardMonthWrap');
+    const mw = document.getElementById('memoBoardMonthWrap');
     if (period === 'lmonth') {
-        monthWrap.style.display = 'block';
-        // 지난달 기본값
+        mw.style.display = 'block';
         const d = new Date();
         d.setMonth(d.getMonth() - 1);
         document.getElementById('memoBoardMonth').value =
-            `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+            d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
     } else {
-        monthWrap.style.display = 'none';
+        mw.style.display = 'none';
     }
     renderMemoBoard();
 }
@@ -6564,12 +6550,10 @@ function _memoPeriodFilter(o) {
     const date = o.date || '';
     const today = new Date();
     const d = new Date(date);
-
     if (_memoPeriod === 'all') return true;
-
     if (_memoPeriod === 'week') {
         const start = new Date(today);
-        start.setDate(today.getDate() - today.getDay()); // 이번주 일요일
+        start.setDate(today.getDate() - today.getDay());
         start.setHours(0,0,0,0);
         const end = new Date(start);
         end.setDate(start.getDate() + 6);
@@ -6584,7 +6568,7 @@ function _memoPeriodFilter(o) {
         return d >= start && d <= end;
     }
     if (_memoPeriod === 'month') {
-        const ym = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}`;
+        const ym = today.getFullYear() + '-' + String(today.getMonth()+1).padStart(2,'0');
         return date.startsWith(ym);
     }
     if (_memoPeriod === 'lmonth') {
@@ -6596,8 +6580,7 @@ function _memoPeriodFilter(o) {
 
 function openMemoBoard() {
     _memoPeriod = 'all';
-    const el = document.getElementById('memoBoardOverlay');
-    el.style.display = 'flex';
+    document.getElementById('memoBoardOverlay').style.display = 'flex';
     document.querySelectorAll('.memo-chip').forEach(btn => {
         btn.classList.toggle('active', btn.dataset.period === 'all');
     });
@@ -6605,13 +6588,12 @@ function openMemoBoard() {
     document.getElementById('memoBoardSearch').value = '';
     renderMemoBoard();
 }
-
 function closeMemoBoard() {
     document.getElementById('memoBoardOverlay').style.display = 'none';
 }
 
 function renderMemoBoard() {
-    const q    = (document.getElementById('memoBoardSearch').value || '').trim().toLowerCase();
+    const q = (document.getElementById('memoBoardSearch').value || '').trim().toLowerCase();
     const list = document.getElementById('memoBoardList');
 
     const memoOrders = (orders || [])
@@ -6620,7 +6602,7 @@ function renderMemoBoard() {
         .filter(o => !q || (o.clientName || '').toLowerCase().includes(q));
 
     if (!memoOrders.length) {
-        list.innerHTML = `<div class="memo-board-empty">📭 ${q ? '검색 결과 없음' : '해당 기간에 메모가 없습니다'}</div>`;
+        list.innerHTML = '<div class="memo-board-empty">📭 ' + (q ? '검색 결과 없음' : '해당 기간에 메모가 없습니다') + '</div>';
         return;
     }
 
@@ -6632,61 +6614,63 @@ function renderMemoBoard() {
         grouped[name].push(o);
     });
     Object.keys(grouped).forEach(name => {
-        grouped[name].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+        grouped[name].sort((a,b) => (b.date||'').localeCompare(a.date||''));
     });
-    const clientNames = Object.keys(grouped).sort((a, b) => a.localeCompare(b, 'ko'));
+    const clientNames = Object.keys(grouped).sort((a,b) => a.localeCompare(b,'ko'));
 
-    const total = memoOrders.length;
-    // 안전하게 DOM으로 직접 빌드
-    list.innerHTML = '';
-    const countEl = document.createElement('div');
-    countEl.className = 'memo-board-count';
-    countEl.textContent = `총 ${total}건`;
-    list.appendChild(countEl);
+    // 렌더링
+    let html = '<div class="memo-board-count">총 ' + memoOrders.length + '건</div>';
+    clientNames.forEach((name, idx) => {
+        html += '<div class="memo-client-row" data-mbidx="' + idx + '">'
+            + '<span class="memo-client-icon">🏪</span>'
+            + '<span class="memo-client-name">' + escapeHtml(name) + '</span>'
+            + '<span class="memo-client-cnt">' + grouped[name].length + '건</span>'
+            + '<span class="memo-client-arr">›</span>'
+            + '</div>';
+    });
+    list.innerHTML = html;
 
-    clientNames.forEach(name => {
-        const wrap = document.createElement('div');
-        wrap.className = 'memo-board-client';
-
-        const header = document.createElement('div');
-        header.className = 'memo-board-client-name';
-        header.style.cssText = 'cursor:pointer;';
-        header.innerHTML = `<span>🏪</span><span class="memo-bn-name">${escapeHtml(name)}</span><span class="memo-bn-cnt">${grouped[name].length}건</span><span class="memo-bn-arr">›</span>`;
-        header.addEventListener('click', () => openMemoBubble(name));
-
-        wrap.appendChild(header);
-        list.appendChild(wrap);
+    // 클릭 이벤트 - index로 매핑
+    list.querySelectorAll('.memo-client-row').forEach(el => {
+        const idx = parseInt(el.dataset.mbidx, 10);
+        el.addEventListener('click', () => openMemoBubble(clientNames[idx], grouped[clientNames[idx]]));
     });
 }
 
-function openMemoBubble(clientName) {
-    const items = (orders || [])
-        .filter(o => o.note && o.note.trim() && (o.clientName || '') === clientName)
-        .filter(o => _memoPeriodFilter(o))
-        .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-
-    document.getElementById('memoBubbleClient').innerHTML = `🏪 ${escapeHtml(clientName)} <span style="font-size:12px;opacity:.8;">${items.length}건</span>`;
-    document.getElementById('memoBubbleList').innerHTML = items.map(o => `
-        <div class="memo-bubble-item">
-            <div class="memo-bubble-date">${escapeHtml(o.date || '')}</div>
-            <div class="memo-bubble-text">${escapeHtml(o.note)}</div>
-            <button class="memo-bubble-edit" onclick="closeMemoBubble();closeMemoBoard();openMemoPopup('${o.id}')">✏️ 수정</button>
-        </div>
-    `).join('');
-
-    document.getElementById('memoBubble').style.display = 'flex';
+// ═══════════════════════════════════════
+// 말풍선 팝업
+// ═══════════════════════════════════════
+function openMemoBubble(clientName, items) {
+    document.getElementById('memoBubbleClient').textContent = '🏪 ' + clientName;
+    document.getElementById('memoBubbleCnt').textContent = items.length + '건';
+    const listEl = document.getElementById('memoBubbleList');
+    let html = '';
+    items.forEach(o => {
+        html += '<div class="memo-bubble-item">'
+            + '<div class="memo-bubble-date">' + escapeHtml(o.date || '') + '</div>'
+            + '<div class="memo-bubble-text">' + escapeHtml(o.note) + '</div>'
+            + '<button class="memo-bubble-edit" data-oid="' + o.id + '">✏️ 수정</button>'
+            + '</div>';
+    });
+    listEl.innerHTML = html;
+    listEl.querySelectorAll('.memo-bubble-edit').forEach(btn => {
+        btn.addEventListener('click', () => {
+            closeMemoBubble();
+            closeMemoBoard();
+            openMemoPopup(btn.dataset.oid);
+        });
+    });
+    const mb = document.getElementById('memoBubble');
+    mb.style.display = 'flex';
 }
-
 function closeMemoBubble() {
     document.getElementById('memoBubble').style.display = 'none';
 }
 
-// ESC 키로 닫기
+// ESC 키
 document.addEventListener('keydown', e => {
-    if (e.key === 'Escape') {
-        const bubble = document.getElementById('memoBubble');
-        if (bubble && bubble.style.display === 'flex') { closeMemoBubble(); return; }
-        const mb = document.getElementById('memoBoardOverlay');
-        if (mb && mb.style.display === 'flex') closeMemoBoard();
-    }
+    if (e.key !== 'Escape') return;
+    if (document.getElementById('memoBubble').style.display === 'flex') { closeMemoBubble(); return; }
+    if (document.getElementById('memoBoardOverlay').style.display === 'flex') { closeMemoBoard(); return; }
+    if (document.getElementById('memoPopup').classList.contains('open')) { closeMemoPopup(); }
 });
