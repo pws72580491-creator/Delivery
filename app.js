@@ -858,6 +858,10 @@ function closeModal(id) {
 // 브라우저/안드로이드 이전(뒤로가기) 버튼 → 최상위 모달 닫기
 window.addEventListener('popstate', () => {
     _modalHistoryPushed = false;
+    // 메모 상세 팝업 (더 안쪽 레이어이므로 먼저 처리)
+    if (document.getElementById('memoDetailPopup')?.classList.contains('open')) { closeMemoDetail(); return; }
+    // 메모 모아보기 팝업
+    if (document.getElementById('memoViewPopup')?.classList.contains('open'))   { closeMemoView();   return; }
     // 퀵페이 팝업류 전용 처리
     if (document.getElementById('bulkPayPopup')?.classList.contains('open'))      { closeBulkPayPopup(); return; }
     if (document.getElementById('deliveryConfirmPopup')?.classList.contains('open')) { closeDeliveryConfirm(); return; }
@@ -6514,6 +6518,8 @@ let _memoDetailClient = '';    // 상세 팝업에 표시 중인 거래처명
 function openMemoView() {
     _memoViewOffset = 0;
     document.getElementById('memoViewPopup').classList.add('open');
+    history.pushState({ modalOpen: true }, '');
+    _modalHistoryPushed = true;
     renderMemoView();
 }
 function closeMemoView() {
@@ -6617,6 +6623,8 @@ function openMemoDetail(clientName) {
         : `<div style="text-align:center;padding:36px 0;color:var(--text3);font-size:14px;">📭 메모가 없습니다</div>`;
 
     document.getElementById('memoDetailPopup').classList.add('open');
+    history.pushState({ modalOpen: true }, '');
+    _modalHistoryPushed = true;
 }
 
 function deleteMemoById(orderId) {
