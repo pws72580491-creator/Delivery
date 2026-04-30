@@ -1190,7 +1190,16 @@ function _clientCardHTML(c, statsMap, q) {
         <div class="swipe-bg-left">📞</div>
         <div class="swipe-bg-right">🗑️</div>
         <div class="swipe-inner">
-        <div class="client-card ${ageCls}">
+        <div class="client-card ${ageCls}" onclick="toggleClientTooltip(event, this)">
+            ${(() => {
+                // 이 거래처의 최근 메모 3개
+                const memos = (orders||[])
+                    .filter(o => o.clientName === c.name && o.note && o.note.trim())
+                    .sort((a,b) => (b.date||'').localeCompare(a.date||''))
+                    .slice(0, 3);
+                if (!memos.length) return '';
+                return `<div class="client-tooltip">${memos.map(o => `📅 ${o.date}\n📝 ${escapeHtml(o.note)}`).join('\n\n')}</div>`;
+            })()}
             <div>
                 <div class="client-name">${highlight(c.name, q)}</div>
                 ${c.phone ? `<div class="client-phone">📞 ${escapeHtml(c.phone)}</div>` : ''}
@@ -5730,7 +5739,7 @@ function exportSettlementExcel() {
 }
 
 function exportJSON() {
-    const data = { clients, orders, prices, stockItems, exportDate:new Date().toISOString(), version:'67' };
+    const data = { clients, orders, prices, stockItems, exportDate:new Date().toISOString(), version:'73' };
     const blob = new Blob([JSON.stringify(data,null,2)], { type:'application/json' });
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement('a');
@@ -6523,154 +6532,22 @@ function saveMemoPopup() {
     toast(text ? '📝 메모 저장됨' : '🗑️ 메모 삭제됨', 'var(--accent)');
 }
 
-// ═══════════════════════════════════════
-// 메모 모아보기
-// ═══════════════════════════════════════
-let _memoPeriod = 'all';
-
-function setMemoPeriod(period) {
-    _memoPeriod = period;
-    document.querySelectorAll('.memo-chip').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.period === period);
+// ═══ 거래처 카드 툴팁 토글 ═══
+function toggleClientTooltip(e, card) {
+    // 버튼(수정/삭제/전화/납품) 클릭 시 툴팁 무시
+    if (e.target.closest('button,a')) return;
+    const tooltip = card.querySelector('.client-tooltip');
+    if (!tooltip) return;
+    // 다른 열린 툴팁 먼저 닫기
+    document.querySelectorAll('.client-card.show-tooltip').forEach(el => {
+        if (el !== card) el.classList.remove('show-tooltip');
     });
-    const mw = document.getElementById('memoBoardMonthWrap');
-    if (period === 'lmonth') {
-        mw.style.display = 'block';
-        const d = new Date();
-        d.setMonth(d.getMonth() - 1);
-        document.getElementById('memoBoardMonth').value =
-            d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
-    } else {
-        mw.style.display = 'none';
-    }
-    renderMemoBoard();
+    card.classList.toggle('show-tooltip');
+    e.stopPropagation();
 }
-
-function _memoPeriodFilter(o) {
-    const date = o.date || '';
-    const today = new Date();
-    const d = new Date(date);
-    if (_memoPeriod === 'all') return true;
-    if (_memoPeriod === 'week') {
-        const start = new Date(today);
-        start.setDate(today.getDate() - today.getDay());
-        start.setHours(0,0,0,0);
-        const end = new Date(start);
-        end.setDate(start.getDate() + 6);
-        return d >= start && d <= end;
-    }
-    if (_memoPeriod === 'lweek') {
-        const start = new Date(today);
-        start.setDate(today.getDate() - today.getDay() - 7);
-        start.setHours(0,0,0,0);
-        const end = new Date(start);
-        end.setDate(start.getDate() + 6);
-        return d >= start && d <= end;
-    }
-    if (_memoPeriod === 'month') {
-        const ym = today.getFullYear() + '-' + String(today.getMonth()+1).padStart(2,'0');
-        return date.startsWith(ym);
-    }
-    if (_memoPeriod === 'lmonth') {
-        const sel = document.getElementById('memoBoardMonth').value;
-        return sel ? date.startsWith(sel) : false;
-    }
-    return true;
-}
-
-function openMemoBoard() {
-    _memoPeriod = 'all';
-    document.getElementById('memoBoardOverlay').style.display = 'flex';
-    document.querySelectorAll('.memo-chip').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.period === 'all');
+// 외부 클릭 시 툴팁 닫기
+document.addEventListener('click', () => {
+    document.querySelectorAll('.client-card.show-tooltip').forEach(el => {
+        el.classList.remove('show-tooltip');
     });
-    document.getElementById('memoBoardMonthWrap').style.display = 'none';
-    document.getElementById('memoBoardSearch').value = '';
-    renderMemoBoard();
-}
-function closeMemoBoard() {
-    document.getElementById('memoBoardOverlay').style.display = 'none';
-}
-
-function renderMemoBoard() {
-    const q = (document.getElementById('memoBoardSearch').value || '').trim().toLowerCase();
-    const list = document.getElementById('memoBoardList');
-
-    const memoOrders = (orders || [])
-        .filter(o => o.note && o.note.trim())
-        .filter(o => _memoPeriodFilter(o))
-        .filter(o => !q || (o.clientName || '').toLowerCase().includes(q));
-
-    if (!memoOrders.length) {
-        list.innerHTML = '<div class="memo-board-empty">📭 ' + (q ? '검색 결과 없음' : '해당 기간에 메모가 없습니다') + '</div>';
-        return;
-    }
-
-    // 거래처별 그룹핑
-    const grouped = {};
-    memoOrders.forEach(o => {
-        const name = o.clientName || '(거래처 없음)';
-        if (!grouped[name]) grouped[name] = [];
-        grouped[name].push(o);
-    });
-    Object.keys(grouped).forEach(name => {
-        grouped[name].sort((a,b) => (b.date||'').localeCompare(a.date||''));
-    });
-    const clientNames = Object.keys(grouped).sort((a,b) => a.localeCompare(b,'ko'));
-
-    // 렌더링
-    let html = '<div class="memo-board-count">총 ' + memoOrders.length + '건</div>';
-    clientNames.forEach((name, idx) => {
-        html += '<div class="memo-client-row" data-mbidx="' + idx + '">'
-            + '<span class="memo-client-icon">🏪</span>'
-            + '<span class="memo-client-name">' + escapeHtml(name) + '</span>'
-            + '<span class="memo-client-cnt">' + grouped[name].length + '건</span>'
-            + '<span class="memo-client-arr">›</span>'
-            + '</div>';
-    });
-    list.innerHTML = html;
-
-    // 클릭 이벤트 - index로 매핑
-    list.querySelectorAll('.memo-client-row').forEach(el => {
-        const idx = parseInt(el.dataset.mbidx, 10);
-        el.addEventListener('click', () => openMemoBubble(clientNames[idx], grouped[clientNames[idx]]));
-    });
-}
-
-// ═══════════════════════════════════════
-// 말풍선 팝업
-// ═══════════════════════════════════════
-function openMemoBubble(clientName, items) {
-    document.getElementById('memoBubbleClient').textContent = '🏪 ' + clientName;
-    document.getElementById('memoBubbleCnt').textContent = items.length + '건';
-    const listEl = document.getElementById('memoBubbleList');
-    let html = '';
-    items.forEach(o => {
-        html += '<div class="memo-bubble-item">'
-            + '<div class="memo-bubble-date">' + escapeHtml(o.date || '') + '</div>'
-            + '<div class="memo-bubble-text">' + escapeHtml(o.note) + '</div>'
-            + '<button class="memo-bubble-edit" data-oid="' + o.id + '">✏️ 수정</button>'
-            + '</div>';
-    });
-    listEl.innerHTML = html;
-    listEl.querySelectorAll('.memo-bubble-edit').forEach(btn => {
-        btn.addEventListener('click', () => {
-            closeMemoBubble();
-            closeMemoBoard();
-            openMemoPopup(btn.dataset.oid);
-        });
-    });
-    const mb = document.getElementById('memoBubble');
-    mb.style.display = 'flex';
-}
-function closeMemoBubble() {
-    document.getElementById('memoBubble').style.display = 'none';
-}
-
-// ESC 키
-document.addEventListener('keydown', e => {
-    if (e.key !== 'Escape') return;
-    if (document.getElementById('memoBubble').style.display === 'flex') { closeMemoBubble(); return; }
-    if (document.getElementById('memoBoardOverlay').style.display === 'flex') { closeMemoBoard(); return; }
-    if (document.getElementById('memoPopup').classList.contains('open')) { closeMemoPopup(); }
 });
