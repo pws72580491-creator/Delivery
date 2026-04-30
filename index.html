@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <!-- ─── PWA 메타태그 ─── -->
     <meta name="theme-color" content="#6c63ff">
     <meta name="mobile-web-app-capable" content="yes">
@@ -16,6 +17,8 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js" defer></script>
+
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -164,6 +167,8 @@
     <div id="unpaidClientList"></div>
 </div>
 
+<!-- ─── 납품 등록 ─── -->
+
 <!-- ─── 재고 관리 ─── -->
 <div class="pane" id="pane-stock">
   <!-- 과거 날짜 재고 조회 -->
@@ -222,7 +227,7 @@
   <div id="stockList"></div>
 </div>
 
-<!-- ─── 납품 등록 ─── -->
+<!-- ─── 거래처 ─── -->
 <div class="pane" id="pane-delivery">
     <div class="card">
         <div class="form-group" style="position:relative;">

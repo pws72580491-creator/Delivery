@@ -1885,7 +1885,7 @@ function setHistPayFilter(f, btn) {
 // ── 오늘 거래 건수 위젯 독립 업데이트 (항상 전체 orders 기준) ──
 function _updateTodayCountWidget() {
     const todayStr = todayKST();
-    const todayOrders = orders.filter(o => o.date === todayStr); // ✅ 타인거래 포함 (v60)
+    const todayOrders = orders.filter(o => o.date === todayStr && !o.isVoid);
     const todayCount  = todayOrders.length;
     const todayAmt    = todayOrders.reduce((s, o) => s + o.total, 0);
     const numEl = document.getElementById('todayCountNum');
@@ -1912,12 +1912,12 @@ function renderOrders() {
     });
 
     const _et       = o => o.isPaid && o.discount > 0 ? o.total - o.discount : o.total;
-    const totalAmt  = filtered.reduce((s,o)=>s+_et(o),0);                  // ✅ 타인거래 포함 (v60)
-    const paidAmt     = filtered.reduce((s,o)=>s+_actualPaid(o),0);        // ✅ 타인거래 포함 (v60)
+    const totalAmt  = filtered.filter(o=>!o.isVoid).reduce((s,o)=>s+_et(o),0);
+    const paidAmt     = filtered.filter(o=>!o.isVoid).reduce((s,o)=>s+_actualPaid(o),0);
     const unpaidAmt   = Math.max(0, totalAmt - paidAmt);
     // 수금방법별 집계 (paidAmount 기준)
     let cashAmt = 0, transferAmt = 0, otherPaidAmt = 0;
-    filtered.forEach(o => {
+    filtered.filter(o=>!o.isVoid).forEach(o => {
         const got = _actualPaid(o);
         if (got <= 0) return;
         if (o.paidMethod === 'transfer') transferAmt += got;
@@ -3928,7 +3928,6 @@ function renderDashboard() {
         if (o.isPaid) return;
         const key = o.clientId || o.clientName;
         if (!clientUnpaidMap[key]) clientUnpaidMap[key] = { name: o.clientName||'(없음)', amt: 0, oldestDate: o.date, phone: '' };
-        clientUnpaidMap[key].amt += Math.max(0, o.total - _actualPaid(o)); // ✅ 미수금 누산
         if (o.date < clientUnpaidMap[key].oldestDate) clientUnpaidMap[key].oldestDate = o.date;
     });
     // 연락처 보충
@@ -3977,7 +3976,7 @@ function _renderWeekBarChart() {
         label: d.slice(5),
         day: ['일','월','화','수','목','금','토'][new Date(d).getDay()],
         isToday: d === today,
-        sales: orders.filter(o => o.date === d).reduce((s, o) => s + _et(o), 0) // ✅ 타인거래 포함 (v60)
+        sales: orders.filter(o => o.date === d && !o.isVoid).reduce((s, o) => s + _et(o), 0)
     }));
     const maxVal = Math.max(...data.map(d => d.sales), 1);
     const weekTotal = data.reduce((s, d) => s + d.sales, 0);
@@ -5731,7 +5730,7 @@ function exportSettlementExcel() {
 }
 
 function exportJSON() {
-    const data = { clients, orders, prices, stockItems, exportDate:new Date().toISOString(), version:'60' };
+    const data = { clients, orders, prices, stockItems, exportDate:new Date().toISOString(), version:'58' };
     const blob = new Blob([JSON.stringify(data,null,2)], { type:'application/json' });
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement('a');
