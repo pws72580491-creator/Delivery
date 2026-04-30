@@ -3,7 +3,6 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <!-- ─── PWA 메타태그 ─── -->
     <meta name="theme-color" content="#6c63ff">
     <meta name="mobile-web-app-capable" content="yes">
@@ -17,8 +16,6 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js" defer></script>
-
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -167,8 +164,6 @@
     <div id="unpaidClientList"></div>
 </div>
 
-<!-- ─── 납품 등록 ─── -->
-
 <!-- ─── 재고 관리 ─── -->
 <div class="pane" id="pane-stock">
   <!-- 과거 날짜 재고 조회 -->
@@ -227,7 +222,7 @@
   <div id="stockList"></div>
 </div>
 
-<!-- ─── 거래처 ─── -->
+<!-- ─── 납품 등록 ─── -->
 <div class="pane" id="pane-delivery">
     <div class="card">
         <div class="form-group" style="position:relative;">
@@ -981,8 +976,8 @@
       <input type="text" class="form-input" id="saReason" placeholder="정기 입고·반품·재고실사">
     </div>
     <div style="display:flex;gap:8px;">
-      <button class="btn btn-primary" style="flex:2;" onclick="applyAdj()">✅ 적용</button>
       <button class="btn btn-ghost"   style="flex:1;" onclick="closeModal('stockAdjModal')">취소</button>
+      <button class="btn btn-primary" style="flex:2;" onclick="applyAdj()">✅ 적용</button>
     </div>
   </div>
 </div>
@@ -1050,8 +1045,8 @@
       <input type="text" class="form-input" id="ppNote" placeholder="메모 (선택)">
     </div>
     <div style="display:flex;gap:8px;">
-      <button class="btn btn-primary" style="flex:2;" onclick="confirmPartialPay()">💳 입금 처리</button>
       <button class="btn btn-ghost"   style="flex:1;" onclick="closeModal('partialPayModal')">취소</button>
+      <button class="btn btn-primary" style="flex:2;" onclick="confirmPartialPay()">💳 입금 처리</button>
     </div>
     <!-- 할인 완납 -->
     <div style="margin-top:10px;border-top:1px solid var(--border);padding-top:10px;">
@@ -1313,10 +1308,46 @@
 </div>
 
 
-<!-- 메모 팝업 -->
+<!-- ─── 메모 모아보기 팝업 ─── -->
+<div id="memoBoardOverlay" onclick="if(event.target===this)closeMemoBoard()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:3000;align-items:flex-end;justify-content:center;backdrop-filter:blur(3px);">
+    <div class="memo-board-box">
+        <div class="memo-board-header">
+            <span>📋 메모 모아보기</span>
+            <button class="memo-board-close" onclick="closeMemoBoard()">✕</button>
+        </div>
+        <!-- 기간 필터 칩 -->
+        <div class="memo-board-chips">
+            <button class="memo-chip active" data-period="all"   onclick="setMemoPeriod('all')">전체</button>
+            <button class="memo-chip"        data-period="week"  onclick="setMemoPeriod('week')">이번주</button>
+            <button class="memo-chip"        data-period="lweek" onclick="setMemoPeriod('lweek')">지난주</button>
+            <button class="memo-chip"        data-period="month" onclick="setMemoPeriod('month')">이번달</button>
+            <button class="memo-chip"        data-period="lmonth" onclick="setMemoPeriod('lmonth')">지난달</button>
+        </div>
+        <!-- 월 직접 선택 -->
+        <div id="memoBoardMonthWrap" style="display:none;margin-bottom:8px;">
+            <input type="month" id="memoBoardMonth" class="form-input" oninput="renderMemoBoard()" style="font-size:14px;">
+        </div>
+        <input id="memoBoardSearch" class="form-input" placeholder="🔍 거래처 검색…" oninput="renderMemoBoard()" style="margin-bottom:12px;">
+        <div id="memoBoardList"></div>
+    </div>
+</div>
+
+<!-- 말풍선 팝업 -->
+<div id="memoBubble" onclick="closeMemoBubble()" style="display:none;position:fixed;inset:0;z-index:4000;">
+    <div class="memo-bubble-box" id="memoBubbleBox" onclick="event.stopPropagation()">
+        <div class="memo-bubble-client" id="memoBubbleClient"></div>
+        <div class="memo-bubble-list" id="memoBubbleList"></div>
+        <button class="memo-bubble-close" onclick="closeMemoBubble()">✕ 닫기</button>
+    </div>
+</div>
+
+<!-- ─── 메모 팝업 ─── -->
 <div id="memoPopup" onclick="if(event.target===this)closeMemoPopup()">
     <div class="memo-popup-box">
-        <div class="memo-popup-title">📝 메모 <span id="memoPopupClient"></span></div>
+        <div class="memo-popup-title">
+            📝 메모
+            <span id="memoPopupClient"></span>
+        </div>
         <textarea id="memoTextarea" placeholder="메모를 입력하세요…"></textarea>
         <div class="memo-popup-btns">
             <button class="btn btn-ghost"   style="flex:1;" onclick="closeMemoPopup()">취소</button>
@@ -1325,41 +1356,10 @@
     </div>
 </div>
 
-<!-- 메모 모아보기 -->
-<div id="memoBoardOverlay" onclick="if(event.target===this)closeMemoBoard()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:3000;align-items:flex-end;justify-content:center;backdrop-filter:blur(3px);">
-    <div class="memo-board-box">
-        <div class="memo-board-header">
-            <span>📋 메모 모아보기</span>
-            <button class="memo-board-close" onclick="closeMemoBoard()">✕</button>
-        </div>
-        <div class="memo-board-chips">
-            <button class="memo-chip active" data-period="all"    onclick="setMemoPeriod('all')">전체</button>
-            <button class="memo-chip"        data-period="week"   onclick="setMemoPeriod('week')">이번주</button>
-            <button class="memo-chip"        data-period="lweek"  onclick="setMemoPeriod('lweek')">지난주</button>
-            <button class="memo-chip"        data-period="month"  onclick="setMemoPeriod('month')">이번달</button>
-            <button class="memo-chip"        data-period="lmonth" onclick="setMemoPeriod('lmonth')">지난달</button>
-        </div>
-        <div id="memoBoardMonthWrap" style="display:none;margin-bottom:8px;">
-            <input type="month" id="memoBoardMonth" class="form-input" oninput="renderMemoBoard()">
-        </div>
-        <input id="memoBoardSearch" class="form-input" placeholder="🔍 거래처 검색…" oninput="renderMemoBoard()" style="margin-bottom:12px;">
-        <div id="memoBoardList"></div>
-    </div>
-</div>
-
-<!-- 말풍선 -->
-<div id="memoBubble" onclick="if(event.target===this)closeMemoBubble()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:4000;align-items:center;justify-content:center;padding:24px 16px;">
-    <div class="memo-bubble-box">
-        <div class="memo-bubble-header">
-            <span id="memoBubbleClient"></span>
-            <span class="memo-bubble-cnt" id="memoBubbleCnt"></span>
-        </div>
-        <div class="memo-bubble-list" id="memoBubbleList"></div>
-        <button class="memo-bubble-close" onclick="closeMemoBubble()">✕ 닫기</button>
-    </div>
-</div>
-
+<!-- ─── 앱 스크립트 ─── -->
 <script src="./app.js" defer></script>
+
+<!-- ─── Service Worker 등록 ─── -->
 <script>
 if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js', { scope: './' })
