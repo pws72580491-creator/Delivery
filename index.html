@@ -12,7 +12,7 @@
     <meta name="apple-mobile-web-app-title" content="납품관리">
     <link rel="apple-touch-icon" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAALQAAAC0CAYAAAA9zQYyAAADgElEQVR4nO3csXEUQRCG0RVFEjgkgUEQhAEmRAMeEAZBYJAEDmEI6+C4UgmdNDPd++97pgzd3Pan1lyVStsGAAAAAAAAAAAAAAAAI91UH2CF929vb6vP0MWnrzfRM497c+K9XlLkEW9ExOPsPe7dHl7E8+0x7t0dWMjr7Sns3RxUyPX2EHb7Awq5n85hP6s+wH3E3FPnubT8Sev8wPhXt23dbkOLeV+6zatV0N0eDg/TaW4tfl10eiA8TfUVpHxDizlL9TxLg65+88xROdeyoMWcrWq+JUGL+Rgq5lx+h4aRlgdtOx/L6nkvDVrMx7Ry7suCFvOxrZq/OzRRlgRtO7NtazqYHrSYOTe7B1cOokwN2nbmLjO7sKGJMi1o25n7zOrDhibKlKBtZx5iRic2NFEETZThQbtucI3RvdjQRBE0UYYG7brBY4zsxoYmiqCJImiiCJoow4L2gZCnGNWPDU0UQRNF0EQRNFGeVx9gto9ftm/VZ+jmw7vtTfUZZrGhiSJoogiaKIImiqCJImiiCJoogiaKoIkiaKIImijxf8uxfX8V+3cLj/ej+gDT2NBEETRRBE0UQRMl/0Ph6x+/Kl/+w7vt5+XXPn7ZXlac5Y/P24vS15/IhiaKoIkiaKIImiiCJoqgiSJoogiaKIImiqCJImiiCJoogiaKoIkiaKIImiiCJoqgiSJoogiaKIImiqCJImiiCJoogiaKoIkiaKIImiiCJoqgiSJoogiaKIImiqCJImiiCJoogiaKoIkiaKLcjPpG79/e3o76XhzTp683T+7RhiaKoIkiaKIImijDgh5xoee4RvVjQxNF0EQRNFEETZShQftgyGOM7MaGJoqgiTI8aNcOrjG6FxuaKIImypSgXTt4iBmd2NBEmRa0Lc19ZvVhQxNlatC2NHeZ2YUNTZTpQdvSnJvdw5INLWq2bU0HrhxEWRa0LX1sq+a/dEOL+phWzn35lUPUx7J63u7QRCkJ2pY+hoo5l21oUWermm/plUPUmSrnWn6HFnWW6nm2isk/Td+v6pBPyjf0uS4Phet0mluroLet18Ph/7rNq9VhLrmC9NUt5JN2G/pc14d2dJ3n0vZgl2zrep1DPml/wEvCXm8PIZ/s5qCXhD3fnkI+2d2B7yLucfYY8bldH/4u4r7e3iM+F/NG7iPyv5LiBQAAAAAAAAAAAAAAmvoNL57jyrjjuqMAAAAASUVORK5CYII=">
     <link rel="manifest" href="./manifest.json">
-    <title>납품 관리 Pro v73</title>
+    <title>납품 관리 Pro v75</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js" defer></script>
@@ -41,7 +41,7 @@
             <div class="logo-icon">📦</div>
             <div>
                 <div class="logo-text">납품 관리 Pro</div>
-                <div class="logo-sub">v73 · PWA 앱 설치 지원</div>
+                <div class="logo-sub">v75 · PWA 앱 설치 지원</div>
             </div>
         </div>
         <div class="header-btns">
@@ -598,7 +598,7 @@
     <div class="card">
         <div class="card-title">앱 정보</div>
         <div style="font-size:13px;color:var(--text2);line-height:2;margin-bottom:12px;">
-            버전: <strong style="color:var(--accent);">v73</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
+            버전: <strong style="color:var(--accent);">v75</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
             거래처: <span id="infoClients">0</span>개 &nbsp;·&nbsp;
             납품내역: <span id="infoOrders">0</span>건
         </div>
@@ -608,8 +608,8 @@
             <div id="changelogList" style="display:flex;flex-direction:column;gap:6px;">
                 <!-- 현재 버전 -->
                 <div class="changelog-item">
-                    <span class="changelog-ver" style="color:var(--green);">v73</span>
-                    <span class="changelog-desc">타인거래 포함 범위 확장 — 재고 차감만 제외, 매출·미수금·정산·거래명세표·대시보드·내역 통계 등 재고 외 모든 집계에 타인거래 포함. Excel 내보내기에 타인거래 컬럼(Y) 추가.</span>
+                    <span class="changelog-ver" style="color:var(--green);">v75</span>
+                    <span class="changelog-desc">재고 이력 정리 기준 수정 — 어제·오늘만 유지(기존 30일 유지 버그 수정). 전표 메모 기능 추가 — 납품 카드 메모 버튼, 거래처 카드 탭 시 메모 말풍선 표시. 버튼 순서 통일(취소→저장). 코드 정리.</span>
                 </div>
                 <!-- 이전 이력 토글 버튼 -->
                 <button id="changelogToggleBtn" onclick="toggleOldChangelog()" style="display:flex;align-items:center;justify-content:center;gap:5px;width:100%;padding:7px 12px;margin-top:2px;background:var(--surf3);border:1px solid var(--border);border-radius:var(--radius-s);color:var(--text2);font-size:11px;font-weight:700;cursor:pointer;transition:all .15s;letter-spacing:.3px;">
@@ -851,6 +851,10 @@
             <div class="more-item" onclick="closeMoreSheet();bnavGo('settings',null)">
                 <span class="more-item-icon">⚙️</span>
                 <span class="more-item-label">설정</span>
+            </div>
+            <div class="more-item" onclick="closeMoreSheet();openMemoView()">
+                <span class="more-item-icon">📋</span>
+                <span class="more-item-label">메모 모아보기</span>
             </div>
         </div>
     </div>
@@ -1310,6 +1314,38 @@
 
 
 <!-- 메모 팝업 -->
+<!-- ─── 메모 모아보기 팝업 ─── -->
+<div id="memoViewPopup" onclick="if(event.target===this)closeMemoView()">
+    <div class="memo-view-box">
+        <div class="memo-view-header">
+            <span class="memo-view-title">📋 메모 모아보기</span>
+            <button class="memo-view-close" onclick="closeMemoView()">✕</button>
+        </div>
+        <div class="memo-view-unit-tabs">
+            <button class="memo-unit-tab active" data-unit="week" onclick="setMemoUnit('week',this)">주단위</button>
+            <button class="memo-unit-tab" data-unit="month" onclick="setMemoUnit('month',this)">월단위</button>
+        </div>
+        <div class="memo-view-nav">
+            <button onclick="moveMemoViewPeriod(-1)">◀</button>
+            <span id="memoViewPeriodLabel"></span>
+            <button onclick="moveMemoViewPeriod(1)">▶</button>
+        </div>
+        <div id="memoViewClientList"></div>
+    </div>
+</div>
+
+<!-- ─── 거래처 메모 상세 팝업 ─── -->
+<div id="memoDetailPopup" onclick="if(event.target===this)closeMemoDetail()">
+    <div class="memo-detail-box">
+        <div class="memo-view-header">
+            <span class="memo-view-title" id="memoDetailTitle"></span>
+            <button class="memo-view-close" onclick="closeMemoDetail()">✕</button>
+        </div>
+        <div id="memoDetailPeriodLabel" class="memo-detail-period"></div>
+        <div id="memoDetailList"></div>
+    </div>
+</div>
+
 <div id="memoPopup" onclick="if(event.target===this)closeMemoPopup()">
     <div class="memo-popup-box">
         <div class="memo-popup-title">📝 메모 <span id="memoPopupClient"></span></div>

@@ -113,10 +113,10 @@ function todayKST() {
 // (과거 날짜 재고 역산 정확도를 위해 30일치 유지)
 function _trimLogByDate(log) {
     if (!Array.isArray(log)) return [];
-    const cutoff = kstAddDays(todayKST(), -30);  // 30일 전 기준
+    const yesterday = kstAddDays(todayKST(), -1);  // 어제·오늘만 유지
     return log.filter(l => {
         const d = l.date || (l.at ? l.at.slice(0, 10) : null);
-        return d && d >= cutoff;
+        return d && d >= yesterday;
     });
 }
 
@@ -886,6 +886,9 @@ document.addEventListener('click', e => {
     // 납품 거래처 드롭다운 외부 클릭 시 닫기
     if (!e.target.closest('#deliveryClient') && !e.target.closest('#clientDropdown'))
         document.getElementById('clientDropdown')?.classList.remove('open');
+    // 거래처 카드 툴팁 외부 클릭 시 닫기
+    if (!e.target.closest('.client-card'))
+        document.querySelectorAll('.client-card.show-tooltip').forEach(el => el.classList.remove('show-tooltip'));
 });
 
 // ─── 거래처 ───
@@ -5739,7 +5742,7 @@ function exportSettlementExcel() {
 }
 
 function exportJSON() {
-    const data = { clients, orders, prices, stockItems, exportDate:new Date().toISOString(), version:'73' };
+    const data = { clients, orders, prices, stockItems, exportDate:new Date().toISOString(), version:'75' };
     const blob = new Blob([JSON.stringify(data,null,2)], { type:'application/json' });
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement('a');
@@ -6314,7 +6317,8 @@ function _initDoubleTapSelect(el) {
 // ─── Escape 키로 열린 모달 닫기 ───
 document.addEventListener('keydown', e => {
     if (e.key !== 'Escape') return;
-    // quickPayPopup은 전용 함수로 닫기
+    const mp = document.getElementById('memoPopup');
+    if (mp && mp.classList.contains('open')) { closeMemoPopup(); return; }
     const qp = document.getElementById('quickPayPopup');
     if (qp && qp.classList.contains('open')) { closeQuickPay(); return; }
     const bp = document.getElementById('bulkPayPopup');
@@ -6501,6 +6505,157 @@ window.addEventListener('DOMContentLoaded', () => {
 });
 
 // ═══════════════════════════════════════
+// ── 메모 모아보기 ─────────────────────────────────────────────
+// ═══════════════════════════════════════
+let _memoViewUnit   = 'week';  // 'week' | 'month'
+let _memoViewOffset = 0;       // 오늘 기준 n주/월 전후
+let _memoDetailClient = '';    // 상세 팝업에 표시 중인 거래처명
+
+function openMemoView() {
+    _memoViewOffset = 0;
+    document.getElementById('memoViewPopup').classList.add('open');
+    renderMemoView();
+}
+function closeMemoView() {
+    document.getElementById('memoViewPopup').classList.remove('open');
+}
+
+function setMemoUnit(unit, btn) {
+    _memoViewUnit   = unit;
+    _memoViewOffset = 0;
+    document.querySelectorAll('.memo-unit-tab').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    renderMemoView();
+}
+
+function moveMemoViewPeriod(dir) {
+    _memoViewOffset += dir;
+    renderMemoView();
+}
+
+function _getMemoViewRange() {
+    const today = new Date();
+    if (_memoViewUnit === 'month') {
+        const d     = new Date(today.getFullYear(), today.getMonth() + _memoViewOffset, 1);
+        const endD  = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+        const pad   = n => String(n).padStart(2,'0');
+        const start = `${d.getFullYear()}-${pad(d.getMonth()+1)}-01`;
+        const end   = `${endD.getFullYear()}-${pad(endD.getMonth()+1)}-${pad(endD.getDate())}`;
+        const label = `${d.getFullYear()}년 ${d.getMonth()+1}월`;
+        return { start, end, label };
+    } else {
+        // 주단위: 월요일 기준
+        const day    = today.getDay(); // 0=일
+        const monday = new Date(today);
+        monday.setDate(today.getDate() - (day === 0 ? 6 : day - 1) + _memoViewOffset * 7);
+        const sunday = new Date(monday);
+        sunday.setDate(monday.getDate() + 6);
+        const fmt = d => {
+            const y = d.getFullYear(), m = String(d.getMonth()+1).padStart(2,'0'), dd = String(d.getDate()).padStart(2,'0');
+            return `${y}-${m}-${dd}`;
+        };
+        const label = `${monday.getMonth()+1}/${monday.getDate()}(월) ~ ${sunday.getMonth()+1}/${sunday.getDate()}(일)`;
+        return { start: fmt(monday), end: fmt(sunday), label };
+    }
+}
+
+function renderMemoView() {
+    const { start, end, label } = _getMemoViewRange();
+    document.getElementById('memoViewPeriodLabel').textContent = label;
+
+    // 기간 내 메모 있는 주문 필터 → 거래처별 그룹핑
+    const filtered = (orders || []).filter(o => o.note && o.note.trim() && o.date >= start && o.date <= end);
+    const groups = {};
+    filtered.forEach(o => {
+        if (!groups[o.clientName]) groups[o.clientName] = [];
+        groups[o.clientName].push(o);
+    });
+
+    const list = document.getElementById('memoViewClientList');
+    if (!Object.keys(groups).length) {
+        list.innerHTML = `<div style="text-align:center;padding:36px 0;color:var(--text3);font-size:14px;">📭 이 기간에 메모가 없습니다</div>`;
+        return;
+    }
+
+    list.innerHTML = Object.entries(groups)
+        .sort((a, b) => a[0].localeCompare(b[0], 'ko'))
+        .map(([name, ords]) => {
+            const cnt     = ords.length;
+            const preview = ords[0].note.length > 24 ? ords[0].note.slice(0, 24) + '…' : ords[0].note;
+            const safeName = escapeHtml(name);
+            return `<div class="memo-view-client-card" onclick="openMemoDetail('${safeName}')">
+                <div class="memo-view-client-name">${safeName} <span class="memo-count-badge">${cnt}건</span></div>
+                <div class="memo-view-preview">${escapeHtml(preview)}</div>
+            </div>`;
+        }).join('');
+}
+
+function openMemoDetail(clientName) {
+    const { start, end, label } = _getMemoViewRange();
+    _memoDetailClient = clientName;
+
+    const ords = (orders || [])
+        .filter(o => o.clientName === clientName && o.note && o.note.trim() && o.date >= start && o.date <= end)
+        .sort((a, b) => a.date.localeCompare(b.date));
+
+    document.getElementById('memoDetailTitle').textContent = `📋 ${clientName}`;
+    document.getElementById('memoDetailPeriodLabel').textContent = label;
+
+    document.getElementById('memoDetailList').innerHTML = ords.length
+        ? ords.map(o => {
+            const paidBadge = o.isPaid ? '✅ 완납' : '🔴 미수';
+            const amount    = o.total ? `${o.total.toLocaleString()}원 · ${paidBadge}` : '';
+            return `<div class="memo-detail-item" id="mdi-${o.id}">
+                <div class="memo-detail-header">
+                    <div class="memo-detail-date">📅 ${o.date}</div>
+                    <button class="memo-delete-btn" onclick="deleteMemoById('${o.id}')" title="메모 삭제">🗑️</button>
+                </div>
+                <div class="memo-detail-text">${escapeHtml(o.note)}</div>
+                ${amount ? `<div class="memo-detail-amount">${amount}</div>` : ''}
+            </div>`;
+        }).join('')
+        : `<div style="text-align:center;padding:36px 0;color:var(--text3);font-size:14px;">📭 메모가 없습니다</div>`;
+
+    document.getElementById('memoDetailPopup').classList.add('open');
+}
+
+function deleteMemoById(orderId) {
+    const o = orders.find(x => x.id === orderId);
+    if (!o) return;
+    if (!confirm(`📅 ${o.date} 메모를 삭제할까요?\n\n"${o.note}"`)) return;
+
+    o.note = '';
+    saveData();
+    toast('🗑️ 메모 삭제됨', 'var(--text3)');
+
+    // 현재 항목 제거 (애니메이션)
+    const el = document.getElementById(`mdi-${orderId}`);
+    if (el) {
+        el.style.transition = 'opacity .25s, max-height .3s';
+        el.style.opacity = '0';
+        el.style.overflow = 'hidden';
+        el.style.maxHeight = el.offsetHeight + 'px';
+        setTimeout(() => { el.style.maxHeight = '0'; el.style.marginBottom = '0'; }, 10);
+        setTimeout(() => {
+            el.remove();
+            // 남은 항목 없으면 목록 탭에도 반영
+            const list = document.getElementById('memoDetailList');
+            if (!list.querySelector('.memo-detail-item')) {
+                list.innerHTML = `<div style="text-align:center;padding:36px 0;color:var(--text3);font-size:14px;">📭 메모가 없습니다</div>`;
+                // 메모 목록 뷰도 갱신
+                renderMemoView();
+            }
+        }, 320);
+    }
+
+    // 납품 내역 카드 메모 버튼도 갱신
+    renderOrders();
+}
+
+function closeMemoDetail() {
+    document.getElementById('memoDetailPopup').classList.remove('open');
+}
+
 // 메모 팝업
 // ═══════════════════════════════════════
 let _memoTargetId = null;
@@ -6546,8 +6701,3 @@ function toggleClientTooltip(e, card) {
     e.stopPropagation();
 }
 // 외부 클릭 시 툴팁 닫기
-document.addEventListener('click', () => {
-    document.querySelectorAll('.client-card.show-tooltip').forEach(el => {
-        el.classList.remove('show-tooltip');
-    });
-});

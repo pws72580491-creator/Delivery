@@ -1677,4 +1677,83 @@ button, a, input, select, textarea,
 #memoTextarea:focus { border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-dim); }
 .memo-popup-btns { display:flex; gap:8px; margin-top:12px; }
 
+/* ── 메모 모아보기 팝업 — v75 ── */
+#memoViewPopup, #memoDetailPopup {
+    display:none; position:fixed; inset:0;
+    background:rgba(0,0,0,.55); z-index:1200;
+    align-items:flex-end; justify-content:center;
+}
+#memoViewPopup.open, #memoDetailPopup.open { display:flex; }
 
+.memo-view-box {
+    background:var(--surf2); border-radius:20px 20px 0 0;
+    width:100%; max-width:640px;
+    max-height:82vh; overflow-y:auto;
+    padding:20px 16px 36px;
+}
+.memo-detail-box {
+    background:var(--surf2); border-radius:20px 20px 0 0;
+    width:100%; max-width:640px;
+    max-height:75vh; overflow-y:auto;
+    padding:20px 16px 36px;
+    z-index:1300;
+}
+#memoDetailPopup { z-index:1300; }
+
+.memo-view-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; }
+.memo-view-title  { font-size:16px; font-weight:700; color:var(--text1); }
+.memo-view-close  { background:none; border:none; color:var(--text3); font-size:20px; cursor:pointer; line-height:1; padding:0 2px; }
+
+.memo-view-unit-tabs { display:flex; gap:6px; margin-bottom:12px; }
+.memo-unit-tab {
+    flex:1; padding:9px 0; border:1px solid var(--border);
+    background:var(--surf3); color:var(--text2);
+    border-radius:8px; font-size:13px; cursor:pointer; font-weight:600;
+    transition:background .15s, color .15s;
+}
+.memo-unit-tab.active { background:var(--accent); color:#fff; border-color:var(--accent); }
+
+.memo-view-nav {
+    display:flex; justify-content:space-between; align-items:center;
+    margin-bottom:14px; font-size:14px; font-weight:700; color:var(--text1);
+    background:var(--surf3); border-radius:10px; padding:6px 4px;
+}
+.memo-view-nav button {
+    background:none; border:none; font-size:20px;
+    color:var(--accent); cursor:pointer; padding:2px 12px; line-height:1;
+}
+
+.memo-view-client-card {
+    background:var(--surf3); border-radius:12px;
+    padding:14px 16px; margin-bottom:10px; cursor:pointer;
+    display:flex; flex-direction:column; gap:5px;
+    transition:opacity .15s;
+}
+.memo-view-client-card:active { opacity:.65; }
+.memo-view-client-name { font-size:15px; font-weight:700; color:var(--text1); display:flex; align-items:center; gap:8px; }
+.memo-count-badge {
+    background:var(--accent); color:#fff;
+    font-size:11px; font-weight:700; border-radius:20px; padding:1px 8px;
+}
+.memo-view-preview { font-size:12px; color:var(--text3); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+.memo-detail-period { font-size:12px; color:var(--text3); text-align:center; margin-bottom:14px; }
+.memo-detail-item {
+    background:var(--surf3); border-radius:12px;
+    padding:14px 16px; margin-bottom:10px;
+    overflow:hidden;
+}
+.memo-detail-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; }
+.memo-detail-date   { font-size:12px; color:var(--text3); }
+.memo-delete-btn {
+    background:none; border:none; font-size:16px; cursor:pointer;
+    padding:2px 4px; border-radius:6px; line-height:1;
+    opacity:.55; transition:opacity .15s, background .15s;
+}
+.memo-delete-btn:active { opacity:1; background:var(--danger-dim, rgba(255,80,80,.15)); }
+.memo-detail-text   { font-size:14px; color:var(--text1); line-height:1.6; white-space:pre-wrap; }
+.memo-detail-amount {
+    font-size:12px; color:var(--text3);
+    margin-top:9px; padding-top:9px;
+    border-top:1px solid var(--border);
+}
