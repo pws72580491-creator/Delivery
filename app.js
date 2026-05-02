@@ -1193,6 +1193,24 @@ function _clientCardHTML(c, statsMap, q) {
     const ageLabel = unpaidAmt > 0
         ? (maxAgeDays >= 90 ? `🚨 ${maxAgeDays}일 경과` : maxAgeDays >= 60 ? `🔴 ${maxAgeDays}일 경과` : maxAgeDays >= 30 ? `🟠 ${maxAgeDays}일 경과` : `🟢 ${maxAgeDays}일 경과`)
         : '';
+
+    // ── 오늘 납품한 거래처만: 가장 최근 메모 뱃지 ──
+    const _todayStr = todayKST();
+    const _hasTodayOrder = orders.some(o =>
+        o.clientName === c.name && o.date === _todayStr);
+    let lastMemoHtml = '';
+    if (_hasTodayOrder) {
+        const _lastMemo = orders
+            .filter(o => o.clientName === c.name && o.note && o.note.trim())
+            .sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.id || '').localeCompare(a.id || ''))
+            [0];
+        if (_lastMemo) {
+            const _dLabel  = _lastMemo.date === _todayStr ? '오늘' : _lastMemo.date;
+            const _preview = _lastMemo.note.length > 30 ? _lastMemo.note.slice(0, 30) + '…' : _lastMemo.note;
+            lastMemoHtml = `<div class="client-last-memo">💬 ${_dLabel} · ${escapeHtml(_preview)}</div>`;
+        }
+    }
+
     return `<div class="swipe-wrap" id="swipe-${escapeHtml(c.id)}" data-client-id="${escapeHtml(c.id)}">
         <div class="swipe-bg-left">📞</div>
         <div class="swipe-bg-right">🗑️</div>
@@ -1214,22 +1232,7 @@ function _clientCardHTML(c, statsMap, q) {
                 <div class="client-stats">거래 ${stats.count}건 · ${fmt(stats.total)}원</div>
                 ${unpaidAmt > 0 ? `<div><span class="client-unpaid-badge ${badgeCls}">💸 미수 ${fmt(unpaidAmt)}원 ${ageLabel}</span></div>` : ''}
                 ${c.note ? `<div class="client-stats" style="color:var(--text3);">📝 ${escapeHtml(c.note)}</div>` : ''}
-                ${(() => {
-                    // 오늘 납품이 있는 거래처만: 가장 최근 메모 표시
-                    const today = todayKST();
-                    const hasTodayOrder = (orders||[]).some(o =>
-                        (o.clientId === c.id || o.clientName === c.name) && o.date === today);
-                    if (!hasTodayOrder) return '';
-                    const lastMemo = (orders||[])
-                        .filter(o => (o.clientId === c.id || o.clientName === c.name) && o.note && o.note.trim())
-                        .sort((a,b) => (b.date||'').localeCompare(a.date||'') || (b.id||'').localeCompare(a.id||''))
-                        [0];
-                    if (!lastMemo) return '';
-                    const isToday = lastMemo.date === today;
-                    const dateLabel = isToday ? '오늘' : lastMemo.date;
-                    const preview = lastMemo.note.length > 30 ? lastMemo.note.slice(0,30) + '…' : lastMemo.note;
-                    return `<div class="client-last-memo">💬 ${dateLabel} · ${escapeHtml(preview)}</div>`;
-                })()}
+                ${lastMemoHtml}
             </div>
             <div class="client-actions">
                 ${c.phone ? `<a href="tel:${escapeHtml(c.phone)}" class="btn-call">📞</a>` : ''}
