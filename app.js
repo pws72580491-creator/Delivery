@@ -1214,6 +1214,22 @@ function _clientCardHTML(c, statsMap, q) {
                 <div class="client-stats">거래 ${stats.count}건 · ${fmt(stats.total)}원</div>
                 ${unpaidAmt > 0 ? `<div><span class="client-unpaid-badge ${badgeCls}">💸 미수 ${fmt(unpaidAmt)}원 ${ageLabel}</span></div>` : ''}
                 ${c.note ? `<div class="client-stats" style="color:var(--text3);">📝 ${escapeHtml(c.note)}</div>` : ''}
+                ${(() => {
+                    // 오늘 납품이 있는 거래처만: 가장 최근 메모 표시
+                    const today = todayKST();
+                    const hasTodayOrder = (orders||[]).some(o =>
+                        (o.clientId === c.id || o.clientName === c.name) && o.date === today);
+                    if (!hasTodayOrder) return '';
+                    const lastMemo = (orders||[])
+                        .filter(o => (o.clientId === c.id || o.clientName === c.name) && o.note && o.note.trim())
+                        .sort((a,b) => (b.date||'').localeCompare(a.date||'') || (b.id||'').localeCompare(a.id||''))
+                        [0];
+                    if (!lastMemo) return '';
+                    const isToday = lastMemo.date === today;
+                    const dateLabel = isToday ? '오늘' : lastMemo.date;
+                    const preview = lastMemo.note.length > 30 ? lastMemo.note.slice(0,30) + '…' : lastMemo.note;
+                    return `<div class="client-last-memo">💬 ${dateLabel} · ${escapeHtml(preview)}</div>`;
+                })()}
             </div>
             <div class="client-actions">
                 ${c.phone ? `<a href="tel:${escapeHtml(c.phone)}" class="btn-call">📞</a>` : ''}

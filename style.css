@@ -389,6 +389,14 @@ body.light .stat-card.orange .stat-value { color:#a07010; }
 .client-name { font-weight:800; font-size:14px; letter-spacing:-.2px; }
 .client-phone { font-size:12px; color:var(--text2); margin-top:2px; }
 .client-stats { font-size:11px; color:var(--text3); margin-top:3px; }
+.client-last-memo {
+    font-size:11px; color:var(--accent);
+    margin-top:5px; line-height:1.4;
+    background:var(--accent-dim, rgba(108,99,255,.1));
+    border-radius:6px; padding:3px 7px;
+    display:inline-block; max-width:100%;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
 .client-actions { display:flex; gap:6px; flex-shrink:0; }
 .btn-call {
     background:var(--green-dim); color:var(--green);
