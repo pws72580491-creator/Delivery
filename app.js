@@ -1917,20 +1917,32 @@ function setHistPayFilter(f, btn) {
     renderOrders();
 }
 
-// ── 오늘 거래 건수 위젯 독립 업데이트 (항상 전체 orders 기준) ──
-function _updateTodayCountWidget() {
+// ── 거래 건수 위젯 업데이트 (선택된 기간 기준) ──
+function _updateTodayCountWidget(filteredOrders, start, end) {
     const todayStr = todayKST();
-    const todayOrders = orders.filter(o => o.date === todayStr && !o.isVoid);
-    const todayCount  = todayOrders.length;
-    const todayAmt    = todayOrders.reduce((s, o) => s + o.total, 0);
-    const numEl = document.getElementById('todayCountNum');
-    const amtEl = document.getElementById('todayCountAmt');
-    const tbox  = document.getElementById('todayCountBox');
-    if (numEl) numEl.textContent = todayCount;
-    if (amtEl) amtEl.textContent = fmt(todayAmt) + '원';
+    // 기간 라벨 결정
+    let periodLabel = '오늘 거래';
+    if (start && end) {
+        if (start === end) {
+            periodLabel = start === todayStr ? '오늘 거래' : `${start.slice(5).replace('-','/')} 거래`;
+        } else {
+            periodLabel = `${start.slice(5).replace('-','/')}~${end.slice(5).replace('-','/')} 거래`;
+        }
+    }
+    const base = (filteredOrders || []).filter(o => !o.isVoid);
+    const count = base.length;
+    const amt   = base.reduce((s, o) => s + o.total, 0);
+
+    const numEl   = document.getElementById('todayCountNum');
+    const amtEl   = document.getElementById('todayCountAmt');
+    const tbox    = document.getElementById('todayCountBox');
+    const labelEl = document.getElementById('todayCountLabel');
+    if (numEl)   numEl.textContent   = count;
+    if (amtEl)   amtEl.textContent   = fmt(amt) + '원';
+    if (labelEl) labelEl.textContent = periodLabel;
     if (tbox) {
-        tbox.style.borderColor = todayCount > 0 ? 'var(--accent)' : 'var(--border)';
-        tbox.style.background  = todayCount > 0 ? 'rgba(108,99,255,0.07)' : 'var(--surf3)';
+        tbox.style.borderColor = count > 0 ? 'var(--accent)' : 'var(--border)';
+        tbox.style.background  = count > 0 ? 'rgba(108,99,255,0.07)' : 'var(--surf3)';
     }
 }
 
@@ -1974,8 +1986,8 @@ function renderOrders() {
         }
     }
 
-    // ── 오늘 거래 건수 위젯 업데이트 (항상 전체 orders 기준) ──
-    _updateTodayCountWidget();
+    // ── 거래 건수 위젯 업데이트 (선택된 기간 기준) ──
+    _updateTodayCountWidget(filtered, start, end);
 
     const el = document.getElementById('orderList');
     if (!filtered.length) {
