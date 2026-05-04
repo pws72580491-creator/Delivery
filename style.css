@@ -397,6 +397,19 @@ body.light .stat-card.orange .stat-value { color:#a07010; }
     display:inline-block; max-width:100%;
     white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
 }
+
+/* 납품 카드 메모 본문 — v76 */
+.order-memo-body {
+    margin:8px 0 4px;
+    padding:9px 12px;
+    background:var(--accent-dim, rgba(108,99,255,.08));
+    border-left:3px solid var(--accent);
+    border-radius:0 8px 8px 0;
+    font-size:13px; color:var(--text1);
+    line-height:1.6; white-space:pre-wrap;
+    cursor:pointer;
+}
+.order-memo-body:active { opacity:.7; }
 .client-actions { display:flex; gap:6px; flex-shrink:0; }
 .btn-call {
     background:var(--green-dim); color:var(--green);

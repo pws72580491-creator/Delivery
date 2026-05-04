@@ -1996,18 +1996,22 @@ function renderOrders() {
         const badgeHtml = voided
             ? `<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;"><span class="void-badge">👤 타인거래</span>${payBadge}</div>`
             : payBadge;
-        const memoLabel = o.note ? escapeHtml(o.note.length>12 ? o.note.slice(0,12)+'…' : o.note) : '메모';
+        const memoLabel = o.note ? '📝 메모수정' : '📝 메모';
         const memoClass = o.note ? 'memo-btn has-memo' : 'memo-btn';
+        const memoBodyHtml = o.note
+            ? `<div class="order-memo-body" onclick="openMemoPopup('${oId}')">${escapeHtml(o.note)}</div>`
+            : '';
         return `<div class="${cardClass}">
             <div class="order-top">
                 <div style="display:flex;flex-direction:column;gap:4px;">
                     <div class="order-client-name" onclick="showClientStatement('${cName}','${o.date.slice(0,7)}')">${highlight(o.clientName||'(거래처없음)', q)}</div>
                     <div class="order-date">${escapeHtml(o.date)}</div>
-                    <button class="${memoClass}" onclick="openMemoPopup('${oId}')">📝 ${memoLabel}</button>
+                    <button class="${memoClass}" onclick="openMemoPopup('${oId}')">📝 ${o.note ? '메모수정' : '메모'}</button>
                 </div>
                 ${badgeHtml}
             </div>
             <div class="order-items">${(o.items||[]).map(i=>`${highlight(i.name,q)} ${escapeHtml(i.qty)}개 × ${fmt(i.price)}원`).join('<br>')}</div>
+            ${memoBodyHtml}
             <div class="order-bottom"><div class="order-total">${fmt(o.total)}원</div></div>
             <div class="order-actions">
                 <button class="btn btn-ghost btn-sm" onclick="showOrderDetail('${oId}')">🔍<span class="btn-label">상세</span></button>
