@@ -402,10 +402,10 @@ body.light .stat-card.orange .stat-value { color:#a07010; }
 .order-memo-body {
     margin:8px 0 4px;
     padding:9px 12px;
-    background:var(--accent-dim, rgba(108,99,255,.08));
-    border-left:3px solid var(--accent);
+    background:var(--orange-dim);
+    border-left:3px solid var(--orange);
     border-radius:0 8px 8px 0;
-    font-size:13px; color:var(--text1);
+    font-size:13px; color:var(--orange);
     line-height:1.6; white-space:pre-wrap;
     cursor:pointer;
 }
