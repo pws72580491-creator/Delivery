@@ -401,16 +401,13 @@ body.light .stat-card.orange .stat-value { color:#a07010; }
 /* 납품 카드 메모 본문 — v76 */
 .order-memo-body {
     margin:8px 0 4px;
-    padding:6px 10px;
+    padding:9px 12px;
     background:var(--orange-dim);
     border-left:3px solid var(--orange);
     border-radius:0 8px 8px 0;
     font-size:13px; color:var(--orange);
-    line-height:1.5; white-space:pre-wrap;
+    line-height:1.6; white-space:pre-wrap;
     cursor:pointer;
-    display:block;
-    box-sizing:border-box;
-    word-break:break-all;
 }
 .order-memo-body:active { opacity:.7; }
 
@@ -420,7 +417,6 @@ body.light .stat-card.orange .stat-value { color:#a07010; }
     border-left-color:var(--text3);
     color:var(--text2);
     opacity:.85;
-    white-space:normal;
 }
 .order-memo-prev-label {
     display:block;

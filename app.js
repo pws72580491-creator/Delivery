@@ -300,7 +300,6 @@ let showHiddenClients = false; // 숨긴 거래처 포함 표시 여부
 // Firebase
 let workspaceRef = null;
 let isConnected  = false;
-let _initialLoadDone = false;  // 전역 선언 — _fbValueHandler에서 접근 가능
 const SESSION_ID = Math.random().toString(36).slice(2);
 let lastHash = { clients:'', orders:'', prices:'', stock:'' };
 
@@ -2023,8 +2022,10 @@ function renderOrders() {
                 .sort((a, b) => (b.date||'').localeCompare(a.date||'') || (b.id||'').localeCompare(a.id||''))
                 [0];
             if (prevMemo) {
-                memoBodyHtml = `<div class="order-memo-body order-memo-prev" onclick="openMemoPopup('${oId}')"><span class="order-memo-prev-label">이전 메모 · ${prevMemo.date}</span>${escapeHtml(prevMemo.note)}</div>`;
-            }
+                memoBodyHtml = `<div class="order-memo-body order-memo-prev" onclick="openMemoPopup('${oId}')">
+                    <span class="order-memo-prev-label">이전 메모 · ${prevMemo.date}</span>
+                    ${escapeHtml(prevMemo.note)}
+                </div>`;
             }
         }
         return `<div class="${cardClass}">
@@ -5942,7 +5943,7 @@ function setSyncStatus(state) {
 
 // Firebase SDK 로드 완료 대기 (defer 스크립트 타이밍 보정)
 
-function waitFirebase(callback, retries=50, interval=200) {
+function waitFirebase(callback, retries=20, interval=200) {
     if (typeof firebase !== 'undefined' && firebase.database) {
         callback();
     } else if (retries > 0) {
@@ -5974,12 +5975,14 @@ function _doConnect(id, auto=false) {
 
         // isConnected는 .get() 성공 후에 true로 설정 (조기 설정 방지)
         isConnected = false;
-        _initialLoadDone = false;  // 재연결 시 초기화
         setSyncStatus('syncing');
         document.getElementById('connectBtn').style.display    = 'none';
         document.getElementById('disconnectBtn').style.display = 'block';
 
         // ── 실시간 리스너를 .get() 이전에 먼저 등록 (이벤트 유실 방지) ──
+        // 단, 초기 1회 로드는 별도 _initialLoad 플래그로 구분
+        let _initialLoadDone = false;
+
         workspaceRef.on('value', _fbValueHandler);
 
         // ── 최초 1회 스냅샷: 서버↔로컬 병합 판단 ──
@@ -6482,29 +6485,18 @@ window.addEventListener('DOMContentLoaded', () => {
         const sid = localStorage.getItem('workspaceId');
         if (isConnected && workspaceRef) {
             setSyncStatus('online');
-            if (sid) {
-                // ── 업로드 완료 후 서버 데이터 재로드 (경쟁 조건 방지) ──
-                debouncedSync.cancel();
-                const ch=dataHash(clients),oh=dataHash(orders),ph=dataHash(prices),sh=dataHash(stockItems);
-                workspaceRef.update({
-                    clients, orders, prices, stockItems,
-                    lastUpdated: new Date().toISOString(),
-                    writtenBy: SESSION_ID
-                }).then(() => {
-                    lastHash.clients=ch; lastHash.orders=oh; lastHash.prices=ph; lastHash.stock=sh;
-                    // 업로드 완료 후 서버 재로드
-                    return workspaceRef.get();
-                }).then(snap => {
-                    const d = snap.val(); if (!d) return;
-                    if (d.clients)    clients    = toArray(d.clients).map(_normClientFromFb);
-                    if (d.orders)     orders     = toArray(d.orders).map(_normOrderFromFb);
-                    if (d.prices)     prices     = d.prices;
-                    if (d.stockItems) stockItems = toArray(d.stockItems).map(normStock);
-                    invalidateOrdersCache();
-                    saveToLocal();
-                    _fullRender();
-                }).catch(() => {});
-            }
+            if (sid) debouncedSync();
+            // 온라인 복귀 시 Firebase에서 전체 데이터 재로드 (로컬엔 경량 저장만 있을 수 있으므로)
+            workspaceRef.get().then(snap => {
+                const d = snap.val(); if (!d) return;
+                if (d.clients)    clients    = toArray(d.clients).map(_normClientFromFb);
+                if (d.orders)     orders     = toArray(d.orders).map(_normOrderFromFb);
+                if (d.prices)     prices     = d.prices;
+                if (d.stockItems) stockItems = toArray(d.stockItems).map(normStock);
+                invalidateOrdersCache();
+                saveToLocal();
+                _fullRender();
+            }).catch(()=>{});
         } else {
             if (sid) {
                 document.getElementById('workspaceId').value = sid;
