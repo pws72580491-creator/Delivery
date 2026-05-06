@@ -2022,10 +2022,8 @@ function renderOrders() {
                 .sort((a, b) => (b.date||'').localeCompare(a.date||'') || (b.id||'').localeCompare(a.id||''))
                 [0];
             if (prevMemo) {
-                memoBodyHtml = `<div class="order-memo-body order-memo-prev" onclick="openMemoPopup('${oId}')">
-                    <span class="order-memo-prev-label">이전 메모 · ${prevMemo.date}</span>
-                    ${escapeHtml(prevMemo.note)}
-                </div>`;
+                memoBodyHtml = `<div class="order-memo-body order-memo-prev" onclick="openMemoPopup('${oId}')"><span class="order-memo-prev-label">이전 메모 · ${prevMemo.date}</span>${escapeHtml(prevMemo.note)}</div>`;
+            }
             }
         }
         return `<div class="${cardClass}">

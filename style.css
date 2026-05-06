@@ -408,8 +408,7 @@ body.light .stat-card.orange .stat-value { color:#a07010; }
     font-size:13px; color:var(--orange);
     line-height:1.5; white-space:pre-wrap;
     cursor:pointer;
-    display:inline-block;
-    width:calc(100% - 13px);
+    display:block;
     box-sizing:border-box;
     word-break:break-all;
 }
@@ -421,6 +420,7 @@ body.light .stat-card.orange .stat-value { color:#a07010; }
     border-left-color:var(--text3);
     color:var(--text2);
     opacity:.85;
+    white-space:normal;
 }
 .order-memo-prev-label {
     display:block;
