@@ -410,6 +410,19 @@ body.light .stat-card.orange .stat-value { color:#a07010; }
     cursor:pointer;
 }
 .order-memo-body:active { opacity:.7; }
+
+/* 이전 메모 (현재 카드에 메모 없을 때) */
+.order-memo-prev {
+    background:var(--surf3);
+    border-left-color:var(--text3);
+    color:var(--text2);
+    opacity:.85;
+}
+.order-memo-prev-label {
+    display:block;
+    font-size:10px; color:var(--text3);
+    font-weight:700; margin-bottom:4px;
+}
 .client-actions { display:flex; gap:6px; flex-shrink:0; }
 .btn-call {
     background:var(--green-dim); color:var(--green);

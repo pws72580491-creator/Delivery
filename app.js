@@ -2010,9 +2010,24 @@ function renderOrders() {
             : payBadge;
         const memoLabel = o.note ? '📝 메모수정' : '📝 메모';
         const memoClass = o.note ? 'memo-btn has-memo' : 'memo-btn';
-        const memoBodyHtml = o.note
-            ? `<div class="order-memo-body" onclick="openMemoPopup('${oId}')">${escapeHtml(o.note)}</div>`
-            : '';
+
+        let memoBodyHtml = '';
+        if (o.note) {
+            // 현재 메모 표시
+            memoBodyHtml = `<div class="order-memo-body" onclick="openMemoPopup('${oId}')">${escapeHtml(o.note)}</div>`;
+        } else {
+            // 메모 없으면 같은 거래처의 가장 최근 이전 메모 표시
+            const prevMemo = orders
+                .filter(x => x.clientName === o.clientName && x.id !== o.id && x.note && x.note.trim())
+                .sort((a, b) => (b.date||'').localeCompare(a.date||'') || (b.id||'').localeCompare(a.id||''))
+                [0];
+            if (prevMemo) {
+                memoBodyHtml = `<div class="order-memo-body order-memo-prev" onclick="openMemoPopup('${oId}')">
+                    <span class="order-memo-prev-label">이전 메모 · ${prevMemo.date}</span>
+                    ${escapeHtml(prevMemo.note)}
+                </div>`;
+            }
+        }
         return `<div class="${cardClass}">
             <div class="order-top">
                 <div style="display:flex;flex-direction:column;gap:4px;">
