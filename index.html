@@ -605,22 +605,22 @@
             <div id="changelogList" style="display:flex;flex-direction:column;gap:6px;">
                 <!-- 현재 버전 -->
                 <div class="changelog-item">
-                    <span class="changelog-ver" style="color:var(--green);">v75</span>
-                    <span class="changelog-desc">재고 이력 정리 기준 수정 — 어제·오늘만 유지(기존 30일 유지 버그 수정). 전표 메모 기능 추가 — 납품 카드 메모 버튼, 거래처 카드 탭 시 메모 말풍선 표시. 버튼 순서 통일(취소→저장). 코드 정리.</span>
+                    <span class="changelog-ver" style="color:var(--green);">v77</span>
+                    <span class="changelog-desc">동기화 안정성 개선 — _initialLoadDone 전역 이동(실시간 리스너 정상화), online 복귀 시 업로드→다운로드 순서 보장, waitFirebase 재시도 4초→10초 연장. JS 문법 오류 수정(중괄호 중복). head 중복 제거(viewport·Google Fonts).</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v76</span>
+                    <span class="changelog-desc">메모 모아보기 — 더보기 메뉴에서 거래처별 주·월 단위 메모 모아보기, 메모 삭제, 뒤로가기 닫기 지원. 납품 카드 메모 항상 표시 + 이전 메모 표시. 거래처 카드 오늘 납품 시 최근 메모 뱃지 표시. 기간별 거래 건수·금액 위젯 개선. 메모 글색 주황색 통일.</span>
                 </div>
                 <!-- 이전 이력 토글 버튼 -->
                 <button id="changelogToggleBtn" onclick="toggleOldChangelog()" style="display:flex;align-items:center;justify-content:center;gap:5px;width:100%;padding:7px 12px;margin-top:2px;background:var(--surf3);border:1px solid var(--border);border-radius:var(--radius-s);color:var(--text2);font-size:11px;font-weight:700;cursor:pointer;transition:all .15s;letter-spacing:.3px;">
                     <span id="changelogToggleIcon">▼</span>
-                    <span id="changelogToggleLabel">이전 이력 보기 (v59 ~ v24_4-3-3)</span>
+                    <span id="changelogToggleLabel">이전 이력 보기 (v75 ~ v24_4-3-3)</span>
                 </button>
                 <div id="oldChangelogItems" style="display:none;flex-direction:column;gap:6px;">
                 <div class="changelog-item">
-                    <span class="changelog-ver">v59</span>
-                    <span class="changelog-desc">PWA 앱 설치 지원 — 단일 HTML 파일 안에 manifest·아이콘·Service Worker 완전 내장. 크롬에서 열면 "홈화면에 추가" 배너 자동 표시 → 설치 후 주소창 없는 전체화면 앱으로 실행. 오프라인 캐시로 인터넷 없이도 앱 유지.</span>
-                </div>
-                <div class="changelog-item">
-                    <span class="changelog-ver">v56</span>
-                    <span class="changelog-desc">PWA 앱 설치 지원 — 단일 HTML 파일 안에 manifest·아이콘·Service Worker 완전 내장. 크롬에서 열면 "홈화면에 추가" 배너 자동 표시 → 설치 후 주소창 없는 전체화면 앱으로 실행. 오프라인 캐시로 인터넷 없이도 앱 유지. iOS 사파리에서는 공유→홈화면에 추가로 설치 가능.</span>
+                    <span class="changelog-ver">v75</span>
+                    <span class="changelog-desc">재고 이력 정리 기준 수정 — 어제·오늘만 유지(기존 30일 유지 버그 수정). 전표 메모 기능 추가 — 납품 카드 메모 버튼, 거래처 카드 탭 시 메모 말풍선 표시. 버튼 순서 통일(취소→저장). 코드 정리.</span>
                 </div>
                 <div class="changelog-item">
                     <span class="changelog-ver">v55</span>
