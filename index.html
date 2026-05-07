@@ -1,0 +1,1368 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <!-- ─── PWA 메타태그 ─── -->
+    <meta name="theme-color" content="#6c63ff">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="납품관리">
+    <link rel="apple-touch-icon" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAALQAAAC0CAYAAAA9zQYyAAADgElEQVR4nO3csXEUQRCG0RVFEjgkgUEQhAEmRAMeEAZBYJAEDmEI6+C4UgmdNDPd++97pgzd3Pan1lyVStsGAAAAAAAAAAAAAAAAI91UH2CF929vb6vP0MWnrzfRM497c+K9XlLkEW9ExOPsPe7dHl7E8+0x7t0dWMjr7Sns3RxUyPX2EHb7Awq5n85hP6s+wH3E3FPnubT8Sev8wPhXt23dbkOLeV+6zatV0N0eDg/TaW4tfl10eiA8TfUVpHxDizlL9TxLg65+88xROdeyoMWcrWq+JUGL+Rgq5lx+h4aRlgdtOx/L6nkvDVrMx7Ry7suCFvOxrZq/OzRRlgRtO7NtazqYHrSYOTe7B1cOokwN2nbmLjO7sKGJMi1o25n7zOrDhibKlKBtZx5iRic2NFEETZThQbtucI3RvdjQRBE0UYYG7brBY4zsxoYmiqCJImiiCJoow4L2gZCnGNWPDU0UQRNF0EQRNFGeVx9gto9ftm/VZ+jmw7vtTfUZZrGhiSJoogiaKIImiqCJImiiCJoogiaKoIkiaKIImijxf8uxfX8V+3cLj/ej+gDT2NBEETRRBE0UQRMl/0Ph6x+/Kl/+w7vt5+XXPn7ZXlac5Y/P24vS15/IhiaKoIkiaKIImiiCJoqgiSJoogiaKIImiqCJImiiCJoogiaKoIkiaKIImiiCJoqgiSJoogiaKIImiqCJImiiCJoogiaKoIkiaKIImiiCJoqgiSJoogiaKIImiqCJImiiCJoogiaKoIkiaKLcjPpG79/e3o76XhzTp683T+7RhiaKoIkiaKIImijDgh5xoee4RvVjQxNF0EQRNFEETZShQftgyGOM7MaGJoqgiTI8aNcOrjG6FxuaKIImypSgXTt4iBmd2NBEmRa0Lc19ZvVhQxNlatC2NHeZ2YUNTZTpQdvSnJvdw5INLWq2bU0HrhxEWRa0LX1sq+a/dEOL+phWzn35lUPUx7J63u7QRCkJ2pY+hoo5l21oUWermm/plUPUmSrnWn6HFnWW6nm2isk/Td+v6pBPyjf0uS4Phet0mluroLet18Ph/7rNq9VhLrmC9NUt5JN2G/pc14d2dJ3n0vZgl2zrep1DPml/wEvCXm8PIZ/s5qCXhD3fnkI+2d2B7yLucfYY8bldH/4u4r7e3iM+F/NG7iPyv5LiBQAAAAAAAAAAAAAAmvoNL57jyrjjuqMAAAAASUVORK5CYII=">
+    <link rel="manifest" href="./manifest.json">
+    <title>납품 관리 Pro v77</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js" defer></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js" defer></script>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+
+<div class="app" id="appRoot">
+
+<!-- ▶ 헤더 -->
+<div id="pullIndicator">
+    <div class="ptr-spinner"></div>
+    <span class="ptr-arrow">↓</span>
+    <span id="pullText">당겨서 새로고침</span>
+</div>
+<div class="header">
+    <div class="header-top">
+        <div class="logo">
+            <div class="logo-icon">📦</div>
+            <div>
+                <div class="logo-text">납품 관리 Pro</div>
+                <div class="logo-sub">v77 · PWA 앱 설치 지원</div>
+            </div>
+        </div>
+        <div class="header-btns">
+            <button class="hbtn" onclick="toggleTheme()" id="themeBtn">🌙</button>
+            <button class="hbtn" onclick="openModal('firebaseModal')" title="Firebase 동기화">🔗</button>
+        </div>
+    </div>
+    <div id="syncStatus">● 오프라인 모드</div>
+</div>
+
+<!-- ▶ 탭 -->
+<div class="tabs" id="tabMenu">
+    <button class="tab active" data-tab="dashboard">📈통계</button>
+    <button class="tab" data-tab="clients">🏪거래처</button>
+    <button class="tab" data-tab="unpaid">🔴미수</button>
+    <button class="tab" data-tab="delivery">🚚납품</button>
+    <button class="tab" data-tab="history">📜내역</button>
+    <button class="tab" data-tab="stock">📦재고</button>
+    <button class="tab" data-tab="settlement">💰정산</button>
+    <button class="tab" data-tab="backup">🗄️백업</button>
+    <button class="tab" data-tab="settings">⚙️설정</button>
+</div>
+
+<!-- ▶ 콘텐츠 -->
+<div class="content" id="mainContent">
+
+<!-- ─── 대시보드 ─── -->
+<div class="pane active" id="pane-dashboard">
+    <div class="stat-grid">
+        <div class="stat-card purple">
+            <div class="stat-label">이달 매출</div>
+            <div class="stat-value" id="dashSales">0</div>
+            <div class="stat-unit" style="color:#a39fff;">원</div>
+            <div class="sparkline-wrap" id="sparkSales"></div>
+        </div>
+        <div class="stat-card pink">
+            <div class="stat-label">미수금 (누적)</div>
+            <div class="stat-value" id="dashUnpaid">0</div>
+            <div class="stat-unit" style="color:#fb7185;">원</div>
+            <div class="sparkline-wrap" id="sparkUnpaid"></div>
+        </div>
+        <!-- 일주일 매출 바차트 카드 (2칸 전체) -->
+        <div class="stat-card pink" style="grid-column:1/-1;padding-bottom:14px;background:linear-gradient(145deg,rgba(220,50,90,.22),rgba(240,78,78,.14));border:1.5px solid rgba(240,78,78,.35);">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                <div class="stat-label" style="margin-bottom:0;">최근 7일 매출</div>
+                <div style="font-size:12px;color:#fca5a5;font-weight:800;font-family:'DM Mono',monospace;" id="dashWeekTotal"></div>
+            </div>
+            <div id="dashWeekBarChart" style="display:flex;align-items:flex-end;gap:5px;height:80px;"></div>
+        </div>
+    </div>
+    <!-- 최근 납품 내역 -->
+    <div id="dashRecentSection"></div>
+    <!-- 미수금 거래처 현황 -->
+    <div id="dashUnpaidSection"></div>
+</div>
+
+<div class="pane" id="pane-clients">
+    <div class="card">
+        <div class="card-title" id="clientFormTitle">거래처 등록</div>
+        <div class="form-group">
+            <label class="form-label">거래처명 *</label>
+            <input type="text" class="form-input" id="clientName" placeholder="예: OO마트" oninput="checkDupClient()">
+            <div class="dup-warn" id="dupWarn">⚠️ 이미 존재하는 거래처입니다</div>
+        </div>
+        <div class="form-group">
+            <label class="form-label">연락처</label>
+            <input type="tel" class="form-input" id="clientPhone" placeholder="010-0000-0000">
+        </div>
+        <div class="form-group">
+            <label class="form-label">주소</label>
+            <input type="text" class="form-input" id="clientAddress" placeholder="예: 서울시 강남구">
+        </div>
+        <div class="form-group">
+            <label class="form-label">비고</label>
+            <textarea class="form-input" id="clientNote" rows="2" placeholder="메모 (선택)"></textarea>
+        </div>
+        <div style="display:flex;gap:8px;">
+            <button class="btn btn-primary" style="flex:2;" onclick="saveClient()">등록</button>
+            <button class="btn btn-ghost" style="flex:1;display:none;" id="clientCancelBtn" onclick="cancelClientEdit()">취소</button>
+        </div>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:8px;">
+        <input type="text" class="form-input" id="clientSearch" placeholder="🔍 거래처 검색… (초성 가능)" oninput="renderClients()" ondblclick="this.select()">
+        <button class="btn btn-ghost btn-sm" onclick="toggleClientList()" id="clientToggleBtn" style="white-space:nowrap;">숨기기</button>
+        <button class="btn btn-ghost btn-sm" onclick="toggleShowHidden()" id="showHiddenBtn" style="white-space:nowrap;font-size:11px;" title="isHidden=true인 거래처 표시">숨김포함</button>
+    </div>
+    <div class="unpaid-alert-bar" id="unpaidAlertBar">
+        <div class="unpaid-alert-title">💸 미수금 알림</div>
+        <div class="unpaid-alert-sub" id="unpaidAlertSub"></div>
+    </div>
+    <div class="sort-btn-group">
+        <button class="sort-btn active" data-sort="name" onclick="setClientSort('name',this)">가나다순</button>
+        <button class="sort-btn" data-sort="recent" onclick="setClientSort('recent',this)">최근납품</button>
+        <button class="sort-btn" data-sort="unpaid" onclick="setClientSort('unpaid',this)">미수금↑</button>
+        <button class="sort-btn" data-sort="total" onclick="setClientSort('total',this)">매출↑</button>
+    </div>
+    <div id="clientList" style="display:block;"></div>
+</div>
+
+<!-- ─── 미수금 관리 ─── -->
+<div class="pane" id="pane-unpaid">
+    <div class="unpaid-summary-bar">
+        <div class="unpaid-sum-card danger">
+            <div class="unpaid-sum-label">총 미수금</div>
+            <div class="unpaid-sum-val" id="upTotalAmt">0원</div>
+        </div>
+        <div class="unpaid-sum-card">
+            <div class="unpaid-sum-label">미수 거래처</div>
+            <div class="unpaid-sum-val" id="upClientCount">0곳</div>
+        </div>
+        <div class="unpaid-sum-card">
+            <div class="unpaid-sum-label">미수 전표</div>
+            <div class="unpaid-sum-val" id="upOrderCount">0건</div>
+        </div>
+    </div>
+    <div class="unpaid-age-tabs">
+        <button class="unpaid-age-tab active" data-age="all" onclick="setUnpaidAgeFilter('all',this)">전체</button>
+        <button class="unpaid-age-tab" data-age="0" onclick="setUnpaidAgeFilter('0',this)">🟢 30일 이내</button>
+        <button class="unpaid-age-tab" data-age="30" onclick="setUnpaidAgeFilter('30',this)">🟠 30~60일</button>
+        <button class="unpaid-age-tab" data-age="60" onclick="setUnpaidAgeFilter('60',this)">🔴 60~90일</button>
+        <button class="unpaid-age-tab" data-age="90" onclick="setUnpaidAgeFilter('90',this)">🚨 90일+</button>
+    </div>
+    <div id="unpaidClientList"></div>
+</div>
+
+<!-- ─── 납품 등록 ─── -->
+
+<!-- ─── 재고 관리 ─── -->
+<div class="pane" id="pane-stock">
+  <!-- 과거 날짜 재고 조회 -->
+  <div class="stock-date-bar">
+    <label>📅</label>
+    <button class="stock-date-today-btn" onclick="stockDateNav(-1)" style="padding:7px 10px;">◀</button>
+    <input type="date" class="stock-date-input" id="stockViewDate" onchange="onStockDateChange(this.value)">
+    <button class="stock-date-today-btn" onclick="stockDateNav(1)" style="padding:7px 10px;">▶</button>
+    <button class="stock-date-today-btn" onclick="resetStockToToday()">오늘</button>
+  </div>
+  <div class="stock-history-banner" id="stockHistoryBanner">
+    <div class="stock-history-banner-title">🕐 과거 재고 조회 중</div>
+    <div class="stock-history-banner-sub" id="stockHistoryBannerSub"></div>
+  </div>
+  <div class="stock-summary">
+    <div class="stock-sum-card s-all">
+      <div class="stock-sum-label">전체 품목</div>
+      <div class="stock-sum-val" id="sCountAll">0</div>
+    </div>
+    <div class="stock-sum-card s-low">
+      <div class="stock-sum-label">부족 주의</div>
+      <div class="stock-sum-val" id="sCountLow">0</div>
+    </div>
+    <div class="stock-sum-card s-danger">
+      <div class="stock-sum-label">재고 없음</div>
+      <div class="stock-sum-val" id="sCountDanger">0</div>
+    </div>
+  </div>
+  <div class="auto-deduct-bar">
+    <div>
+      <div style="font-size:13px;font-weight:700;">납품 시 자동 재고 차감</div>
+      <div style="font-size:11px;color:var(--text2);margin-top:2px;">납품 확정 시 품목 재고 자동 차감</div>
+    </div>
+    <button class="btn btn-ghost btn-sm" id="autoDeductBtn" onclick="toggleAutoDeduct()" style="min-width:52px;">OFF</button>
+  </div>
+  <!-- 달걀 품목 빠른 등록 배너 -->
+  <div id="eggInitBanner" style="display:none;margin-bottom:12px;background:linear-gradient(135deg,#fef3c7,#fffbeb);border:1.5px solid #fcd34d;border-radius:var(--radius);padding:13px 14px;">
+    <div style="font-size:13px;font-weight:800;color:#92400e;margin-bottom:6px;">🥚 달걀 품목을 한 번에 등록할까요?</div>
+    <div style="font-size:11px;color:#78350f;margin-bottom:10px;">왕란 · 특란 · 대란 · 중란을 자동으로 등록합니다</div>
+    <div style="display:flex;gap:8px;">
+      <button class="btn btn-sm" style="flex:1;background:#f59e0b;color:#fff;border:none;" onclick="initEggItems()">✅ 달걀 4종 등록</button>
+      <button class="btn btn-ghost btn-sm" onclick="document.getElementById('eggInitBanner').style.display='none'">나중에</button>
+    </div>
+  </div>
+  <div style="display:flex;gap:8px;margin-bottom:10px;">
+    <input type="text" class="form-input" id="stockSearch" placeholder="🔍 품목 검색…" oninput="renderStock()" autocomplete="off" style="flex:1;">
+    <button class="btn btn-ghost btn-sm" onclick="refreshStockCarryover()" style="white-space:nowrap;flex-shrink:0;" title="전일 마감 재고 이월 및 변동 반영">🔄</button>
+    <button class="btn btn-primary btn-sm" onclick="openStockEdit(null)" style="white-space:nowrap;flex-shrink:0;">+ 등록</button>
+  </div>
+  <div class="sort-btn-group" style="margin-bottom:12px;">
+    <button class="sort-btn active" onclick="setStockSort('name',this)">가나다순</button>
+    <button class="sort-btn" onclick="setStockSort('qty-asc',this)">재고↑</button>
+    <button class="sort-btn" onclick="setStockSort('qty-desc',this)">재고↓</button>
+    <button class="sort-btn" onclick="setStockSort('danger',this)">부족순</button>
+  </div>
+  <div id="stockList"></div>
+</div>
+
+<!-- ─── 거래처 ─── -->
+<div class="pane" id="pane-delivery">
+    <div class="card">
+        <div class="form-group" style="position:relative;">
+            <label class="form-label">거래처 *</label>
+            <input type="text" class="form-input" id="deliveryClient" placeholder="거래처 검색… (초성 가능)" autocomplete="off"
+                oninput="searchDeliveryClient(this.value)" onfocus="searchDeliveryClient(this.value)" ondblclick="this.select()">
+            <input type="hidden" id="selectedClientId">
+            <div class="dropdown" id="clientDropdown"></div>
+        </div>
+        <div class="client-unpaid-hint" id="clientUnpaidHint"></div>
+    </div>
+    <div class="card">
+        <div class="card-title">날짜 + 품목 추가</div>
+        <div class="form-group">
+            <label class="form-label">납품 일자</label>
+            <input type="date" class="form-input" id="deliveryDate">
+        </div>
+        <!-- 거래처별 최근 품목 추천 -->
+        <div class="client-item-suggest" id="clientItemSuggest">
+            <div class="cis-label">⚡ 이 거래처 최근 품목 — 탭하면 바로 채워짐</div>
+            <div class="cis-chips" id="cisChips"></div>
+        </div>
+        <div class="form-group">
+            <label class="form-label">품목명</label>
+            <input type="text" class="form-input" id="itemName" placeholder="품목명" autocomplete="new-password" autocorrect="off" autocapitalize="off" spellcheck="false" oninput="onItemNameInput(this.value)">
+            <div class="price-hint" id="priceHint"></div>
+        </div>
+        <div class="input-row" style="margin-bottom:12px;">
+            <div class="form-group">
+                <label class="form-label">수량</label>
+                <input type="number" class="form-input" id="itemQty" placeholder="0">
+            </div>
+            <div class="form-group">
+                <label class="form-label">단가</label>
+                <input type="number" class="form-input" id="itemPrice" placeholder="0" onfocus="autoFillPrice(this)">
+            </div>
+            <button class="btn btn-primary" onclick="addItemToGroup()" style="align-self:flex-end;height:44px;padding:0 14px;">+</button>
+        </div>
+    </div>
+    <div id="tempGroupList" style="margin-bottom:12px;"></div>
+    <div id="tempTotalBox" style="display:none;background:var(--accent);color:#fff;padding:13px 16px;border-radius:10px;margin-bottom:12px;">
+        <div style="display:flex;justify-content:space-between;font-size:15px;font-weight:700;">
+            <span>전체 합계</span><span id="tempTotal">0원</span>
+        </div>
+        <div id="tempDateCount" style="font-size:11px;opacity:.8;margin-top:3px;text-align:right;"></div>
+    </div>
+</div>
+
+<!-- ─── 내역 조회 ─── -->
+<div class="pane" id="pane-history">
+    <div class="hist-summary">
+        <div class="hist-sum-card" style="background:linear-gradient(135deg,#4e54c8,#6c63ff);">
+            <div class="hist-sum-label">총납품액</div>
+            <div class="hist-sum-value" id="hstatTotal">0원</div>
+        </div>
+        <div class="hist-sum-card" style="background:linear-gradient(135deg,#22c55e,#16a34a);">
+            <div class="hist-sum-label">수금액</div>
+            <div class="hist-sum-value" id="hstatPaid">0원</div>
+            <div class="hist-sum-breakdown" id="hstatBreakdown" style="display:none;">
+                <span class="hist-sum-method" id="hstatCash">💵 0원</span>
+                <span class="hist-sum-method" id="hstatTransfer">🏦 0원</span>
+            </div>
+        </div>
+        <div class="hist-sum-card" style="background:linear-gradient(135deg,#ef4444,#dc2626);">
+            <div class="hist-sum-label">미수금</div>
+            <div class="hist-sum-value" id="hstatUnpaid">0원</div>
+        </div>
+    </div>
+    <div class="card" style="margin-bottom:12px;">
+        <!-- 날짜 네비 바 -->
+        <div class="stock-date-bar" style="margin-bottom:10px;">
+            <span style="font-size:16px;">📅</span>
+            <button class="stock-date-today-btn" onclick="histDateNav(-1)" style="padding:7px 11px;">◀</button>
+            <input type="date" class="stock-date-input" id="histNavDate" onchange="histDateNavSet(this.value)">
+            <button class="stock-date-today-btn" onclick="histDateNav(1)" style="padding:7px 11px;">▶</button>
+            <button class="stock-date-today-btn" onclick="histDateNavToday()">오늘</button>
+        </div>
+        <div style="display:flex;gap:5px;margin-bottom:10px;flex-wrap:nowrap;">
+            <button class="chip hist-period active" data-p="today"     onclick="setHistPeriod('today',this)" style="padding:7px 10px;flex:1;text-align:center;">오늘</button>
+            <button class="chip hist-period" data-p="week"      onclick="setHistPeriod('week',this)" style="padding:7px 10px;flex:1;text-align:center;">이번주</button>
+            <button class="chip hist-period" data-p="lastweek"  onclick="setHistPeriod('lastweek',this)" style="padding:7px 10px;flex:1;text-align:center;">지난주</button>
+            <button class="chip hist-period" data-p="month"     onclick="setHistPeriod('month',this)" style="padding:7px 10px;flex:1;text-align:center;">이번달</button>
+            <button class="chip hist-period" data-p="lastmonth" onclick="setHistPeriod('lastmonth',this)" style="padding:7px 10px;flex:1;text-align:center;">지난달</button>
+        </div>
+        <div style="display:grid;grid-template-columns:auto 1fr auto 1fr;gap:6px;margin-bottom:10px;align-items:center;min-width:0;">
+            <span style="font-size:11px;font-weight:700;color:var(--text2);white-space:nowrap;letter-spacing:.5px;">기간설정</span>
+            <input type="date" class="form-input" id="histStart" onchange="clearHistPeriodActive();renderOrders()" style="width:100%;min-width:0;font-size:13px;padding:9px 8px;">
+            <span style="color:var(--text3);font-size:13px;text-align:center;">~</span>
+            <input type="date" class="form-input" id="histEnd"   onchange="clearHistPeriodActive();renderOrders()" style="width:100%;min-width:0;font-size:13px;padding:9px 8px;">
+        </div>
+        <div style="display:flex;align-items:stretch;gap:8px;">
+            <!-- 왼쪽: 전체/미수금만/완납만 + 날짜순/거래처순/최근거래순 -->
+            <div style="flex:1;display:flex;flex-direction:column;gap:8px;">
+                <div class="hist-filter-chips" id="histPayChips">
+                    <button class="chip active" data-f="all"    onclick="setHistPayFilter('all',this)">전체</button>
+                    <button class="chip" data-f="unpaid" onclick="setHistPayFilter('unpaid',this)">미수금만</button>
+                    <button class="chip" data-f="paid"   onclick="setHistPayFilter('paid',this)">완납만</button>
+                </div>
+                <div class="sort-btn-group" style="margin-top:0;">
+                    <button class="sort-btn active" id="histSortDate"   onclick="setHistSort('date',this)">날짜순</button>
+                    <button class="sort-btn"        id="histSortClient" onclick="setHistSort('client',this)">거래처순</button>
+                    <button class="sort-btn"        id="histSortRecent" onclick="setHistSort('recent',this)">최근거래순</button>
+                </div>
+            </div>
+            <!-- 오른쪽: 오늘 거래 박스 (좌측과 동일 높이) -->
+            <div id="todayCountBox" style="
+                flex-shrink:0;
+                width:82px;
+                background:var(--surf3);
+                border:1px solid var(--border);
+                border-radius:16px;
+                display:flex;
+                flex-direction:column;
+                align-items:center;
+                justify-content:center;
+                gap:1px;
+            ">
+                <span id="todayCountLabel" style="font-size:9px;font-weight:700;color:var(--text2);letter-spacing:.8px;text-transform:uppercase;">오늘 거래</span>
+                <div style="display:flex;align-items:baseline;gap:2px;">
+                    <span id="todayCountNum" style="font-size:22px;font-weight:900;color:var(--accent);line-height:1.1;">0</span>
+                    <span style="font-size:10px;font-weight:700;color:var(--text2);">건</span>
+                </div>
+                <span id="todayCountAmt" style="font-size:10px;font-weight:600;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:90%;">0원</span>
+            </div>
+        </div>
+        <div class="form-group" style="margin-bottom:0;margin-top:10px;">
+            <input type="text" class="form-input" id="histSearch" placeholder="🔍 거래처·품목명 검색… (초성 가능: ㄱ,ㄴ,ㅅ…)" oninput="renderOrders()" autocomplete="off" ondblclick="this.select()">
+        </div>
+    </div>
+    <div id="orderList"></div>
+</div>
+
+<!-- ─── 정산 ─── -->
+<div class="pane" id="pane-settlement">
+
+    <!-- 정산 단위 탭: 일별 / 월별 / 분기별 -->
+    <div class="settle-unit-tabs" style="display:flex;gap:6px;margin-bottom:14px;">
+        <button class="settle-unit-tab active" data-unit="monthly" onclick="setSettleUnit(this)">📅 월별</button>
+        <button class="settle-unit-tab" data-unit="daily" onclick="setSettleUnit(this)">📆 일별</button>
+        <button class="settle-unit-tab" data-unit="quarterly" onclick="setSettleUnit(this)">📊 분기별</button>
+    </div>
+
+    <!-- ── 월별 컨트롤 ── -->
+    <div id="settle-ctrl-monthly">
+        <div class="form-group">
+            <label class="form-label">정산 월</label>
+            <input type="month" class="form-input" id="settlementMonth" onchange="renderSettlement()">
+        </div>
+        <div class="period-tabs">
+            <button class="period-tab active" data-period="current" onclick="setSettlePeriod(this)">이번 달</button>
+            <button class="period-tab" data-period="last" onclick="setSettlePeriod(this)">지난 달</button>
+            <button class="period-tab" data-period="custom" onclick="setSettlePeriod(this)">직접 선택</button>
+        </div>
+    </div>
+
+    <!-- ── 일별 컨트롤 ── -->
+    <div id="settle-ctrl-daily" style="display:none;">
+        <div class="form-group">
+            <label class="form-label">날짜 선택</label>
+            <input type="date" class="form-input" id="settlementDateDaily" onchange="renderSettlementDaily()">
+        </div>
+        <div class="period-tabs">
+            <button class="period-tab active" data-dperiod="today" onclick="setSettlePeriodDaily(this)">오늘</button>
+            <button class="period-tab" data-dperiod="yesterday" onclick="setSettlePeriodDaily(this)">어제</button>
+            <button class="period-tab" data-dperiod="prev" onclick="setSettlePeriodDaily(this)">◀ 전날</button>
+            <button class="period-tab" data-dperiod="next" onclick="setSettlePeriodDaily(this)">다음날 ▶</button>
+        </div>
+    </div>
+
+    <!-- ── 분기별 컨트롤 ── -->
+    <div id="settle-ctrl-quarterly" style="display:none;">
+        <div class="form-group">
+            <label class="form-label">연도</label>
+            <input type="number" class="form-input" id="settlementYear" min="2020" max="2099" onchange="renderSettlementQuarterly()">
+        </div>
+        <div class="period-tabs" style="grid-template-columns:repeat(2,1fr);">
+            <button class="period-tab active" data-qy="current" onclick="setSettleYearQuick(this)">올해</button>
+            <button class="period-tab" data-qy="last" onclick="setSettleYearQuick(this)">작년</button>
+        </div>
+    </div>
+
+    <!-- 수납 필터 (공통) -->
+    <div class="hist-filter-chips" id="settlePayFilter" style="margin-bottom:12px;margin-top:4px;">
+        <button class="chip active" data-f="all"    onclick="setSettleFilter('all',this)">전체</button>
+        <button class="chip" data-f="unpaid" onclick="setSettleFilter('unpaid',this)">미수금만</button>
+        <button class="chip" data-f="paid"   onclick="setSettleFilter('paid',this)">완납만</button>
+    </div>
+
+    <!-- 차트 -->
+    <div id="settleBarChart"></div>
+
+    <!-- 요약 박스 -->
+    <div id="settlementSummary"></div>
+
+    <!-- Excel 버튼 -->
+    <button class="btn btn-success btn-full" onclick="exportSettlementExcel()" style="margin-bottom:8px;">📊 정산서 Excel</button>
+
+    <!-- 월별 거래처 테이블 (기존) -->
+    <div id="settle-section-monthly">
+        <div style="display:flex;gap:8px;margin-bottom:10px;align-items:center;">
+            <input type="text" class="form-input" id="settleSearch" placeholder="🔍 거래처 검색… (초성 가능: ㄱ,ㄴ,ㅅ…)" autocomplete="off" oninput="onSettleSearch(this.value)" ondblclick="this.select()">
+            <button class="btn btn-ghost btn-sm" onclick="toggleSettleList()" id="settleToggleBtn" style="white-space:nowrap;">보이기</button>
+        </div>
+        <div id="settlementTable" style="display:none;"></div>
+    </div>
+
+    <!-- 일별 테이블 -->
+    <div id="settle-section-daily" style="display:none;">
+        <div id="settlementDailyTable"></div>
+    </div>
+
+    <!-- 분기별 테이블 -->
+    <div id="settle-section-quarterly" style="display:none;">
+        <div id="settlementQuarterlyTable"></div>
+    </div>
+
+</div>
+
+<!-- ─── 백업 ─── -->
+<div class="pane" id="pane-backup">
+    <div id="backupBanner" class="status-banner"></div>
+    <div class="backup-section">
+        <h3>📁 백업 저장 위치</h3>
+        <p>수동·자동 백업 파일이 저장될 폴더를 지정합니다.<br>
+        <strong style="color:var(--text2);">Chrome·Edge 데스크톱에서 지원 · 미지정 시 기본 다운로드 폴더</strong></p>
+        <div id="backupDirInfo" style="margin:10px 0 10px;padding:9px 12px;background:var(--surf2);border:1px solid var(--border);border-radius:8px;font-size:13px;">
+            <span style="color:var(--text2);">📂 기본 다운로드 폴더</span>
+        </div>
+        <div style="display:flex;gap:8px;">
+            <button class="btn btn-ghost btn-sm" id="pickDirBtn" onclick="pickBackupDir()">📁 폴더 선택</button>
+            <button class="btn btn-danger btn-sm" id="clearDirBtn" onclick="clearBackupDir()" style="display:none;">✕ 초기화</button>
+        </div>
+    </div>
+    <div class="backup-section">
+        <h3>⏰ 자동 백업 설정</h3>
+        <p>앱 실행 시 해당 날짜에 자동으로 클라우드&amp;파일 백업을 실행합니다.<br>
+        <strong style="color:var(--red);">Firebase 연결 시에만 클라우드 저장 가능</strong></p>
+        <div class="schedule-row">
+            <span style="font-size:13px;font-weight:600;">매월</span>
+            <input type="number" class="schedule-day-input" id="schedDay1" min="1" max="28" value="1"> 일 ·
+            <input type="number" class="schedule-day-input" id="schedDay2" min="1" max="28" value="15"> 일
+            <button class="btn btn-ghost btn-sm" onclick="saveBackupSchedule()">저장</button>
+        </div>
+        <div style="font-size:11px;color:var(--text2);">마지막 자동 백업: <span id="lastAutoBackup" style="color:var(--accent);font-weight:700;">없음</span></div>
+    </div>
+    <div class="backup-section">
+        <h3>💾 수동 백업</h3>
+        <p>지금 즉시 백업을 실행합니다 (파일 저장 + 클라우드 동시).</p>
+        <button class="btn btn-primary btn-full" id="manualBackupBtn" onclick="runManualBackup()">📦 지금 백업 실행</button>
+    </div>
+    <div class="backup-section">
+        <h3>📋 백업 목록 <span style="font-size:11px;color:var(--text2);font-weight:400;">(최근 10개 · 클라우드)</span></h3>
+        <button class="btn btn-ghost btn-sm" onclick="renderBackupTab()" style="margin-bottom:10px;">🔄 새로고침</button>
+        <div id="backupList">
+            <div class="empty"><div class="empty-icon">☁️</div><div class="empty-text">Firebase 연결 후 백업 목록을 확인하세요</div></div>
+        </div>
+    </div>
+</div>
+
+<!-- ─── 설정 ─── -->
+<div class="pane" id="pane-settings">
+
+    <!-- ▶ 저장공간 관리 카드 -->
+    <div class="card" id="storageCard">
+        <div class="card-title">💾 저장공간 관리</div>
+
+        <!-- 스마트 저장 모드 안내 -->
+        <div style="background:var(--surf3);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:var(--radius-s);padding:10px 13px;margin-bottom:14px;font-size:12px;color:var(--text2);line-height:1.7;">
+            📡 <strong style="color:var(--accent);">Firebase 연결 중</strong>: 로컬엔 최근 3개월 + 재고 이력 어제·오늘만 저장 (용량 최소화)<br>
+            📴 <strong style="color:var(--text2);">오프라인</strong>: 전체 데이터 로컬 저장 (안전 모드)
+        </div>
+
+        <!-- 사용량 바 -->
+        <div style="margin-bottom:14px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                <span style="font-size:12px;font-weight:700;color:var(--text2);">localStorage 사용량</span>
+                <span id="storageUsedLabel" style="font-size:12px;font-weight:900;font-family:'DM Mono',monospace;color:var(--accent);">계산 중...</span>
+            </div>
+            <div style="background:var(--surf3);border-radius:99px;height:10px;overflow:hidden;">
+                <div id="storageBar" style="height:100%;border-radius:99px;background:linear-gradient(90deg,#22c55e,#6c63ff);transition:width .5s ease;width:0%;"></div>
+            </div>
+            <div style="display:flex;justify-content:space-between;margin-top:4px;">
+                <span style="font-size:10px;color:var(--text3);">0</span>
+                <span style="font-size:10px;color:var(--text3);">한도 ~5MB</span>
+            </div>
+        </div>
+
+        <!-- 🚨 긴급 저장공간 정리 (한도 초과 시) -->
+        <div class="settings-row" id="emergencyCleanRow" style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:var(--radius-s);padding:10px 13px;margin-bottom:10px;display:none;">
+            <div>
+                <div class="settings-label" style="color:#dc2626;">🚨 저장공간 한도 초과</div>
+                <div class="settings-desc" style="color:#b91c1c;">기존 로컬 데이터를 지우고 경량 재저장합니다.<br>Firebase 데이터는 안전하게 유지됩니다.</div>
+            </div>
+            <button class="btn btn-sm btn-danger" onclick="emergencyCleanStorage()" style="white-space:nowrap;flex-shrink:0;">즉시 정리</button>
+        </div>
+
+        <!-- 즉각 해결: 재고 이력 정리 -->
+        <div class="settings-row">
+            <div>
+                <div class="settings-label">⚡ 재고 이력 즉시 정리</div>
+                <div class="settings-desc">재고 이력을 어제·오늘만 남기고 이전 이력 삭제 (공간 즉시 확보)</div>
+            </div>
+            <button class="btn btn-sm" style="background:var(--orange);color:#fff;border:none;white-space:nowrap;" onclick="trimStockLog()">정리</button>
+        </div>
+
+        <!-- 오래된 전표 자동 정리 -->
+        <div class="settings-row">
+            <div>
+                <div class="settings-label">🗂️ 오래된 전표 자동 정리</div>
+                <div class="settings-desc" id="autoTrimDesc">완납된 전표 중 <strong id="autoTrimMonthsLabel">6</strong>개월 이상 된 것 자동 삭제</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;">
+                <select id="autoTrimMonths" class="form-input" style="width:72px;padding:6px 8px;font-size:13px;" onchange="document.getElementById('autoTrimMonthsLabel').textContent=this.value">
+                    <option value="3">3개월</option>
+                    <option value="6" selected>6개월</option>
+                    <option value="12">12개월</option>
+                    <option value="24">24개월</option>
+                </select>
+                <button class="btn btn-sm btn-ghost" onclick="trimOldOrders()">정리</button>
+            </div>
+        </div>
+
+        <!-- 저장공간 새로고침 -->
+        <div style="margin-top:10px;">
+            <button class="btn btn-ghost btn-full btn-sm" onclick="updateStorageBar()">🔄 사용량 다시 계산</button>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-title">데이터 관리</div>
+        <div class="settings-row">
+            <div>
+                <div class="settings-label">Excel 내보내기</div>
+                <div class="settings-desc">전체 납품 내역을 xlsx로 저장</div>
+            </div>
+            <button class="btn btn-ghost btn-sm" onclick="exportHistoryExcel()">내보내기</button>
+        </div>
+        <div class="settings-row">
+            <div>
+                <div class="settings-label">JSON 백업 내보내기</div>
+                <div class="settings-desc">전체 데이터를 JSON 파일로 저장</div>
+            </div>
+            <button class="btn btn-ghost btn-sm" onclick="exportJSON()">저장</button>
+        </div>
+        <div class="settings-row">
+            <div>
+                <div class="settings-label">JSON 가져오기</div>
+                <div class="settings-desc">백업 JSON 파일로 데이터 복원</div>
+            </div>
+            <button class="btn btn-ghost btn-sm" onclick="document.getElementById('importFile').click()">가져오기</button>
+        </div>
+        <input type="file" id="importFile" accept=".json" style="display:none;" onchange="importJSON(event)">
+        <div class="settings-row">
+            <div>
+                <div class="settings-label">샘플 데이터 생성</div>
+                <div class="settings-desc">테스트용 거래처·납품 추가</div>
+            </div>
+            <button class="btn btn-ghost btn-sm" onclick="loadSample()">생성</button>
+        </div>
+        <div class="settings-row">
+            <div>
+                <div class="settings-label" style="color:var(--red);">전체 데이터 초기화</div>
+                <div class="settings-desc">모든 데이터 영구 삭제</div>
+            </div>
+            <button class="btn btn-danger btn-sm" onclick="resetAllData()">초기화</button>
+        </div>
+    </div>
+    <div class="card">
+        <div class="card-title">앱 정보</div>
+        <div style="font-size:13px;color:var(--text2);line-height:2;margin-bottom:12px;">
+            버전: <strong style="color:var(--accent);">v77</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
+            거래처: <span id="infoClients">0</span>개 &nbsp;·&nbsp;
+            납품내역: <span id="infoOrders">0</span>건
+        </div>
+        <!-- 변경 이력 -->
+        <div style="border-top:1px solid var(--border);padding-top:10px;">
+            <div style="font-size:11px;font-weight:700;color:var(--text2);letter-spacing:.7px;text-transform:uppercase;margin-bottom:8px;">변경 이력</div>
+            <div id="changelogList" style="display:flex;flex-direction:column;gap:6px;">
+                <!-- 현재 버전 -->
+                <div class="changelog-item">
+                    <span class="changelog-ver" style="color:var(--green);">v77</span>
+                    <span class="changelog-desc">동기화 안정성 개선 — _initialLoadDone 전역 이동(실시간 리스너 정상화), online 복귀 시 업로드→다운로드 순서 보장, waitFirebase 재시도 4초→10초 연장. JS 문법 오류 수정(중괄호 중복). head 중복 제거(viewport·Google Fonts).</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v76</span>
+                    <span class="changelog-desc">메모 모아보기 — 더보기 메뉴에서 거래처별 주·월 단위 메모 모아보기, 메모 삭제, 뒤로가기 닫기 지원. 납품 카드 메모 항상 표시 + 이전 메모 표시. 거래처 카드 오늘 납품 시 최근 메모 뱃지 표시. 기간별 거래 건수·금액 위젯 개선. 메모 글색 주황색 통일.</span>
+                </div>
+                <!-- 이전 이력 토글 버튼 -->
+                <button id="changelogToggleBtn" onclick="toggleOldChangelog()" style="display:flex;align-items:center;justify-content:center;gap:5px;width:100%;padding:7px 12px;margin-top:2px;background:var(--surf3);border:1px solid var(--border);border-radius:var(--radius-s);color:var(--text2);font-size:11px;font-weight:700;cursor:pointer;transition:all .15s;letter-spacing:.3px;">
+                    <span id="changelogToggleIcon">▼</span>
+                    <span id="changelogToggleLabel">이전 이력 보기 (v75 ~ v24_4-3-3)</span>
+                </button>
+                <div id="oldChangelogItems" style="display:none;flex-direction:column;gap:6px;">
+                <div class="changelog-item">
+                    <span class="changelog-ver">v75</span>
+                    <span class="changelog-desc">재고 이력 정리 기준 수정 — 어제·오늘만 유지(기존 30일 유지 버그 수정). 전표 메모 기능 추가 — 납품 카드 메모 버튼, 거래처 카드 탭 시 메모 말풍선 표시. 버튼 순서 통일(취소→저장). 코드 정리.</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v55</span>
+                    <span class="changelog-desc">할인 완납 수금 누계 버그 수정 — 할인 완납 시 실수령액 대신 청구금액으로 수금 통계가 집계되던 문제 수정. _actualPaid() 헬퍼 도입 → 내역·정산·대시보드·미수탭·거래명세표 등 수금액 집계 14곳 일괄 수정.</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v54</span>
+                    <span class="changelog-desc">할인 완납 기능 추가 — ① 퀵결제 팝업에 "✂️ 끝자리 할인 완납" 영역 추가 ② 입금 처리 모달에도 동일 기능 추가 ③ 전표 카드·거래명세표에 "✂️ 할인완납" 배지 표시 ④ 미수 복귀 시 discount 필드 자동 초기화</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v53</span>
+                    <span class="changelog-desc">검색창 더블탭 전체선택 — 납품 거래처·거래처·내역·정산 검색창에서 두 번 터치(모바일) 또는 더블클릭(PC) 시 텍스트 전체 선택.</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v52</span>
+                    <span class="changelog-desc">코드 품질 개선 4건 — ① changelog HTML 태그 오류 수정 ② document click 리스너 중복 등록 제거 ③ Firebase 데이터 정규화 헬퍼 함수 추출 ④ Firebase 실시간 리스너 공용 핸들러 추출</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v51</span>
+                    <span class="changelog-desc">정밀 코드 점검 후 추가 수정 6건 — ① 재고 자동차감 OFF여도 품목 신규 등록·수정 허용 ② 캐시 변수 선언 위치 통일 ③ 수금취소 저장 누락 수정 ④ 대시보드 미수금 방어 코드 ⑤ 전체완납 수금방법 UX 개선 ⑥ 거래처 미연결 전표 품목 추천 지원</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v50</span>
+                    <span class="changelog-desc">안정성 전면 개선 — ① 저장공간 부족 시 메모리 데이터 보존 ② 재고 이력 30일치 보존 ③ 재고 품목 삭제 항상 허용 ④ 단가 조회 캐시화 ⑤ 수금액 음수 방어 ⑥ 데이터 해시 키 순서 안정화 ⑦ 퀵결제 팝업 ESC 지원 ⑧ JSON 백업 버전 표기 수정</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v49</span>
+                    <span class="changelog-desc">납품수정보정 출고 상쇄 버그 수정 — 수정보정(edit_adj +)이 입고로 집계되던 버그 수정. 재고 카드·과거조회·재고 이력 헤더 3곳 수정.</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v48</span>
+                    <span class="changelog-desc">모달 뒤로가기(이전) 버튼 지원 — 모든 팝업을 스마트폰 이전(←) 버튼으로 닫을 수 있게 개선. 팝업이 여러 개면 하나씩 순서대로 닫힘.</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v47</span>
+                    <span class="changelog-desc">재고 이력 시간 KST 보정 — 재고 이력 타임스탬프를 KST 기준으로 올바르게 표시.</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v46</span>
+                    <span class="changelog-desc">납품 확정 후 내역 탭 자동 전환 — 🚚 납품 확정 시 내역 탭(오늘)으로 바로 이동.</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v45</span>
+                    <span class="changelog-desc">내역 탭 수금방법 퀵선택 — 미수 배지 탭 시 💵현금/🏦계좌이체 선택 팝업 표시 후 완납. 완납 배지 탭 시 confirm 후 미수 복귀. 내역 수금액에 현금/이체 분리 표시.</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v44</span>
+                    <span class="changelog-desc">수금 방법 구분 추가 — 입금처리·수금수정 모달에 💵현금/🏦계좌이체/📝기타 버튼. 거래명세표 수금 이력에 방법 배지 표시. Excel 수금방법 컬럼 추가.</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v43</span>
+                    <span class="changelog-desc">미수금 관리 강화 — 🔴미수 전용 탭 추가(거래처별 미수금·경과일·전화/문자/입금처리), 거래처 카드 미수금 색띠+배지(30/60/90일), 대시보드 미수 거래처 TOP 현황, 네비게이션 배지.</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v42</span>
+                    <span class="changelog-desc">전체 코드 점검 및 버그 수정 4건 — ① _trimLogByDate 타임존 버그 수정 ② _compactTs undefined 처리 ③ normalizeBackupData items.total 미복원 수정 ④ _minifyOrder createdAt 항상 포함 문제 수정.</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v41</span>
+                    <span class="changelog-desc">localStorage 4종 최적화 — ① 전표 품목 total 필드 제거 ② createdAt/updatedAt 24→16자 단축 ③ 빈 note/paidNote 저장 방지 ④ prices 최근 6개월 미사용 단가 자동 정리. 평균 15~25% 절감.</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v40</span>
+                    <span class="changelog-desc">재고 이력 보관 정책 변경 — 어제·오늘 이력만 유지하고 이전 이력 자동 삭제. 모든 이력 추가 지점 동일 정책 적용.</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v39</span>
+                    <span class="changelog-desc">localStorage 저장 최적화 — 평균 20~40% 절감. 거래명세표 카카오톡 공유 버튼 추가. 버그 수정: _noItems Firebase 오염 방지·Excel 내보내기 누락·거래명세서 품목 빈칸.</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v38</span>
+                    <span class="changelog-desc">내역 탭 기간 필터 개편 — "전체" 제거, 순서 변경(오늘→이번주→지난주→이번달→지난달), "지난주" 버튼 추가, 오늘 거래 건수·금액 위젯 추가.</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v37</span>
+                    <span class="changelog-desc">수금 수정 기능 추가 — 거래명세표 수금 이력에 ✏️ 수정 버튼 추가. 수금액 변경·메모 수정·수금 취소(미수 복귀) 가능.</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v36</span>
+                    <span class="changelog-desc">내역 탭 기간 필터 "지난달" 버튼 추가 / 초성 검색 하이라이트 버그 수정.</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v35</span>
+                    <span class="changelog-desc">모듈 분리(§0~§15) + 부분 렌더링 엔진 도입: 탭 전환 시 더티 플래그(_dirty) 기반으로 변경된 탭만 렌더링.</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v34</span>
+                    <span class="changelog-desc">재고 이월 안정성 개선 — ① lastCarryDate 필드 도입(이중 이월 차단) ② 탭 전환마다 자동 이월 실행 문제 수정(세션 1회 제한).</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v31</span>
+                    <span class="changelog-desc">재고 시스템 전체 점검·수정 4건: ① 자동차감 기본값 ON ② 자동차감 OFF여도 출고 칸 표시 ③ refreshStockCarryover 계산 개선 ④ getInOutAtDate edit_adj 타입 누락 보정.</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v28</span>
+                    <span class="changelog-desc">버그 수정 6건: 재고 수정보정 이중계산·완납 toast 덮어쓰기·togglePaid 미수 복귀 시 paidHistory 누락·음수 미수금 방지·applyAdj 변동없음 로그 차단·renderSparklines 변수명 충돌.</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v27.4</span>
+                    <span class="changelog-desc">localStorage 한도 초과 시 🚨 긴급정리 버튼 자동 표시 · saveToLocal 3단계 폴백 · 한도 동적 감지(5MB→10MB).</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v27.3</span>
+                    <span class="changelog-desc">재고 출고 재고0 차단 · 초과출고 확인 팝업 · 변동없음 차단 · saveToLocal 조기 경량화.</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v27.2</span>
+                    <span class="changelog-desc">터치 딜레이 300ms 제거 · GPU 가속 · Firebase echo 무시 복구 · saveToLocal 스마트 경량화.</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v27</span>
+                    <span class="changelog-desc">PDF 출력 제거 · JPG만 유지 · 저장공간 관리 카드 추가 · 재고 이력 상한 100→30.</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v24_4-3-6</span>
+                    <span class="changelog-desc">버전 전체 동기화 · 설정 탭 변경 이력 추가.</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v24_4-3-5</span>
+                    <span class="changelog-desc">성능 캐시 도입 — 납품 탭 딜레이 개선 (품목 목록·거래처 통계·미수금 배지 캐싱).</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v24_4-3-4</span>
+                    <span class="changelog-desc">정산 탭 거래처 목록 기본 숨김 · 납품 등록 후 배지 즉시 반영.</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v24_4-3-3</span>
+                    <span class="changelog-desc">스와이프·탭 전환·당겨서 새로고침 반응 속도 개선 · 완납·삭제·수납 시 배지 즉시 반영.</span>
+                </div>
+                </div><!-- /oldChangelogItems -->
+            </div>
+        </div>
+    </div>
+</div>
+
+</div><!-- /content -->
+
+<!-- ─── 납품 확정 팝업 ─── -->
+<div class="quick-pay-overlay" id="deliveryConfirmOverlay" onclick="closeDeliveryConfirm()"></div>
+<div class="quick-pay-popup" id="deliveryConfirmPopup">
+    <div class="modal-handle"></div>
+    <div class="quick-pay-title">🚚 납품 확정</div>
+    <div class="quick-pay-sub" id="deliveryConfirmSub">납품 내용을 확인하세요</div>
+    <div id="deliveryConfirmSummary" style="
+        background:var(--surf2); border:1.5px solid var(--border);
+        border-radius:var(--radius-s); padding:14px 16px;
+        margin-bottom:16px; font-size:13px; line-height:1.9;
+        max-height:220px; overflow-y:auto;
+    "></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;
+        background:var(--accent-dim); border:1.5px solid rgba(123,110,246,.25);
+        border-radius:var(--radius-s); padding:12px 16px; margin-bottom:16px;">
+        <span style="font-size:13px;font-weight:700;color:var(--text2);">합계 금액</span>
+        <span id="deliveryConfirmTotal" style="font-size:20px;font-weight:900;color:var(--accent);font-family:'DM Mono',monospace;letter-spacing:-1px;">0원</span>
+    </div>
+    <!-- 타인거래 토글 -->
+    <button id="deliveryVoidToggle" onclick="toggleDeliveryVoid()" style="
+        width:100%; margin-bottom:10px; padding:12px 16px;
+        border-radius:var(--radius-s); border:1.5px solid var(--border);
+        background:var(--surf2); color:var(--text2);
+        font-size:13px; font-weight:700; cursor:pointer;
+        display:flex; align-items:center; justify-content:center; gap:8px;
+        transition:all .18s;">
+        👤 타인거래 (재고 차감만 제외)
+    </button>
+    <div style="display:flex;gap:10px;">
+        <button onclick="closeDeliveryConfirm()" style="
+            flex:1; padding:16px; border-radius:var(--radius-s);
+            border:1.5px solid var(--border); background:var(--surf3);
+            color:var(--text2); font-size:14px; font-weight:700; cursor:pointer;">취소</button>
+        <button onclick="submitOrder()" style="
+            flex:2; padding:16px; border-radius:var(--radius-s);
+            border:none; background:linear-gradient(135deg,#18a84e,var(--green));
+            color:#fff; font-size:15px; font-weight:900; cursor:pointer;
+            box-shadow:0 4px 18px rgba(32,192,92,.4);">✅ 확정</button>
+    </div>
+</div>
+
+<!-- ▶ 바텀 네비게이션 -->
+<nav class="bottom-nav" id="bottomNav">
+    <button class="bnav-item active" data-tab="dashboard" onclick="bnavGo('dashboard',this)">
+        <span class="bnav-icon">📈</span>
+        <span class="bnav-label">통계</span>
+    </button>
+    <button class="bnav-item" data-tab="clients" onclick="bnavGo('clients',this)">
+        <span class="bnav-icon">🏪</span>
+        <span class="bnav-label">거래처</span>
+        <span class="bnav-badge" id="bnavBadgeClients"></span>
+    </button>
+    <div class="bnav-fab-wrap">
+        <button class="bnav-fab" onclick="bnavGo('delivery',null)" title="납품 등록">🚚</button>
+    </div>
+    <button class="bnav-item" data-tab="history" onclick="bnavGo('history',this)">
+        <span class="bnav-icon">📜</span>
+        <span class="bnav-label">내역</span>
+        <span class="bnav-badge" id="bnavBadgeHistory"></span>
+    </button>
+    <button class="bnav-item" data-tab="_more" onclick="openMoreSheet()">
+        <span class="bnav-icon">
+            <span class="bnav-more-dot"></span>
+            <span class="bnav-more-dot"></span>
+            <span class="bnav-more-dot"></span>
+        </span>
+        <span class="bnav-label">더보기</span>
+    </button>
+</nav>
+
+<!-- ▶ 더보기 시트 -->
+<div class="more-sheet-overlay" id="moreSheetOverlay" onclick="if(event.target===this)closeMoreSheet()">
+    <div class="more-sheet">
+        <div class="more-sheet-handle"></div>
+        <div class="more-grid">
+            <div class="more-item" onclick="closeMoreSheet();bnavGo('stock',null)">
+                <span class="more-item-icon">📦</span>
+                <span class="more-item-label">재고</span>
+            </div>
+            <div class="more-item" onclick="closeMoreSheet();bnavGo('settlement',null)">
+                <span class="more-item-icon">💰</span>
+                <span class="more-item-label">정산</span>
+            </div>
+            <div class="more-item" onclick="closeMoreSheet();bnavGo('backup',null)">
+                <span class="more-item-icon">🗄️</span>
+                <span class="more-item-label">백업</span>
+            </div>
+            <div class="more-item" onclick="closeMoreSheet();bnavGo('settings',null)">
+                <span class="more-item-icon">⚙️</span>
+                <span class="more-item-label">설정</span>
+            </div>
+            <div class="more-item" onclick="closeMoreSheet();openMemoView()">
+                <span class="more-item-icon">📋</span>
+                <span class="more-item-label">메모 모아보기</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+</div><!-- /app -->
+
+<!-- ═══ 모달들 ═══ -->
+
+<!-- Firebase 설정 모달 -->
+<div class="modal-overlay" id="firebaseModal">
+    <div class="modal-sheet">
+        <div class="modal-handle"></div>
+        <div class="modal-title">🔗 Firebase 실시간 동기화</div>
+        <p style="font-size:13px;color:var(--text2);margin-bottom:16px;line-height:1.7;">
+            워크스페이스 ID 하나로 여러 기기에서 데이터를 실시간 공유합니다.<br>
+            같은 ID를 입력한 기기끼리 데이터가 동기화됩니다.
+        </p>
+        <div class="form-group">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                <label class="form-label" style="margin-bottom:0;">워크스페이스 ID</label>
+                <span id="wsLockBadge" style="display:none;font-size:10px;font-weight:700;color:var(--green);background:var(--surf3);border:1px solid var(--green);border-radius:5px;padding:2px 7px;">🔒 고정됨</span>
+            </div>
+            <div style="display:flex;gap:6px;align-items:center;">
+                <input type="text" class="form-input" id="workspaceId" placeholder="예: myshop2024" style="flex:1;">
+                <button class="btn btn-ghost btn-sm" id="wsLockBtn" onclick="toggleWsLock()" title="ID 고정/해제" style="white-space:nowrap;flex-shrink:0;">🔓 고정</button>
+            </div>
+            <div id="wsLockHint" style="font-size:11px;color:var(--text2);margin-top:5px;display:none;">
+                🔒 ID가 고정되었습니다. 앱을 다시 열어도 자동 연결됩니다.
+            </div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:8px;">
+            <button class="btn btn-primary" style="flex:1;" id="connectBtn" onclick="connectWorkspace(false)">🔌 연결</button>
+            <button class="btn btn-danger"  style="flex:1;display:none;" id="disconnectBtn" onclick="disconnectWorkspace()">연결 해제</button>
+        </div>
+        <button class="btn btn-ghost btn-full" style="margin-top:8px;" onclick="closeModal('firebaseModal')">닫기</button>
+    </div>
+</div>
+
+<!-- 재고 품목 등록/수정 -->
+<div class="modal-overlay" id="stockEditModal">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title" id="stockEditTitle">📦 품목 등록</div>
+    <input type="hidden" id="seId">
+    <div class="form-group">
+      <label class="form-label">품목명 *</label>
+      <input type="text" class="form-input" id="seName" placeholder="예: 두부, 콩나물">
+    </div>
+    <!-- 이전재고(어제 마감) 안내 -->
+    <div id="sePrevQtyBar" style="display:none;margin-bottom:12px;padding:10px 13px;background:var(--surf3);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:var(--radius-s);">
+      <div style="font-size:10px;font-weight:700;color:var(--text2);letter-spacing:.7px;text-transform:uppercase;margin-bottom:6px;">이전 재고 (어제 마감)</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px;">
+        <span id="sePrevQtyVal" style="font-size:20px;font-weight:900;font-family:'DM Mono',monospace;color:var(--accent);"></span>
+        <div id="sePrevQtyDate" style="font-size:10px;color:var(--text3);text-align:right;"></div>
+      </div>
+      <div style="display:flex;gap:7px;">
+        <button type="button" id="btnApplyCarry" onclick="setPrevCarryMode(true)"
+          style="flex:1;padding:7px 0;border-radius:8px;border:2px solid var(--border);
+                 background:var(--surf2);color:var(--text2);font-size:12px;font-weight:700;cursor:pointer;transition:all .15s;">
+          ↩ 이월 적용
+        </button>
+        <button type="button" id="btnSkipCarry" onclick="setPrevCarryMode(false)"
+          style="flex:1;padding:7px 0;border-radius:8px;border:2px solid var(--accent);
+                 background:var(--accent);color:#fff;font-size:12px;font-weight:700;cursor:pointer;transition:all .15s;">
+          ✓ 현재값 유지
+        </button>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;">
+      <div class="form-group" style="flex:1;">
+        <label class="form-label">오늘 재고 *</label>
+        <input type="number" class="form-input" id="seQty" placeholder="0" min="0">
+      </div>
+      <div class="form-group" style="flex:1;">
+        <label class="form-label">단위</label>
+        <input type="text" class="form-input" id="seUnit" placeholder="개·kg·박스" maxlength="6">
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;">
+      <div class="form-group" style="flex:1;">
+        <label class="form-label">부족 경고 기준 (⚠️)</label>
+        <input type="number" class="form-input" id="seLow" placeholder="10" min="0">
+      </div>
+      <div class="form-group" style="flex:1;">
+        <label class="form-label">위험 경고 기준 (🔴)</label>
+        <input type="number" class="form-input" id="seDanger" placeholder="3" min="0">
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">메모</label>
+      <input type="text" class="form-input" id="seNote" placeholder="공급처·규격 등 (선택)">
+    </div>
+    <div style="display:flex;gap:8px;">
+      <button class="btn btn-ghost"   style="flex:1;" onclick="closeModal('stockEditModal')">취소</button>
+      <button class="btn btn-primary" style="flex:2;" onclick="saveStockItem()">💾 저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- 재고 조정 -->
+<div class="modal-overlay" id="stockAdjModal">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title">📊 재고 조정</div>
+    <input type="hidden" id="saId">
+    <div style="font-size:15px;font-weight:700;margin-bottom:4px;" id="saName"></div>
+    <div style="font-size:13px;color:var(--text2);margin-bottom:14px;">
+      현재 재고: <span id="saCurrent" style="font-weight:900;color:var(--accent);font-family:'DM Mono',monospace;"></span>
+    </div>
+    <div class="adj-btns">
+      <button class="adj-btn" id="adjIn"  onclick="setAdjType('in')">📥 입고</button>
+      <button class="adj-btn" id="adjOut" onclick="setAdjType('out')">📤 출고</button>
+      <button class="adj-btn" id="adjSet" onclick="setAdjType('set')">✏️ 직접설정</button>
+    </div>
+    <div class="form-group">
+      <label class="form-label" id="saQtyLabel">입고 수량</label>
+      <input type="number" class="form-input" id="saQty" placeholder="0" min="0"
+        style="font-size:20px;font-weight:700;text-align:center;" oninput="previewAdj()">
+    </div>
+    <div style="text-align:center;font-size:13px;color:var(--text2);min-height:20px;margin-bottom:8px;" id="saPreview"></div>
+    <div class="form-group">
+      <label class="form-label">사유 (선택)</label>
+      <input type="text" class="form-input" id="saReason" placeholder="정기 입고·반품·재고실사">
+    </div>
+    <div style="display:flex;gap:8px;">
+      <button class="btn btn-primary" style="flex:2;" onclick="applyAdj()">✅ 적용</button>
+      <button class="btn btn-ghost"   style="flex:1;" onclick="closeModal('stockAdjModal')">취소</button>
+    </div>
+  </div>
+</div>
+
+<!-- 재고 이력 -->
+<div class="modal-overlay" id="stockLogModal">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title">📋 재고 이력</div>
+    <div style="font-size:14px;font-weight:700;margin-bottom:12px;" id="slName"></div>
+    <div id="slList" style="max-height:55vh;overflow-y:auto;"></div>
+    <button class="btn btn-ghost btn-full" style="margin-top:14px;" onclick="closeModal('stockLogModal')">닫기</button>
+  </div>
+</div>
+
+<!-- 전표 상세 모달 -->
+<div class="modal-overlay" id="detailModal" style="z-index:2500;">
+    <div class="modal-sheet">
+        <div class="modal-handle"></div>
+        <div class="modal-title">납품 상세</div>
+        <div id="detailContent"></div>
+        <button class="btn btn-ghost btn-full" style="margin-top:14px;" onclick="closeModal('detailModal')">닫기</button>
+    </div>
+</div>
+
+<!-- 거래처 명세서 모달 -->
+<!-- 부분 입금 처리 모달 -->
+<div class="modal-overlay" id="partialPayModal" style="z-index:2000;">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title">💳 입금 처리</div>
+    <input type="hidden" id="ppClientName">
+    <input type="hidden" id="ppMonth">
+    <div style="background:var(--surf2);border:1px solid var(--border);border-radius:10px;padding:13px 15px;margin-bottom:14px;">
+      <div style="font-size:14px;font-weight:800;color:var(--text1);margin-bottom:8px;" id="ppClientTitle"></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <span style="font-size:12px;color:var(--text2);">총 청구 미수금</span>
+        <strong style="font-size:18px;color:var(--red);" id="ppTotalUnpaid"></strong>
+      </div>
+      <div id="ppCarryRow" style="display:none;justify-content:space-between;margin-top:5px;">
+        <span style="font-size:11px;color:var(--orange);">&#x21E9; 이월 미수금 포함</span>
+        <span style="font-size:11px;color:var(--orange);font-weight:700;" id="ppCarryAmt"></span>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">입금액 *</label>
+      <input type="number" class="form-input" id="ppAmount" placeholder="0" min="0"
+             oninput="previewPartialPay()"
+             style="font-size:22px;font-weight:900;text-align:right;letter-spacing:1px;">
+    </div>
+    <div id="ppQuickBtns" style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;"></div>
+    <div id="ppPreview" style="display:none;background:var(--surf3);border:1px solid var(--border);
+         border-left:3px solid var(--accent);border-radius:10px;padding:12px 14px;
+         margin-bottom:12px;font-size:12px;line-height:2.1;"></div>
+    <div class="form-group">
+      <label class="form-label">수금 방법</label>
+      <div class="pay-method-group" id="ppMethodGroup">
+        <button type="button" class="pay-method-btn cash active" data-method="cash"   onclick="selectPayMethod('pp','cash',this)">💵 현금</button>
+        <button type="button" class="pay-method-btn transfer"    data-method="transfer" onclick="selectPayMethod('pp','transfer',this)">🏦 계좌이체</button>
+        <button type="button" class="pay-method-btn"             data-method="other"  onclick="selectPayMethod('pp','other',this)">📝 기타</button>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">메모 <span style="color:var(--text3);font-weight:400;">(선택)</span></label>
+      <input type="text" class="form-input" id="ppNote" placeholder="메모 (선택)">
+    </div>
+    <div style="display:flex;gap:8px;">
+      <button class="btn btn-primary" style="flex:2;" onclick="confirmPartialPay()">💳 입금 처리</button>
+      <button class="btn btn-ghost"   style="flex:1;" onclick="closeModal('partialPayModal')">취소</button>
+    </div>
+    <!-- 할인 완납 -->
+    <div style="margin-top:10px;border-top:1px solid var(--border);padding-top:10px;">
+        <button class="qp-discount-toggle" id="ppDiscountToggle" onclick="togglePpDiscount()">
+            ✂️ 끝자리 할인 완납으로 처리
+        </button>
+        <div id="ppDiscountBody" style="display:none;margin-top:8px;background:var(--surf3);border-radius:10px;padding:10px 12px;font-size:12px;color:var(--text2);line-height:2;">
+            입금액을 청구금액보다 적게 입력 후 <strong style="color:var(--accent);">할인 완납</strong> 버튼을 누르면<br>
+            차액은 <strong>할인 처리</strong>되어 ✅ 완납으로 마감됩니다.
+            <button class="btn btn-success btn-full" style="margin-top:8px;" onclick="confirmPartialPayDiscount()">✂️ 할인 완납으로 마감</button>
+        </div>
+    </div>
+  </div>
+</div>
+
+<!-- 수금 수정 모달 -->
+<div class="modal-overlay" id="payEditModal" style="z-index:2100;">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title">✏️ 수금 수정</div>
+    <input type="hidden" id="peOrderId">
+    <input type="hidden" id="peClientName">
+    <input type="hidden" id="peMonth">
+    <div style="background:var(--surf2);border:1px solid var(--border);border-radius:10px;padding:13px 15px;margin-bottom:14px;">
+      <div style="font-size:13px;font-weight:800;color:var(--text);margin-bottom:6px;" id="peOrderInfo"></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <span style="font-size:12px;color:var(--text2);">전표 금액</span>
+        <strong style="font-size:16px;color:var(--text);" id="peOrderTotal"></strong>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">수정할 수금액 *</label>
+      <input type="number" class="form-input" id="peAmount" placeholder="0" min="0"
+             style="font-size:22px;font-weight:900;text-align:right;letter-spacing:1px;">
+      <div style="font-size:11px;color:var(--text2);margin-top:5px;">0원 입력 시 수금 취소(미수로 되돌리기)</div>
+    </div>
+    <div id="peQuickBtns" style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;"></div>
+    <div class="form-group">
+      <label class="form-label">수금 방법</label>
+      <div class="pay-method-group" id="peMethodGroup">
+        <button type="button" class="pay-method-btn cash active" data-method="cash"   onclick="selectPayMethod('pe','cash',this)">💵 현금</button>
+        <button type="button" class="pay-method-btn transfer"    data-method="transfer" onclick="selectPayMethod('pe','transfer',this)">🏦 계좌이체</button>
+        <button type="button" class="pay-method-btn"             data-method="other"  onclick="selectPayMethod('pe','other',this)">📝 기타</button>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">메모 <span style="color:var(--text3);font-weight:400;">(선택)</span></label>
+      <input type="text" class="form-input" id="peNote" placeholder="메모 (선택)">
+    </div>
+    <div style="display:flex;gap:8px;">
+      <button class="btn btn-primary" style="flex:2;" onclick="confirmPayEdit()">✅ 수정 완료</button>
+      <button class="btn btn-danger"  style="flex:1;" onclick="confirmPayEditCancel()">🗑 수금취소</button>
+    </div>
+    <button class="btn btn-ghost btn-full" style="margin-top:8px;" onclick="closeModal('payEditModal')">닫기</button>
+  </div>
+</div>
+
+<!-- 수금방법 퀵 선택 팝업 -->
+<div class="quick-pay-overlay" id="quickPayOverlay" onclick="closeQuickPay()"></div>
+<div class="quick-pay-popup" id="quickPayPopup">
+    <div class="quick-pay-title" id="qpTitle">수금 방법을 선택하세요</div>
+    <div class="quick-pay-sub"   id="qpSub"></div>
+    <div class="quick-pay-btns">
+        <button class="quick-pay-btn cash"     onclick="confirmQuickPay('cash')">
+            <span class="qp-icon">💵</span>
+            <span class="qp-label">현금</span>
+            <span class="qp-amt"  id="qpCashAmt"></span>
+        </button>
+        <button class="quick-pay-btn transfer" onclick="confirmQuickPay('transfer')">
+            <span class="qp-icon">🏦</span>
+            <span class="qp-label">계좌이체</span>
+            <span class="qp-amt"  id="qpTransferAmt"></span>
+        </button>
+    </div>
+    <!-- 할인 완납 영역 -->
+    <div id="qpDiscountRow" style="margin-top:12px;border-top:1px solid var(--border);padding-top:12px;">
+        <button class="qp-discount-toggle" id="qpDiscountToggle" onclick="toggleQpDiscount()">
+            ✂️ 끝자리 할인 완납
+        </button>
+        <div id="qpDiscountBody" style="display:none;margin-top:10px;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+                <label style="font-size:12px;color:var(--text2);white-space:nowrap;">실수령액</label>
+                <input type="number" id="qpDiscountAmt" class="form-input"
+                    placeholder="실제 받은 금액" min="0"
+                    style="flex:1;font-size:16px;font-weight:900;text-align:right;"
+                    oninput="updateQpDiscountPreview()">
+            </div>
+            <div id="qpDiscountPreview" style="font-size:12px;color:var(--text2);text-align:right;margin-bottom:10px;min-height:18px;"></div>
+            <div style="display:flex;gap:8px;">
+                <button class="quick-pay-btn cash" style="flex:1;padding:12px 8px;" onclick="confirmQuickPayDiscount('cash')">
+                    <span class="qp-icon" style="font-size:20px;">💵</span>
+                    <span class="qp-label">현금 할인완납</span>
+                </button>
+                <button class="quick-pay-btn transfer" style="flex:1;padding:12px 8px;" onclick="confirmQuickPayDiscount('transfer')">
+                    <span class="qp-icon" style="font-size:20px;">🏦</span>
+                    <span class="qp-label">이체 할인완납</span>
+                </button>
+            </div>
+        </div>
+    </div>
+    <button class="quick-pay-cancel" onclick="closeQuickPay()">취소</button>
+    <input type="hidden" id="qpOrderId">
+</div>
+
+<div class="modal-overlay" id="statementModal">
+    <div class="modal-sheet">
+        <div class="modal-handle"></div>
+        <div id="statementContent"></div>
+        <button class="btn btn-ghost btn-full" style="margin-top:14px;" onclick="closeModal('statementModal')">닫기</button>
+    </div>
+</div>
+
+<!-- 토스트 -->
+<div class="toast" id="toast"></div>
+
+<!-- 전체완납 수금방법 선택 팝업 -->
+<div class="quick-pay-overlay" id="bulkPayOverlay" onclick="closeBulkPayPopup()"></div>
+<div class="quick-pay-popup" id="bulkPayPopup">
+    <div class="quick-pay-title">수금 방법 선택</div>
+    <div class="quick-pay-sub" id="bulkPaySub"></div>
+    <div class="quick-pay-btns">
+        <button class="quick-pay-btn cash"     onclick="_doBulkPay('cash')">
+            <span class="qp-icon">💵</span>
+            <span class="qp-label">현금</span>
+        </button>
+        <button class="quick-pay-btn transfer" onclick="_doBulkPay('transfer')">
+            <span class="qp-icon">🏦</span>
+            <span class="qp-label">계좌이체</span>
+        </button>
+        <button class="quick-pay-btn" style="border-color:rgba(245,166,35,.3);" onclick="_doBulkPay('other')">
+            <span class="qp-icon">📝</span>
+            <span class="qp-label">기타</span>
+        </button>
+    </div>
+    <button class="quick-pay-cancel" onclick="closeBulkPayPopup()">취소</button>
+</div>
+
+<!-- 내역탭 거래처 수정 모달 -->
+<div class="modal-overlay" id="clientEditModal">
+    <div class="modal-sheet">
+        <div class="modal-handle"></div>
+        <div class="modal-title">
+            🏪 거래처 정보 수정
+        </div>
+        <input type="hidden" id="ceditClientId">
+        <div class="form-group">
+            <label class="form-label">
+                거래처명
+                <span class="cedit-readonly-badge">변경 불가</span>
+            </label>
+            <input type="text" class="form-input" id="ceditName"
+                style="opacity:.65;cursor:not-allowed;" readonly>
+        </div>
+        <div class="form-group">
+            <label class="form-label">연락처</label>
+            <input type="tel" class="form-input" id="ceditPhone" placeholder="010-0000-0000">
+        </div>
+        <div class="form-group">
+            <label class="form-label">주소</label>
+            <input type="text" class="form-input" id="ceditAddress" placeholder="예: 서울시 강남구">
+        </div>
+        <div class="form-group">
+            <label class="form-label">비고</label>
+            <textarea class="form-input" id="ceditNote" rows="2" placeholder="메모 (선택)"></textarea>
+        </div>
+        <!-- 거래처명 변경 섹션 (접기/펼치기) -->
+        <div id="ceditRenameSection" style="border:1px solid var(--border);border-radius:var(--radius-s);padding:12px;margin-bottom:14px;background:var(--surf2);">
+            <div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;" onclick="toggleCeditRename()">
+                <span style="font-size:12px;font-weight:700;color:var(--text2);">✏️ 거래처명 변경 (전표 일괄 반영)</span>
+                <span id="ceditRenameArrow" style="font-size:11px;color:var(--text3);">▼</span>
+            </div>
+            <div id="ceditRenameBody" style="display:none;margin-top:10px;">
+                <div class="form-group" style="margin-bottom:8px;">
+                    <label class="form-label">새 거래처명</label>
+                    <input type="text" class="form-input" id="ceditNewName" placeholder="변경할 이름 입력">
+                </div>
+                <p style="font-size:11px;color:var(--orange);margin-bottom:0;">
+                    ⚠️ 해당 거래처의 모든 납품 전표에 새 이름이 반영됩니다.
+                </p>
+            </div>
+        </div>
+        <div style="display:flex;gap:8px;">
+            <button class="btn btn-primary" style="flex:2;" onclick="saveClientEditFromHistory()">💾 저장</button>
+            <button class="btn btn-ghost" style="flex:1;" onclick="closeModal('clientEditModal')">취소</button>
+        </div>
+    </div>
+</div>
+
+<!-- 전표 수정 모달 -->
+<div class="modal-overlay" id="orderEditModal">
+    <div class="modal-sheet">
+        <div class="modal-handle"></div>
+        <div class="modal-title">✏️ 납품 내역 수정</div>
+        <input type="hidden" id="oeditOrderId">
+        <div class="form-group">
+            <label class="form-label">거래처</label>
+            <input type="text" class="form-input" id="oeditClientName" readonly style="opacity:.65;cursor:not-allowed;">
+        </div>
+        <div class="form-group">
+            <label class="form-label">납품 일자</label>
+            <input type="date" class="form-input" id="oeditDate">
+        </div>
+        <div class="card-title" style="margin-bottom:8px;">품목 목록</div>
+        <div id="oeditItemList"></div>
+        <div class="oedit-add-row">
+            <div class="form-group" style="flex:2;min-width:0;">
+                <label class="form-label">품목명</label>
+                <input type="text" class="form-input" id="oeditNewName" placeholder="품목명" autocomplete="off"
+                    onkeydown="if(event.key==='Enter'){document.getElementById('oeditNewQty').focus();}">
+            </div>
+            <div class="form-group" style="width:58px;flex-shrink:0;">
+                <label class="form-label">수량</label>
+                <input type="number" class="form-input" id="oeditNewQty" placeholder="0" min="1"
+                    onkeydown="if(event.key==='Enter'){document.getElementById('oeditNewPrice').focus();}">
+            </div>
+            <div class="form-group" style="width:84px;flex-shrink:0;">
+                <label class="form-label">단가</label>
+                <input type="number" class="form-input" id="oeditNewPrice" placeholder="0" min="0"
+                    onkeydown="if(event.key==='Enter'){oeditAddItem();}">
+            </div>
+            <button class="btn btn-primary" onclick="oeditAddItem()"
+                style="align-self:flex-end;height:44px;padding:0 12px;flex-shrink:0;">+</button>
+        </div>
+        <div class="oedit-total-bar">
+            <span class="oedit-total-label">합계</span>
+            <span class="oedit-total-val" id="oeditTotal">0원</span>
+        </div>
+        <div class="form-group">
+            <label class="form-label">메모</label>
+            <textarea class="form-input" id="oeditNote" rows="2" placeholder="메모 (선택)"></textarea>
+        </div>
+        <!-- ③ 타인거래 토글 -->
+        <div id="oeditVoidToggleWrap" style="
+            display:flex; align-items:center; justify-content:space-between;
+            padding:13px 14px; margin-bottom:14px;
+            background:var(--surf2); border:1.5px solid var(--border);
+            border-radius:var(--radius-s); cursor:pointer;"
+            onclick="toggleOeditVoid()">
+            <div>
+                <div style="font-size:13px;font-weight:700;">👤 타인거래</div>
+                <div style="font-size:11px;color:var(--text2);margin-top:2px;">재고 차감 제외 · 매출은 정상 집계</div>
+            </div>
+            <div id="oeditVoidSwitch" style="
+                width:44px; height:24px; border-radius:12px;
+                background:var(--surf3); border:1.5px solid var(--border);
+                position:relative; transition:background .2s, border-color .2s; flex-shrink:0;">
+                <div id="oeditVoidKnob" style="
+                    position:absolute; top:2px; left:2px;
+                    width:18px; height:18px; border-radius:50%;
+                    background:var(--text3); transition:transform .2s, background .2s;">
+                </div>
+            </div>
+        </div>
+        <div style="display:flex;gap:8px;">
+            <button class="btn btn-ghost"   style="flex:1;" onclick="closeModal('orderEditModal')">취소</button>
+            <button class="btn btn-primary" style="flex:2;" onclick="saveOrderEdit()">💾 저장</button>
+        </div>
+    </div>
+</div>
+
+
+<!-- 메모 팝업 -->
+<!-- ─── 메모 모아보기 팝업 ─── -->
+<div id="memoViewPopup" onclick="if(event.target===this)closeMemoView()">
+    <div class="memo-view-box">
+        <div class="memo-view-header">
+            <span class="memo-view-title">📋 메모 모아보기</span>
+            <button class="memo-view-close" onclick="closeMemoView()">✕</button>
+        </div>
+        <div class="memo-view-unit-tabs">
+            <button class="memo-unit-tab active" data-unit="cycle" onclick="setMemoUnit('cycle',this)">납품주기</button>
+            <button class="memo-unit-tab" data-unit="week" onclick="setMemoUnit('week',this)">주단위</button>
+            <button class="memo-unit-tab" data-unit="month" onclick="setMemoUnit('month',this)">월단위</button>
+        </div>
+        <div class="memo-view-nav">
+            <button onclick="moveMemoViewPeriod(-1)">◀</button>
+            <span id="memoViewPeriodLabel"></span>
+            <button onclick="moveMemoViewPeriod(1)">▶</button>
+        </div>
+        <div id="memoViewClientList"></div>
+    </div>
+</div>
+
+<!-- ─── 거래처 메모 상세 팝업 ─── -->
+<div id="memoDetailPopup" onclick="if(event.target===this)closeMemoDetail()">
+    <div class="memo-detail-box">
+        <div class="memo-view-header">
+            <span class="memo-view-title" id="memoDetailTitle"></span>
+            <button class="memo-view-close" onclick="closeMemoDetail()">✕</button>
+        </div>
+        <div id="memoDetailPeriodLabel" class="memo-detail-period"></div>
+        <div id="memoDetailList"></div>
+    </div>
+</div>
+
+<div id="memoPopup" onclick="if(event.target===this)closeMemoPopup()">
+    <div class="memo-popup-box">
+        <div class="memo-popup-title">📝 메모 <span id="memoPopupClient"></span></div>
+        <textarea id="memoTextarea" placeholder="메모를 입력하세요…"></textarea>
+        <div class="memo-popup-btns">
+            <button class="btn btn-ghost"   style="flex:1;" onclick="closeMemoPopup()">취소</button>
+            <button class="btn btn-primary" style="flex:1;" onclick="saveMemoPopup()">💾 저장</button>
+        </div>
+    </div>
+</div>
+
+
+<script src="./app.js" defer></script>
+<script>
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./sw.js', { scope: './' })
+        .then(() => console.log('SW 등록 완료'))
+        .catch(e => console.warn('SW 등록 실패:', e));
+}
+</script>
+</body>
+</html>
