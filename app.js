@@ -6568,7 +6568,7 @@ window.addEventListener('DOMContentLoaded', () => {
 // ═══════════════════════════════════════
 // ── 메모 모아보기 ─────────────────────────────────────────────
 // ═══════════════════════════════════════
-let _memoViewUnit   = 'week';  // 'week' | 'month'
+let _memoViewUnit   = 'cycle'; // 'cycle' | 'week' | 'month'
 let _memoViewOffset = 0;       // 오늘 기준 n주/월 전후
 let _memoDetailClient = '';    // 상세 팝업에 표시 중인 거래처명
 
@@ -6597,37 +6597,58 @@ function moveMemoViewPeriod(dir) {
 }
 
 function _getMemoViewRange() {
-    const today = new Date();
+    const fmt = d => {
+        const y = d.getFullYear(), m = String(d.getMonth()+1).padStart(2,'0'), dd = String(d.getDate()).padStart(2,'0');
+        return `${y}-${m}-${dd}`;
+    };
+    const addDays = (d, n) => { const r = new Date(d); r.setDate(r.getDate() + n); return r; };
+    const today = new Date(new Date().getTime() + 9 * 60 * 60 * 1000); // KST
+
     if (_memoViewUnit === 'month') {
-        const d     = new Date(today.getFullYear(), today.getMonth() + _memoViewOffset, 1);
-        const endD  = new Date(d.getFullYear(), d.getMonth() + 1, 0);
-        const pad   = n => String(n).padStart(2,'0');
+        const d    = new Date(today.getFullYear(), today.getMonth() + _memoViewOffset, 1);
+        const endD = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+        const pad  = n => String(n).padStart(2,'0');
         const start = `${d.getFullYear()}-${pad(d.getMonth()+1)}-01`;
         const end   = `${endD.getFullYear()}-${pad(endD.getMonth()+1)}-${pad(endD.getDate())}`;
         const label = `${d.getFullYear()}년 ${d.getMonth()+1}월`;
         return { start, end, label };
+
+    } else if (_memoViewUnit === 'cycle') {
+        // 납품 주기: 오늘(+offset일) 기준 두 날짜 반환
+        // 월/화/수 → D-7, D-4 / 목/금/토 → D-7, D-3
+        const base = addDays(today, _memoViewOffset);
+        const dow  = base.getDay(); // 0=일,1=월...6=토
+        const gap  = (dow >= 4 && dow <= 6) ? 3 : 4; // 목·금·토=3, 나머지=4
+        const d1   = addDays(base, -7);
+        const d2   = addDays(base, -gap);
+        const dayNames = ['일','월','화','수','목','금','토'];
+        const shortFmt = d => `${d.getMonth()+1}/${d.getDate()}(${dayNames[d.getDay()]})`;
+        const label = `${shortFmt(d1)}, ${shortFmt(d2)} 메모`;
+        return { dates: [fmt(d1), fmt(d2)], label, base: fmt(base) };
+
     } else {
         // 주단위: 월요일 기준
-        const day    = today.getDay(); // 0=일
+        const day    = today.getDay();
         const monday = new Date(today);
         monday.setDate(today.getDate() - (day === 0 ? 6 : day - 1) + _memoViewOffset * 7);
         const sunday = new Date(monday);
         sunday.setDate(monday.getDate() + 6);
-        const fmt = d => {
-            const y = d.getFullYear(), m = String(d.getMonth()+1).padStart(2,'0'), dd = String(d.getDate()).padStart(2,'0');
-            return `${y}-${m}-${dd}`;
-        };
         const label = `${monday.getMonth()+1}/${monday.getDate()}(월) ~ ${sunday.getMonth()+1}/${sunday.getDate()}(일)`;
         return { start: fmt(monday), end: fmt(sunday), label };
     }
 }
 
 function renderMemoView() {
-    const { start, end, label } = _getMemoViewRange();
-    document.getElementById('memoViewPeriodLabel').textContent = label;
+    const range = _getMemoViewRange();
+    document.getElementById('memoViewPeriodLabel').textContent = range.label;
 
-    // 기간 내 메모 있는 주문 필터 → 거래처별 그룹핑
-    const filtered = (orders || []).filter(o => o.note && o.note.trim() && o.date >= start && o.date <= end);
+    // cycle 모드: 두 날짜 / 그 외: start~end 범위
+    const filtered = (orders || []).filter(o => {
+        if (!o.note || !o.note.trim()) return false;
+        if (range.dates) return range.dates.includes(o.date);
+        return o.date >= range.start && o.date <= range.end;
+    });
+
     const groups = {};
     filtered.forEach(o => {
         if (!groups[o.clientName]) groups[o.clientName] = [];
@@ -6654,11 +6675,15 @@ function renderMemoView() {
 }
 
 function openMemoDetail(clientName) {
-    const { start, end, label } = _getMemoViewRange();
+    const range = _getMemoViewRange();
     _memoDetailClient = clientName;
 
     const ords = (orders || [])
-        .filter(o => o.clientName === clientName && o.note && o.note.trim() && o.date >= start && o.date <= end)
+        .filter(o => {
+            if (o.clientName !== clientName || !o.note || !o.note.trim()) return false;
+            if (range.dates) return range.dates.includes(o.date);
+            return o.date >= range.start && o.date <= range.end;
+        })
         .sort((a, b) => a.date.localeCompare(b.date));
 
     document.getElementById('memoDetailTitle').textContent = `📋 ${clientName}`;
