@@ -6687,7 +6687,7 @@ function openMemoDetail(clientName) {
         .sort((a, b) => a.date.localeCompare(b.date));
 
     document.getElementById('memoDetailTitle').textContent = `📋 ${clientName}`;
-    document.getElementById('memoDetailPeriodLabel').textContent = label;
+    document.getElementById('memoDetailPeriodLabel').textContent = range.label;
 
     document.getElementById('memoDetailList').innerHTML = ords.length
         ? ords.map(o => {
