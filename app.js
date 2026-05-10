@@ -226,7 +226,6 @@ function matchSearch(target, q) {
     return false;
 }
 
-// ─── 저장 ───
 // ─── 로컬 저장 (스마트 모드) ───
 // Firebase 연결 중이거나 워크스페이스 ID가 설정된 경우: 경량 저장 (용량 최소화)
 // 순수 오프라인(워크스페이스 ID 없음): 전체 저장
@@ -360,8 +359,6 @@ function _fbValueHandler(snap) {
 let _localWriteTime = 0; // 로컬 변경 시각 — Firebase 리스너 경쟁 방지용
 let backupDirHandle = null;  // File System Access API 디렉토리 핸들
 
-// ─── 유틸 ───
-
 // ╔══════════════════════════════════════════════════════════════╗
 // ║  § 3  로컬 저장 + Firebase 동기화 트리거                               ║
 // ╚══════════════════════════════════════════════════════════════╝
@@ -423,8 +420,6 @@ function saveToLocal() {
         }
     }
 }
-
-// ── 저장용 필드 최소화 헬퍼 (v39: 중복·레거시 필드 제거로 용량 절감) ──
 
 // ── 품목 목록 표시용 헬퍼 (오프라인 _noItems 전표 안내 포함) ──
 function _fmtItems(o) {
@@ -654,8 +649,6 @@ function saveData() {
     _renderActiveIfDirty();
 }
 
-// ─── 토스트 ───
-
 // ╔══════════════════════════════════════════════════════════════╗
 // ║  § 5  UI 코어 — toast · 테마 · 탭 · 모달 · 바텀네비                     ║
 // ╚══════════════════════════════════════════════════════════════╝
@@ -821,8 +814,6 @@ function initTabs() {
     document.querySelectorAll('.tab').forEach(btn => btn.addEventListener('click', () => showTab(btn.dataset.tab)));
 }
 
-// ─── 모달 ───
-
 // ─── 모달 열기/닫기 (뒤로가기 버튼 지원 포함) ───
 let _modalHistoryPushed = false;
 
@@ -897,8 +888,6 @@ document.addEventListener('click', e => {
     if (!e.target.closest('.client-card'))
         document.querySelectorAll('.client-card.show-tooltip').forEach(el => el.classList.remove('show-tooltip'));
 });
-
-// ─── 거래처 ───
 
 // ─── 바텀 네비 ───
 
@@ -4378,7 +4367,10 @@ function getInOutAtDate(si, targetDateStr) {
         const t = l.at ? new Date(l.at).getTime() : 0;
         return t >= startUTC && t <= endUTC;
     });
-    const inQty  = dayLogs.filter(l => l.type === 'in').reduce((s, l) => s + Math.abs(l.qty), 0);
+    const inQty  = Math.max(0,
+        dayLogs.filter(l => l.type === 'in').reduce((s, l) => s + Math.abs(l.qty), 0)
+        + dayLogs.filter(l => l.type === 'in_adj').reduce((s, l) => s + l.qty, 0)
+    );
     // restore는 originalDate가 targetDate인 것만 해당 날짜 출고 상쇄
     const restoreQty = dayLogs.filter(l => (l.type === 'restore' && (l.originalDate || l.date) === targetDateStr)
                                         || (l.type === 'edit_adj' && (l.qty||0) > 0)).reduce((s, l) => s + Math.abs(l.qty), 0);
@@ -4445,9 +4437,14 @@ function getTodayInOut(si) {
         return t >= todayStartUTC && t < tomorrowStartUTC;
     });
     // 입고: type=in (carryover는 이전재고 이월이므로 입고로 보지 않음)
-    const inQty = todayLogs
-        .filter(l => l.type === 'in')
-        .reduce((s, l) => s + Math.abs(l.qty), 0);
+    const inQty = Math.max(0,
+        todayLogs
+            .filter(l => l.type === 'in')
+            .reduce((s, l) => s + Math.abs(l.qty), 0)
+        + todayLogs
+            .filter(l => l.type === 'in_adj')
+            .reduce((s, l) => s + l.qty, 0)  // in_adj는 음수로 입고 수량 차감
+    );
     // 출고 상쇄: 납품삭제복구(restore) + 납품수정보정 증가(edit_adj>0)
     // restore는 originalDate가 오늘인 것만 상쇄 (이전 날짜 전표 삭제는 오늘 출고에 영향 없음)
     const restoreQty = todayLogs
@@ -5061,10 +5058,38 @@ function saveStockItem() {
             // 이월 적용 선택 시 carryover 로그, 아니면 수동 set 로그
             const logType   = _carryMode ? 'carryover' : 'set';
             const logReason = _carryMode ? '이전 재고 이월 적용' : '수동 재고 설정';
+            const diff = qty - before;
             (si.log = si.log||[]).unshift({
-                type: logType, qty: qty - before, before, after: qty,
+                type: logType, qty: diff, before, after: qty,
                 reason: logReason, date: todayKST(), at: new Date().toISOString()
             });
+            // ── 오늘 입고 로그가 있는데 수정으로 수량이 감소한 경우 →
+            //    입고 수량 표시도 보정 (in_adj 로그로 inQty 차감)
+            if (!_carryMode && diff < 0) {
+                const today = todayKST();
+                const todayStartUTC = new Date(today + 'T00:00:00+09:00').getTime();
+                const tomorrowStartUTC = todayStartUTC + 86400000;
+                const todayInTotal = (si.log || []).filter(l => {
+                    if (l.type !== 'in') return false;
+                    const t = l.at ? new Date(l.at).getTime() : 0;
+                    return t >= todayStartUTC && t < tomorrowStartUTC;
+                }).reduce((s, l) => s + Math.abs(l.qty), 0);
+                if (todayInTotal > 0) {
+                    // 이미 쌓인 in_adj 합산
+                    const todayInAdj = (si.log || []).filter(l => {
+                        if (l.type !== 'in_adj') return false;
+                        const t = l.at ? new Date(l.at).getTime() : 0;
+                        return t >= todayStartUTC && t < tomorrowStartUTC;
+                    }).reduce((s, l) => s + l.qty, 0);
+                    const canAdj = Math.min(Math.abs(diff), todayInTotal + todayInAdj);
+                    if (canAdj > 0) {
+                        si.log.unshift({
+                            type: 'in_adj', qty: -canAdj, before, after: qty,
+                            reason: '입고 수량 수정 보정', date: today, at: new Date().toISOString()
+                        });
+                    }
+                }
+            }
             si.log = _trimLogByDate(si.log);
         }
         toast('✅ 품목이 수정되었습니다', 'var(--green)');
@@ -5197,7 +5222,7 @@ function openStockLog(id) {
     if (!si) return;
     document.getElementById('slName').textContent = si.name + '  현재: ' + fmt(si.qty) + ' ' + si.unit;
     const log = (si.log || []);
-    const typeLabel = { in:'📥 입고', out:'📤 출고', set:'✏️ 설정', auto:'🚚 납품차감', carryover:'🔄 이월', edit_adj:'✏️ 수정보정', restore:'↩ 납품삭제복구' };
+    const typeLabel = { in:'📥 입고', out:'📤 출고', set:'✏️ 설정', auto:'🚚 납품차감', carryover:'🔄 이월', edit_adj:'✏️ 수정보정', restore:'↩ 납품삭제복구', in_adj:'📥 입고수정' };
     const typeCls   = { in:'in', out:'out', set:'set', auto:'auto', carryover:'in', edit_adj:'set', restore:'in' };
 
     if (!log.length) {
@@ -6822,3 +6847,48 @@ function toggleClientTooltip(e, card) {
         if (e.ctrlKey) e.preventDefault();
     }, { passive: false });
 })();
+
+// ─── 앱 종료/백그라운드 시 즉시 강제 동기화 ───
+// 자주 껐다 켜는 환경에서 debounce 대기 중 종료로 인한 데이터 유실 방지
+function _flushSync() {
+    if (!workspaceRef || !isConnected) return;
+    const ch = dataHash(clients);
+    const oh = dataHash(orders);
+    const ph = dataHash(prices);
+    const sh = dataHash(stockItems);
+    let changed = false;
+    const updates = {};
+    if (ch !== lastHash.clients) { updates.clients    = clients;    changed = true; }
+    if (oh !== lastHash.orders)  {
+        updates.orders = orders.map(o => {
+            if (!o._noItems) return o;
+            const clean = { ...o }; delete clean._noItems; return clean;
+        });
+        changed = true;
+    }
+    if (ph !== lastHash.prices)  { updates.prices     = prices;     changed = true; }
+    if (sh !== lastHash.stock)   { updates.stockItems = stockItems; changed = true; }
+    if (!changed) return;
+    updates.lastUpdated = new Date().toISOString();
+    updates.writtenBy   = SESSION_ID;
+    if (updates.clients)    lastHash.clients = ch;
+    if (updates.orders)     lastHash.orders  = oh;
+    if (updates.prices)     lastHash.prices  = ph;
+    if (updates.stockItems) lastHash.stock   = sh;
+    debouncedSync.cancel(); // 대기 중인 debounce 취소 (중복 방지)
+    workspaceRef.update(updates).catch(() => {
+        // 롤백 — 다음 실행 시 재시도
+        if (updates.clients)    lastHash.clients = '';
+        if (updates.orders)     lastHash.orders  = '';
+        if (updates.prices)     lastHash.prices  = '';
+        if (updates.stockItems) lastHash.stock   = '';
+    });
+}
+
+// 화면 꺼짐 / 다른 앱으로 전환 시
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') _flushSync();
+});
+
+// 브라우저 탭 닫기 / PWA 종료 시
+window.addEventListener('pagehide', _flushSync);
