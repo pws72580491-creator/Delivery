@@ -3122,9 +3122,9 @@ function showClientStatement(clientName, month) {
         </tr>${partialDetailRow}`;
     }).join('');
     document.getElementById('statementContent').innerHTML = `
-        <div style="margin-bottom:14px;">
+        <div style="margin-bottom:14px;display:flex;align-items:baseline;justify-content:space-between;gap:8px;">
             <div style="font-size:19px;font-weight:900;">${clientName}</div>
-            <div style="font-size:12px;color:var(--text2);">${month} 거래명세표</div>
+            <div style="font-size:19px;font-weight:900;white-space:nowrap;">${month} 거래명세표</div>
         </div>
         <div style="background:var(--surf2);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:14px;">
             ${carryAmt>0?`<div style="display:flex;justify-content:space-between;margin-bottom:7px;"><span style="color:var(--orange);">⏩ 전월 이월</span><strong style="color:var(--orange);">${fmt(carryAmt)}원</strong></div>`:''}
