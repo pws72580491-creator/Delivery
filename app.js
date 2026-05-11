@@ -3457,15 +3457,12 @@ function saveStatementJPG(clientName, month) {
 </head>
 <body>
   <div class="header">
-    <div>
-      <div class="doc-title">거래명세표</div>
-      <div class="client-name">📌 ${clientName} 귀중</div>
-    </div>
-    <div class="doc-meta">
-      <div><strong>${month}</strong></div>
-      <div>${new Date().toLocaleDateString('ko-KR')}</div>
+    <div style="display:flex;justify-content:space-between;align-items:baseline;width:100%;">
+      <div class="doc-title">${clientName}</div>
+      <div class="doc-title">${month} 거래명세표</div>
     </div>
   </div>
+  <div style="text-align:right;font-size:11px;color:#888;margin-bottom:10px;">${new Date().toLocaleDateString('ko-KR')}</div>
   <div class="sum-grid">
     ${carryAmt > 0 ? `<div class="sum-card carry"><div class="sum-label">전월이월</div><div class="sum-val">${fmt(carryAmt)}<small style="font-size:10px">원</small></div></div>` : ''}
     <div class="sum-card sales"><div class="sum-label">당월매출</div><div class="sum-val">${fmt(monthTotal)}<small style="font-size:10px">원</small></div></div>
