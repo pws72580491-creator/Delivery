@@ -11,7 +11,7 @@
     <meta name="apple-mobile-web-app-title" content="납품관리">
     <link rel="apple-touch-icon" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAALQAAAC0CAYAAAA9zQYyAAADgElEQVR4nO3csXEUQRCG0RVFEjgkgUEQhAEmRAMeEAZBYJAEDmEI6+C4UgmdNDPd++97pgzd3Pan1lyVStsGAAAAAAAAAAAAAAAAI91UH2CF929vb6vP0MWnrzfRM497c+K9XlLkEW9ExOPsPe7dHl7E8+0x7t0dWMjr7Sns3RxUyPX2EHb7Awq5n85hP6s+wH3E3FPnubT8Sev8wPhXt23dbkOLeV+6zatV0N0eDg/TaW4tfl10eiA8TfUVpHxDizlL9TxLg65+88xROdeyoMWcrWq+JUGL+Rgq5lx+h4aRlgdtOx/L6nkvDVrMx7Ry7suCFvOxrZq/OzRRlgRtO7NtazqYHrSYOTe7B1cOokwN2nbmLjO7sKGJMi1o25n7zOrDhibKlKBtZx5iRic2NFEETZThQbtucI3RvdjQRBE0UYYG7brBY4zsxoYmiqCJImiiCJoow4L2gZCnGNWPDU0UQRNF0EQRNFGeVx9gto9ftm/VZ+jmw7vtTfUZZrGhiSJoogiaKIImiqCJImiiCJoogiaKoIkiaKIImijxf8uxfX8V+3cLj/ej+gDT2NBEETRRBE0UQRMl/0Ph6x+/Kl/+w7vt5+XXPn7ZXlac5Y/P24vS15/IhiaKoIkiaKIImiiCJoqgiSJoogiaKIImiqCJImiiCJoogiaKoIkiaKIImiiCJoqgiSJoogiaKIImiqCJImiiCJoogiaKoIkiaKIImiiCJoqgiSJoogiaKIImiqCJImiiCJoogiaKoIkiaKLcjPpG79/e3o76XhzTp683T+7RhiaKoIkiaKIImijDgh5xoee4RvVjQxNF0EQRNFEETZShQftgyGOM7MaGJoqgiTI8aNcOrjG6FxuaKIImypSgXTt4iBmd2NBEmRa0Lc19ZvVhQxNlatC2NHeZ2YUNTZTpQdvSnJvdw5INLWq2bU0HrhxEWRa0LX1sq+a/dEOL+phWzn35lUPUx7J63u7QRCkJ2pY+hoo5l21oUWermm/plUPUmSrnWn6HFnWW6nm2isk/Td+v6pBPyjf0uS4Phet0mluroLet18Ph/7rNq9VhLrmC9NUt5JN2G/pc14d2dJ3n0vZgl2zrep1DPml/wEvCXm8PIZ/s5qCXhD3fnkI+2d2B7yLucfYY8bldH/4u4r7e3iM+F/NG7iPyv5LiBQAAAAAAAAAAAAAAmvoNL57jyrjjuqMAAAAASUVORK5CYII=">
     <link rel="manifest" href="./manifest.json">
-    <title>납품 관리 Pro v77</title>
+    <title>납품 관리 Pro v78</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js" defer></script>
@@ -38,7 +38,7 @@
             <div class="logo-icon">📦</div>
             <div>
                 <div class="logo-text">납품 관리 Pro</div>
-                <div class="logo-sub">v77 · PWA 앱 설치 지원</div>
+                <div class="logo-sub">v78 · PWA 앱 설치 지원</div>
             </div>
         </div>
         <div class="header-btns">
@@ -595,7 +595,7 @@
     <div class="card">
         <div class="card-title">앱 정보</div>
         <div style="font-size:13px;color:var(--text2);line-height:2;margin-bottom:12px;">
-            버전: <strong style="color:var(--accent);">v77</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
+            버전: <strong style="color:var(--accent);">v78</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
             거래처: <span id="infoClients">0</span>개 &nbsp;·&nbsp;
             납품내역: <span id="infoOrders">0</span>건
         </div>
@@ -605,7 +605,11 @@
             <div id="changelogList" style="display:flex;flex-direction:column;gap:6px;">
                 <!-- 현재 버전 -->
                 <div class="changelog-item">
-                    <span class="changelog-ver" style="color:var(--green);">v77</span>
+                    <span class="changelog-ver" style="color:var(--green);">v78</span>
+                    <span class="changelog-desc">버그수정 8건 — ① 메모 거래처 클릭 시 내용 미표시 버그 수정(label→range.label) ② 메모 내역 최신순 정렬 ③ 더보기 시트 뒤로가기 닫기 지원 ④ 핀치줌·더블탭 줌 완전 차단(Android Chrome user-scalable 무시 대응) ⑤ 앱 종료·백그라운드 시 즉시 강제 동기화(데이터 유실 방지) ⑥ 재고 수정 시 입고 수량 오류 수정(in_adj 로그 도입) ⑦ 코드 찌꺼기 정리(빈 주석 헤더 6개 제거) ⑧ 거래명세표 헤더 개선(거래처명·정산월 같은 줄 표시, JPG 저장 동일 적용)</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v77</span>
                     <span class="changelog-desc">동기화 안정성 개선 — _initialLoadDone 전역 이동(실시간 리스너 정상화), online 복귀 시 업로드→다운로드 순서 보장, waitFirebase 재시도 4초→10초 연장. JS 문법 오류 수정(중괄호 중복). head 중복 제거(viewport·Google Fonts).</span>
                 </div>
                 <div class="changelog-item">
