@@ -6643,7 +6643,9 @@ function _getMemoViewRange() {
         return `${y}-${m}-${dd}`;
     };
     const addDays = (d, n) => { const r = new Date(d); r.setDate(r.getDate() + n); return r; };
-    const today = new Date(new Date().getTime() + 9 * 60 * 60 * 1000); // KST
+    // todayKST()로 정확한 KST 날짜 구함 (기기 시간대 무관)
+    const todayStr = todayKST();
+    const today = new Date(todayStr + 'T00:00:00');
 
     if (_memoViewUnit === 'month') {
         const d    = new Date(today.getFullYear(), today.getMonth() + _memoViewOffset, 1);
