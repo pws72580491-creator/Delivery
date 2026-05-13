@@ -1261,17 +1261,20 @@
             <div class="form-group" style="flex:2;min-width:0;">
                 <label class="form-label">품목명</label>
                 <input type="text" class="form-input" id="oeditNewName" placeholder="품목명" autocomplete="off"
-                    onkeydown="if(event.key==='Enter'){document.getElementById('oeditNewQty').focus();}">
+                    enterkeyhint="next"
+                    onkeydown="if(event.key==='Enter'){event.preventDefault();document.getElementById('oeditNewQty').focus();}">
             </div>
             <div class="form-group" style="width:58px;flex-shrink:0;">
                 <label class="form-label">수량</label>
                 <input type="number" class="form-input" id="oeditNewQty" placeholder="0" min="1"
-                    onkeydown="if(event.key==='Enter'){document.getElementById('oeditNewPrice').focus();}">
+                    enterkeyhint="next"
+                    onkeydown="if(event.key==='Enter'){event.preventDefault();document.getElementById('oeditNewPrice').focus();}">
             </div>
             <div class="form-group" style="width:84px;flex-shrink:0;">
                 <label class="form-label">단가</label>
                 <input type="number" class="form-input" id="oeditNewPrice" placeholder="0" min="0"
-                    onkeydown="if(event.key==='Enter'){oeditAddItem();}">
+                    enterkeyhint="done"
+                    onkeydown="if(event.key==='Enter'){event.preventDefault();const n=document.getElementById('oeditNewName').value.trim();if(n){oeditAddItem();}else{saveOrderEdit();}}">
             </div>
             <button class="btn btn-primary" onclick="oeditAddItem()"
                 style="align-self:flex-end;height:44px;padding:0 12px;flex-shrink:0;">+</button>

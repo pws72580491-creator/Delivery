@@ -2450,23 +2450,36 @@ function renderOeditItems() {
         // → 안내 메시지 표시
         list.innerHTML = '<div style="text-align:center;color:var(--text3);font-size:13px;padding:12px 0;margin-bottom:8px;">품목이 없습니다. 온라인 연결 후 앱을 재실행하면 품목이 복원됩니다.<br>직접 추가하셔도 됩니다.</div>';
     } else {
-        list.innerHTML = _oeditItems.map((it, i) => `
+        list.innerHTML = _oeditItems.map((it, i) => {
+            const isLast = i === _oeditItems.length - 1;
+            const nextNameSel = isLast ? null : `.oedit-item-row:nth-child(${i+2}) .oedit-item-input`;
+            const onPriceEnter = isLast
+                ? `if(event.key==='Enter'){event.preventDefault();document.getElementById('oeditNewName').focus();}`
+                : `if(event.key==='Enter'){event.preventDefault();document.querySelectorAll('.oedit-item-row')[${i+1}].querySelectorAll('.oedit-item-input')[0].focus();}`;
+            return `
             <div class="oedit-item-row">
                 <div class="oedit-item-name">
                     <input class="oedit-item-input" type="text" value="${(it.name||'').replace(/"/g,'&quot;')}"
+                        enterkeyhint="next"
                         oninput="_oeditItems[${i}].name=this.value;_oeditRecalc()"
+                        onkeydown="if(event.key==='Enter'){event.preventDefault();this.closest('.oedit-item-row').querySelectorAll('.oedit-item-input')[1].focus();}"
                         style="width:100%;font-weight:700;">
                 </div>
                 <div class="oedit-qty-wrap">
                     <input class="oedit-item-input" type="number" value="${it.qty||0}" min="1"
-                        oninput="_oeditItems[${i}].qty=parseInt(this.value)||0;_oeditItems[${i}].total=_oeditItems[${i}].qty*_oeditItems[${i}].price;_oeditRecalc()">
+                        enterkeyhint="next"
+                        oninput="_oeditItems[${i}].qty=parseInt(this.value)||0;_oeditItems[${i}].total=_oeditItems[${i}].qty*_oeditItems[${i}].price;_oeditRecalc()"
+                        onkeydown="if(event.key==='Enter'){event.preventDefault();this.closest('.oedit-item-row').querySelectorAll('.oedit-item-input')[2].focus();}">
                 </div>
                 <div class="oedit-price-wrap">
                     <input class="oedit-item-input" type="number" value="${it.price||0}" min="0"
-                        oninput="_oeditItems[${i}].price=parseInt(this.value)||0;_oeditItems[${i}].total=_oeditItems[${i}].qty*_oeditItems[${i}].price;_oeditRecalc()">
+                        enterkeyhint="${isLast ? 'next' : 'next'}"
+                        oninput="_oeditItems[${i}].price=parseInt(this.value)||0;_oeditItems[${i}].total=_oeditItems[${i}].qty*_oeditItems[${i}].price;_oeditRecalc()"
+                        onkeydown="${onPriceEnter}">
                 </div>
                 <button class="oedit-del-btn" onclick="_oeditItems.splice(${i},1);renderOeditItems()">✕</button>
-            </div>`).join('');
+            </div>`;
+        }).join('');
     }
     _oeditRecalc();
 }
