@@ -2454,7 +2454,7 @@ function renderOeditItems() {
             const isLast = i === _oeditItems.length - 1;
             const nextNameSel = isLast ? null : `.oedit-item-row:nth-child(${i+2}) .oedit-item-input`;
             const onPriceEnter = isLast
-                ? `if(event.key==='Enter'){event.preventDefault();document.getElementById('oeditNewName').focus();}`
+                ? `if(event.key==='Enter'){event.preventDefault();const nn=document.getElementById('oeditNewName');if(nn&&nn.value.trim()){nn.focus();}else{saveOrderEdit();}}`
                 : `if(event.key==='Enter'){event.preventDefault();document.querySelectorAll('.oedit-item-row')[${i+1}].querySelectorAll('.oedit-item-input')[0].focus();}`;
             return `
             <div class="oedit-item-row">
