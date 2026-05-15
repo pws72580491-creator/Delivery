@@ -643,6 +643,7 @@ const debouncedSync = debounce(() => {
 function saveData() {
     invalidateOrdersCache();
     _localWriteTime = Date.now();
+    localStorage.setItem('lastLocalUpdated', new Date().toISOString()); // 로컬 변경 시각 기록
     saveToLocal();
     if (isConnected) debouncedSync();
     _markDirty('dashboard','clients','unpaid','delivery','history','settlement','settings');
@@ -6041,10 +6042,14 @@ function _doConnect(id, auto=false) {
                 // ── 서버·로컬 중 더 최신 데이터 판단 ──
                 // 서버의 lastUpdated vs 로컬의 최근 전표 createdAt 비교
                 const serverTime = data.lastUpdated ? new Date(data.lastUpdated).getTime() : 0;
+                // 주문 createdAt 뿐 아니라 updatedAt(메모 수정/삭제 등)도 함께 비교
+                // localStorage의 lastLocalUpdated도 포함 (오프라인 변경 대비)
+                const lastLocalUpdated = localStorage.getItem('lastLocalUpdated');
                 const localLatestOrder = orders.reduce((max, o) => {
-                    const t = o.createdAt ? new Date(o.createdAt).getTime() : 0;
-                    return t > max ? t : max;
-                }, 0);
+                    const t1 = o.createdAt  ? new Date(o.createdAt).getTime()  : 0;
+                    const t2 = o.updatedAt  ? new Date(o.updatedAt).getTime()  : 0;
+                    return Math.max(t1, t2, max);
+                }, lastLocalUpdated ? new Date(lastLocalUpdated).getTime() : 0);
                 const localIsNewer = localHasData && localLatestOrder > serverTime;
 
                 if (localIsNewer && !auto) {
@@ -6077,6 +6082,7 @@ function _doConnect(id, auto=false) {
                 lastHash.orders  = dataHash(orders);
                 lastHash.prices  = dataHash(prices);
                 lastHash.stock   = dataHash(stockItems);
+                if (data.lastUpdated) localStorage.setItem('lastLocalUpdated', data.lastUpdated);
                 saveToLocal();
                 _fullRender();
                 setSyncStatus('online');
