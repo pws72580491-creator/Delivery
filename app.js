@@ -6759,6 +6759,7 @@ function deleteMemoById(orderId) {
 
     o.note = '';
     saveData();
+    _flushSync(); // 즉시 Firebase 업로드 (debounce 대기 없이)
     toast('🗑️ 메모 삭제됨', 'var(--text3)');
 
     // 현재 항목 제거 (애니메이션)
@@ -6814,7 +6815,7 @@ function saveMemoPopup() {
     o.note = text;
     o.updatedAt = new Date().toISOString();
     saveData();
-    debouncedSync();
+    _flushSync(); // 즉시 Firebase 업로드
     closeMemoPopup();
     renderOrders();
     toast(text ? '📝 메모 저장됨' : '🗑️ 메모 삭제됨', 'var(--accent)');
