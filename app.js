@@ -3605,6 +3605,19 @@ function openPartialPay(clientName, month) {
     ).join('');
 
     _setPayMethod('pp', 'cash');
+    // 혼합 UI 초기화
+    const mixedGrp  = document.getElementById('ppMixedGroup');
+    const singleGrp = document.getElementById('ppSingleAmtGroup');
+    const quickBtns = document.getElementById('ppQuickBtns');
+    if (mixedGrp)  { mixedGrp.style.display = 'none'; }
+    if (singleGrp) { singleGrp.style.display = ''; }
+    if (quickBtns) { quickBtns.style.display = ''; }
+    const ppTransfer = document.getElementById('ppTransferAmt');
+    const ppCash     = document.getElementById('ppCashAmt');
+    const ppMixedPv  = document.getElementById('ppMixedPreview');
+    if (ppTransfer) ppTransfer.value = '';
+    if (ppCash)     ppCash.value = '';
+    if (ppMixedPv)  ppMixedPv.style.display = 'none';
     openModal('partialPayModal');
     setTimeout(() => document.getElementById('ppAmount').focus(), 80);
 }
@@ -3737,6 +3750,7 @@ function confirmPartialPayDiscount() {
     const note       = document.getElementById('ppNote').value.trim();
     const method     = _getPayMethod('pp');
 
+    if (method === 'mixed') return toast('❗ 할인 완납은 단일 수금 방법(현금/이체)으로만 가능합니다');
     if (!amount || amount <= 0) return toast('❗ 실수령액을 입력하세요');
 
     const list  = _getUnpaidList(clientName, month);
