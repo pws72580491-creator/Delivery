@@ -333,7 +333,14 @@ function _fbValueHandler(snap) {
     if (!_initialLoadDone) return;
     if (d.writtenBy === SESSION_ID) return;
     const serverUpdatedAt = d.lastUpdated ? new Date(d.lastUpdated).getTime() : 0;
-    if (_localWriteTime > 0 && (Date.now() - _localWriteTime) < 2000 && serverUpdatedAt < _localWriteTime) return;
+    // 로컬 변경이 서버보다 최신이면 덮어쓰기 차단
+    // _localWriteTime: 메모리 (현재 세션), lastLocalUpdated: localStorage (재시작 후에도 유효)
+    const lastLocalMs = (() => {
+        const s = localStorage.getItem('lastLocalUpdated');
+        return s ? new Date(s).getTime() : 0;
+    })();
+    const localWriteMs = Math.max(_localWriteTime, lastLocalMs);
+    if (localWriteMs > 0 && localWriteMs > serverUpdatedAt) return;
     let changed = false;
     if (d.clients) {
         const inc = toArray(d.clients).map(_normClientFromFb);
@@ -7013,7 +7020,9 @@ function _flushSync() {
     if (updates.prices)     lastHash.prices  = ph;
     if (updates.stockItems) lastHash.stock   = sh;
     debouncedSync.cancel(); // 대기 중인 debounce 취소 (중복 방지)
-    workspaceRef.update(updates).catch(() => {
+    workspaceRef.update(updates).then(() => {
+        localStorage.setItem('lastLocalUpdated', updates.lastUpdated);
+    }).catch(() => {
         // 롤백 — 다음 실행 시 재시도
         if (updates.clients)    lastHash.clients = '';
         if (updates.orders)     lastHash.orders  = '';
