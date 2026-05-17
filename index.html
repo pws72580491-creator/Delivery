@@ -286,6 +286,7 @@
             <div class="hist-sum-breakdown" id="hstatBreakdown" style="display:none;">
                 <span class="hist-sum-method" id="hstatCash">💵 0원</span>
                 <span class="hist-sum-method" id="hstatTransfer">🏦 0원</span>
+                <span class="hist-sum-method" id="hstatMixed" style="display:none;color:#a78bfa;">💳 0원</span>
             </div>
         </div>
         <div class="hist-sum-card" style="background:linear-gradient(135deg,#ef4444,#dc2626);">
@@ -1033,23 +1034,41 @@
       </div>
     </div>
     <div class="form-group">
+      <label class="form-label">수금 방법</label>
+      <div class="pay-method-group" id="ppMethodGroup">
+        <button type="button" class="pay-method-btn cash active" data-method="cash"   onclick="selectPayMethod('pp','cash',this)">💵 현금</button>
+        <button type="button" class="pay-method-btn transfer"    data-method="transfer" onclick="selectPayMethod('pp','transfer',this)">🏦 계좌이체</button>
+        <button type="button" class="pay-method-btn"             data-method="mixed"  onclick="selectPayMethod('pp','mixed',this)">💳 혼합</button>
+        <button type="button" class="pay-method-btn"             data-method="other"  onclick="selectPayMethod('pp','other',this)">📝 기타</button>
+      </div>
+    </div>
+    <!-- 단일 입금액 (현금/이체/기타) -->
+    <div class="form-group" id="ppSingleAmtGroup">
       <label class="form-label">입금액 *</label>
       <input type="number" class="form-input" id="ppAmount" placeholder="0" min="0"
              oninput="previewPartialPay()"
              style="font-size:22px;font-weight:900;text-align:right;letter-spacing:1px;">
     </div>
+    <!-- 혼합 입금액 -->
+    <div id="ppMixedGroup" style="display:none;">
+      <div class="form-group">
+        <label class="form-label">🏦 계좌이체 금액</label>
+        <input type="number" class="form-input" id="ppTransferAmt" placeholder="0" min="0"
+               oninput="previewMixedPay()"
+               style="font-size:20px;font-weight:900;text-align:right;">
+      </div>
+      <div class="form-group">
+        <label class="form-label">💵 현금 금액</label>
+        <input type="number" class="form-input" id="ppCashAmt" placeholder="0" min="0"
+               oninput="previewMixedPay()"
+               style="font-size:20px;font-weight:900;text-align:right;">
+      </div>
+      <div id="ppMixedPreview" style="background:var(--surf3);border:1px solid var(--border);border-left:3px solid #a78bfa;border-radius:10px;padding:11px 14px;font-size:12px;line-height:2.1;margin-bottom:8px;display:none;"></div>
+    </div>
     <div id="ppQuickBtns" style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;"></div>
     <div id="ppPreview" style="display:none;background:var(--surf3);border:1px solid var(--border);
          border-left:3px solid var(--accent);border-radius:10px;padding:12px 14px;
          margin-bottom:12px;font-size:12px;line-height:2.1;"></div>
-    <div class="form-group">
-      <label class="form-label">수금 방법</label>
-      <div class="pay-method-group" id="ppMethodGroup">
-        <button type="button" class="pay-method-btn cash active" data-method="cash"   onclick="selectPayMethod('pp','cash',this)">💵 현금</button>
-        <button type="button" class="pay-method-btn transfer"    data-method="transfer" onclick="selectPayMethod('pp','transfer',this)">🏦 계좌이체</button>
-        <button type="button" class="pay-method-btn"             data-method="other"  onclick="selectPayMethod('pp','other',this)">📝 기타</button>
-      </div>
-    </div>
     <div class="form-group">
       <label class="form-label">메모 <span style="color:var(--text3);font-weight:400;">(선택)</span></label>
       <input type="text" class="form-input" id="ppNote" placeholder="메모 (선택)">

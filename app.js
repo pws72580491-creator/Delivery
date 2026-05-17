@@ -461,6 +461,7 @@ function _minifyOrder(o) {
     if (o.note)        r.note       = o.note;       // ③ 빈 값 저장 방지
     if (o.paidAmount != null && o.paidAmount !== 0) r.paidAmount = o.paidAmount;
     if (o.paidMethod)  r.paidMethod = o.paidMethod;
+    if (o.paidMethodDetail) r.paidMethodDetail = o.paidMethodDetail;
     if (o.paidAt)      r.paidAt     = o.paidAt;
     if (o.paidNote)    r.paidNote   = o.paidNote;
     if (o.discount)    r.discount   = o.discount;  // 할인 완납 금액
@@ -1959,24 +1960,35 @@ function renderOrders() {
     const totalAmt  = filtered.filter(o=>!o.isVoid).reduce((s,o)=>s+_et(o),0);
     const paidAmt     = filtered.filter(o=>!o.isVoid).reduce((s,o)=>s+_actualPaid(o),0);
     const unpaidAmt   = Math.max(0, totalAmt - paidAmt);
-    // 수금방법별 집계 (paidAmount 기준)
-    let cashAmt = 0, transferAmt = 0, otherPaidAmt = 0;
+    // 수금방법별 집계 (paidMethodDetail 우선, 없으면 paidMethod 기준)
+    let cashAmt = 0, transferAmt = 0, mixedAmt = 0, otherPaidAmt = 0;
     filtered.filter(o=>!o.isVoid).forEach(o => {
         const got = _actualPaid(o);
         if (got <= 0) return;
-        if (o.paidMethod === 'transfer') transferAmt += got;
+        if (o.paidMethod === 'mixed') {
+            if (o.paidMethodDetail) {
+                transferAmt += (o.paidMethodDetail.transfer || 0);
+                cashAmt     += (o.paidMethodDetail.cash     || 0);
+            } else {
+                mixedAmt += got; // 구버전 mixed: 별도 항목
+            }
+        } else if (o.paidMethod === 'transfer') transferAmt += got;
         else if (o.paidMethod === 'other') otherPaidAmt += got;
-        else cashAmt += got; // 'cash' 또는 미지정
+        else cashAmt += got;
     });
     document.getElementById('hstatTotal').textContent  = fmt(totalAmt)+'원';
     document.getElementById('hstatPaid').textContent   = fmt(paidAmt)+'원';
     document.getElementById('hstatUnpaid').textContent = fmt(unpaidAmt)+'원';
-    // 수금방법 분리 표시 (수금액이 있고 현금/이체 중 하나라도 있을 때)
+    // 수금방법 분리 표시
     const bdEl = document.getElementById('hstatBreakdown');
     if (bdEl) {
         if (paidAmt > 0) {
             document.getElementById('hstatCash').textContent     = '💵 ' + fmt(cashAmt) + '원';
             document.getElementById('hstatTransfer').textContent = '🏦 ' + fmt(transferAmt) + '원';
+            // 구버전 mixed 항목이 있으면 추가 표시
+            const mixedEl = document.getElementById('hstatMixed');
+            if (mixedEl) mixedEl.textContent = mixedAmt > 0 ? '💳 ' + fmt(mixedAmt) + '원' : '';
+            if (mixedEl) mixedEl.style.display = mixedAmt > 0 ? '' : 'none';
             bdEl.style.display = 'flex';
         } else {
             bdEl.style.display = 'none';
@@ -2118,7 +2130,7 @@ function togglePaid(id) {
     if (o.isPaid) {
         if (!confirm('완납을 취소하고 미수로 되돌릴까요?')) return;
         o.isPaid = false; o.paidAmount = 0;
-        delete o.paidAt; delete o.paidNote; delete o.paidMethod; delete o.discount;
+        delete o.paidAt; delete o.paidNote; delete o.paidMethod; delete o.discount; delete o.paidMethodDetail;
         saveData(); renderOrders(); renderDashboard(); updateInfoCounts(); updateNavBadges();
         if (document.getElementById('pane-unpaid')?.classList.contains('active')) renderUnpaid();
         _markDirty('settlement'); if (document.getElementById('pane-settlement')?.classList.contains('active')) { _dirty['settlement'] = false;
@@ -3165,6 +3177,7 @@ function showClientStatement(clientName, month) {
                         <div style="font-size:13px;font-weight:800;color:#60a5fa;">💳 ${fmt(o.paidAmount)}원 수금</div>
                         ${o.discount>0?`<div style="font-size:11px;color:var(--orange);font-weight:700;">✂️ 할인 ${fmt(o.discount)}원</div>`:''}
                         ${_methodBadgeHtml(o.paidMethod)}
+                        ${o.paidMethod==='mixed'&&o.paidMethodDetail?`<div style="font-size:10px;color:var(--text2);">🏦${fmt(o.paidMethodDetail.transfer||0)}원 + 💵${fmt(o.paidMethodDetail.cash||0)}원</div>`:''}
                         ${o.paidAt?`<div style="font-size:10px;color:var(--text3);">${o.paidAt.slice(0,10)}</div>`:''}
                         ${o.paidNote?`<div style="font-size:10px;color:var(--text2);">📝 ${o.paidNote}</div>`:''}
                         ${!o.isPaid?`<div style="font-size:10px;color:var(--red);">잔여 ${fmt(o.total-(o.paidAmount||0))}원</div>`:`<div style="font-size:10px;color:var(--green);">✅ 완납</div>`}
@@ -3641,8 +3654,20 @@ function selectPayMethod(prefix, method, btn) {
         b.classList.remove('active');
     });
     btn.classList.add('active');
-    // 수금 방법 선택 시 모달 시트를 아래로 스크롤해서 입금처리 버튼 노출
+    // pp 모달: 혼합 선택 시 분리 입력 UI 표시
     if (prefix === 'pp') {
+        const isMixed = method === 'mixed';
+        const singleGrp = document.getElementById('ppSingleAmtGroup');
+        const mixedGrp  = document.getElementById('ppMixedGroup');
+        const quickBtns = document.getElementById('ppQuickBtns');
+        if (singleGrp) singleGrp.style.display = isMixed ? 'none' : '';
+        if (mixedGrp)  mixedGrp.style.display  = isMixed ? 'block' : 'none';
+        if (quickBtns) quickBtns.style.display  = isMixed ? 'none' : '';
+        if (isMixed) {
+            document.getElementById('ppTransferAmt').value = '';
+            document.getElementById('ppCashAmt').value = '';
+            document.getElementById('ppMixedPreview').style.display = 'none';
+        }
         const sheet = document.getElementById('partialPayModal')?.querySelector('.modal-sheet');
         if (sheet) setTimeout(() => sheet.scrollTo({ top: sheet.scrollHeight, behavior: 'smooth' }), 80);
     }
@@ -3666,12 +3691,34 @@ function _setPayMethod(prefix, method) {
 function _methodLabel(method) {
     if (method === 'transfer') return '🏦 계좌이체';
     if (method === 'other')    return '📝 기타';
+    if (method === 'mixed')    return '💳 혼합결제';
     return '💵 현금';
 }
 function _methodBadgeHtml(method) {
     if (!method || method === 'cash')     return '<span class="pay-method-badge cash">💵현금</span>';
     if (method === 'transfer') return '<span class="pay-method-badge transfer">🏦이체</span>';
+    if (method === 'mixed')    return '<span class="pay-method-badge" style="background:#7c3aed22;color:#a78bfa;">💳혼합</span>';
     return '<span class="pay-method-badge other">📝기타</span>';
+}
+
+function previewMixedPay() {
+    const clientName = document.getElementById('ppClientName').value;
+    const month      = document.getElementById('ppMonth').value;
+    const transfer   = Number(document.getElementById('ppTransferAmt').value) || 0;
+    const cash       = Number(document.getElementById('ppCashAmt').value) || 0;
+    const total      = transfer + cash;
+    const preview    = document.getElementById('ppMixedPreview');
+    if (!preview) return;
+    if (total <= 0) { preview.style.display = 'none'; return; }
+    const list    = _getUnpaidList(clientName, month);
+    const unpaid  = list.reduce((s, o) => s + o.total - (o.paidAmount || 0), 0);
+    const remain  = unpaid - total;
+    let html = `🏦 이체 <strong>${fmt(transfer)}원</strong> + 💵 현금 <strong>${fmt(cash)}원</strong> = 합계 <strong>${fmt(total)}원</strong><br>`;
+    if (remain > 0)        html += `<span style="color:var(--orange);">잔여 미수금 ${fmt(remain)}원</span>`;
+    else if (remain === 0) html += `<span style="color:var(--green);">✅ 전액 완납</span>`;
+    else                   html += `<span style="color:var(--red);">⚠ 미수금(${fmt(unpaid)}원) 초과 ${fmt(-remain)}원</span>`;
+    preview.innerHTML = html;
+    preview.style.display = 'block';
 }
 
 function togglePpDiscount() {
@@ -3739,9 +3786,66 @@ function confirmPartialPayDiscount() {
 function confirmPartialPay() {
     const clientName = document.getElementById('ppClientName').value;
     const month      = document.getElementById('ppMonth').value;
-    const amount     = Number(document.getElementById('ppAmount').value);
     const note       = document.getElementById('ppNote').value.trim();
     const method     = _getPayMethod('pp');
+
+    // ── 혼합 결제 분기 ──
+    if (method === 'mixed') {
+        const transferAmt = Number(document.getElementById('ppTransferAmt').value) || 0;
+        const cashAmt     = Number(document.getElementById('ppCashAmt').value) || 0;
+        const total       = transferAmt + cashAmt;
+        if (total <= 0) return toast('❗ 이체/현금 금액을 입력하세요');
+        if (transferAmt <= 0 && cashAmt <= 0) return toast('❗ 이체 또는 현금 금액을 입력하세요');
+
+        const list   = _getUnpaidList(clientName, month);
+        if (!list.length) return toast('✅ 미수금이 없습니다');
+        const unpaid = list.reduce((s, o) => s + o.total - (o.paidAmount || 0), 0);
+        if (total > unpaid) {
+            if (!confirm(`입금액(${fmt(total)}원)이 미수금(${fmt(unpaid)}원)보다 많습니다.\n전체 완납으로 처리할까요?`)) return;
+        }
+
+        let remain = total, fullCnt = 0, partCnt = 0;
+        const now  = new Date().toISOString();
+        for (const o of list) {
+            if (remain <= 0) break;
+            const due   = o.total - (o.paidAmount || 0);
+            const apply = Math.min(due, remain);
+            remain -= apply;
+            // 비율로 이 전표분 이체/현금 배분
+            const ratio = total > 0 ? apply / total : 0;
+            const applyTransfer = Math.round(transferAmt * ratio);
+            const applyCash     = apply - applyTransfer;
+            o.paidMethodDetail = {
+                transfer: applyTransfer,
+                cash:     applyCash
+            };
+            if (apply >= due) {
+                o.isPaid = true; o.paidAmount = o.total; o.paidAt = now; o.paidMethod = 'mixed';
+                if (note) o.paidNote = note; else delete o.paidNote;
+                fullCnt++;
+            } else {
+                o.paidAmount = (o.paidAmount || 0) + apply; o.paidAt = now; o.paidMethod = 'mixed';
+                if (note) o.paidNote = note; else delete o.paidNote;
+                partCnt++;
+            }
+        }
+        saveData(); closeModal('partialPayModal');
+        renderOrders(); renderDashboard(); updateInfoCounts(); updateNavBadges();
+        if (document.getElementById('pane-unpaid')?.classList.contains('active')) renderUnpaid();
+        _markDirty('settlement');
+        if (document.getElementById('pane-settlement')?.classList.contains('active')) {
+            _dirty['settlement'] = false;
+            if (settleUnit==='monthly') renderSettlement();
+            if (settleUnit==='daily') renderSettlementDaily();
+            if (settleUnit==='quarterly') renderSettlementQuarterly();
+        }
+        showClientStatement(clientName, month);
+        toast(`💳 혼합 완납 (🏦${fmt(transferAmt)}원 + 💵${fmt(cashAmt)}원)`, 'var(--green)');
+        return;
+    }
+
+    // ── 기존 단일 방법 처리 ──
+    const amount = Number(document.getElementById('ppAmount').value);
 
     if (!amount || amount <= 0) return toast('❗ 입금액을 입력하세요');
 
@@ -3769,14 +3873,14 @@ function confirmPartialPay() {
             o.isPaid     = true;
             o.paidAmount = o.total;
             o.paidAt     = now;
-            o.paidMethod = method;
+            o.paidMethod = (o.paidMethod && o.paidMethod !== method) ? 'mixed' : method;
             if (note) o.paidNote = note; else delete o.paidNote;
             fullCnt++;
         } else {
             // 부분 입금
             o.paidAmount = (o.paidAmount || 0) + apply;
             o.paidAt     = now;
-            o.paidMethod = method;
+            o.paidMethod = (o.paidMethod && o.paidMethod !== method) ? 'mixed' : method;
             if (note) o.paidNote = note; else delete o.paidNote;
             partCnt++;
         }
@@ -3858,7 +3962,7 @@ function confirmPayEdit() {
         // 수금 취소 → 미수로 복귀
         o.paidAmount = 0;
         o.isPaid     = false;
-        delete o.paidAt; delete o.paidNote; delete o.paidMethod;
+        delete o.paidAt; delete o.paidNote; delete o.paidMethod; delete o.paidMethodDetail;
         toast('🔴 수금 취소 — 미수로 변경됨');
     } else if (amount >= o.total) {
         // 완납
