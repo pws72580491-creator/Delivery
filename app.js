@@ -165,28 +165,9 @@ function _actualPaid(o) {
 
 // 안정적 hash: 객체 키 삽입 순서에 무관하게 동일한 결과 보장
 function dataHash(v) {
-    // 경량 해시: 전체 JSON 직렬화 대신 길이 + 주요 필드 샘플링
-    // orders처럼 큰 배열도 O(n) → O(1)에 가깝게 처리
-    if (!v) return '0';
-    if (Array.isArray(v)) {
-        const len = v.length;
-        if (len === 0) return 'arr:0';
-        // 처음/중간/마지막 샘플 + 각 항목의 핵심 필드
-        const samples = [v[0], v[Math.floor(len / 2)], v[len - 1]].filter(Boolean);
-        const key = samples.map(item => {
-            if (!item || typeof item !== 'object') return String(item);
-            // id, date, updatedAt, note, isPaid, paidAmount, qty 등 변경 감지용 핵심 필드
-            return [item.id||'', item.date||'', item.updatedAt||item.paidAt||'',
-                    item.note||'', item.isPaid?'1':'0', item.paidAmount||0,
-                    item.total||0, item.qty||0, item.name||''].join('|');
-        }).join(';');
-        return `arr:${len}:${_fastStrHash(key)}`;
-    }
-    if (typeof v === 'object') {
-        const keys = Object.keys(v);
-        return `obj:${keys.length}:${_fastStrHash(JSON.stringify(v))}`;
-    }
-    return String(v);
+    // JSON.stringify 후 djb2 해시 — 키 정렬 제거로 속도 개선, 변경 감지 정확도 유지
+    const str = JSON.stringify(v) || '';
+    return _fastStrHash(str);
 }
 
 function _fastStrHash(str) {
