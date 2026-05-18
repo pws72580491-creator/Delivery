@@ -2038,7 +2038,12 @@ function renderOrders() {
                 .sort((a, b) => (b.date||'').localeCompare(a.date||'') || (b.id||'').localeCompare(a.id||''))
                 [0];
             if (prevMemo) {
-                memoBodyHtml = `<div class="order-memo-body order-memo-prev" onclick="openMemoPopup('${oId}')"><span class="order-memo-prev-label">이전 메모 · ${prevMemo.date}</span>${escapeHtml(prevMemo.note)}</div>`;
+                memoBodyHtml = `<div class="order-memo-body order-memo-prev" style="display:flex;align-items:flex-start;justify-content:space-between;gap:6px;">
+                    <div onclick="openMemoPopup('${oId}')" style="flex:1;min-width:0;">
+                        <span class="order-memo-prev-label">이전 메모 · ${prevMemo.date}</span>${escapeHtml(prevMemo.note)}
+                    </div>
+                    <button onclick="deletePrevMemo('${escapeAttr(prevMemo.id)}')" style="flex-shrink:0;background:none;border:none;font-size:14px;color:var(--text3);padding:2px 4px;cursor:pointer;line-height:1;" title="이전 메모 삭제">🗑️</button>
+                </div>`;
             }
         }
         return `<div class="${cardClass}">
@@ -6883,8 +6888,19 @@ function openMemoDetail(clientName) {
     _modalHistoryPushed = true;
 }
 
-function deleteMemoById(orderId) {
+function deletePrevMemo(orderId) {
     const o = orders.find(x => x.id === orderId);
+    if (!o || !o.note) return;
+    if (!confirm(`📅 ${o.date} 이전 메모를 삭제할까요?\n\n"${o.note}"`)) return;
+    o.note = '';
+    o.updatedAt = new Date().toISOString();
+    saveData();
+    _flushSync();
+    renderOrders();
+    toast('🗑️ 이전 메모 삭제됨', 'var(--text3)');
+}
+
+function deleteMemoById(orderId) {
     if (!o) return;
     if (!confirm(`📅 ${o.date} 메모를 삭제할까요?\n\n"${o.note}"`)) return;
 
