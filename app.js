@@ -165,11 +165,38 @@ function _actualPaid(o) {
 
 // 안정적 hash: 객체 키 삽입 순서에 무관하게 동일한 결과 보장
 function dataHash(v) {
-    return JSON.stringify(v, (_, val) =>
-        (val && typeof val === 'object' && !Array.isArray(val))
-            ? Object.keys(val).sort().reduce((acc, k) => { acc[k] = val[k]; return acc; }, {})
-            : val
-    );
+    // 경량 해시: 전체 JSON 직렬화 대신 길이 + 주요 필드 샘플링
+    // orders처럼 큰 배열도 O(n) → O(1)에 가깝게 처리
+    if (!v) return '0';
+    if (Array.isArray(v)) {
+        const len = v.length;
+        if (len === 0) return 'arr:0';
+        // 처음/중간/마지막 샘플 + 각 항목의 핵심 필드
+        const samples = [v[0], v[Math.floor(len / 2)], v[len - 1]].filter(Boolean);
+        const key = samples.map(item => {
+            if (!item || typeof item !== 'object') return String(item);
+            // id, date, updatedAt, note, isPaid, paidAmount, qty 등 변경 감지용 핵심 필드
+            return [item.id||'', item.date||'', item.updatedAt||item.paidAt||'',
+                    item.note||'', item.isPaid?'1':'0', item.paidAmount||0,
+                    item.total||0, item.qty||0, item.name||''].join('|');
+        }).join(';');
+        return `arr:${len}:${_fastStrHash(key)}`;
+    }
+    if (typeof v === 'object') {
+        const keys = Object.keys(v);
+        return `obj:${keys.length}:${_fastStrHash(JSON.stringify(v))}`;
+    }
+    return String(v);
+}
+
+function _fastStrHash(str) {
+    // djb2 알고리즘 - 빠르고 충돌 적음
+    let h = 5381;
+    for (let i = 0; i < str.length; i++) {
+        h = ((h << 5) + h) ^ str.charCodeAt(i);
+        h = h & h; // 32bit 정수 유지
+    }
+    return (h >>> 0).toString(36);
 }
 
 function toArray(v) {
@@ -370,22 +397,35 @@ let backupDirHandle = null;  // File System Access API 디렉토리 핸들
 // ║  § 3  로컬 저장 + Firebase 동기화 트리거                               ║
 // ╚══════════════════════════════════════════════════════════════╝
 
+// ─── localStorage 변경 감지용 해시 캐시 ───
+const _localHash = { clients: null, orders: null, prices: null, stock: null };
+
 function saveToLocal() {
     // 워크스페이스 ID가 있으면 Firebase 연결 중이거나 곧 연결될 예정
     // → isConnected가 아직 false여도 경량 저장으로 용량 절약
     const hasWorkspace = !!(localStorage.getItem('workspaceId'));
     const useLightMode = isConnected || hasWorkspace;
     try {
-        const ordersToSave = useLightMode ? _getLightOrders() : orders.map(_minifyOrder);  // ③ 항상 minify
+        const ordersToSave = useLightMode ? _getLightOrders() : orders.map(_minifyOrder);
         const stockToSave  = useLightMode ? _getLightStock()  : stockItems;
-        _cleanPrices();  // ④ 오래된 단가 정리
-        localStorage.setItem('p_clients', JSON.stringify(clients.map(_minifyClient)));
-        localStorage.setItem('p_orders',  JSON.stringify(ordersToSave));
-        localStorage.setItem('prices',    JSON.stringify(prices));
-        localStorage.setItem('p_stock',   JSON.stringify(stockToSave));
+        _cleanPrices();
+
+        // 변경된 데이터만 저장 (해시 비교)
+        const ch = dataHash(clients);
+        const oh = dataHash(ordersToSave);
+        const ph = dataHash(prices);
+        const sh = dataHash(stockToSave);
+
+        if (ch !== _localHash.clients) { localStorage.setItem('p_clients', JSON.stringify(clients.map(_minifyClient))); _localHash.clients = ch; }
+        if (oh !== _localHash.orders)  { localStorage.setItem('p_orders',  JSON.stringify(ordersToSave));               _localHash.orders  = oh; }
+        if (ph !== _localHash.prices)  { localStorage.setItem('prices',    JSON.stringify(prices));                     _localHash.prices  = ph; }
+        if (sh !== _localHash.stock)   { localStorage.setItem('p_stock',   JSON.stringify(stockToSave));                _localHash.stock   = sh; }
     } catch(e) {
         // ── 자동 긴급 정리: 기존 키 먼저 제거 → 공간 확보 → 경량 재저장 ──
         toast('⚠️ 저장공간 부족 → 자동 정리 중...', 'var(--orange)');
+        // 캐시 초기화 → 전체 재저장 강제
+        _localHash.clients = null; _localHash.orders = null;
+        _localHash.prices  = null; _localHash.stock  = null;
         try {
             // 1단계: 기존 대용량 키 제거로 공간 확보 (데이터는 메모리에 있음)
             localStorage.removeItem('p_orders');
@@ -6213,6 +6253,9 @@ function _doConnect(id, auto=false) {
                 lastHash.prices  = dataHash(prices);
                 lastHash.stock   = dataHash(stockItems);
                 if (data.lastUpdated) localStorage.setItem('lastLocalUpdated', data.lastUpdated);
+                // localStorage 캐시 초기화 → 서버 데이터 전체 재저장
+                _localHash.clients = null; _localHash.orders = null;
+                _localHash.prices  = null; _localHash.stock  = null;
                 saveToLocal();
                 _fullRender();
                 setSyncStatus('online');
