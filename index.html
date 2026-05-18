@@ -175,6 +175,7 @@
     <input type="date" class="stock-date-input" id="stockViewDate" onchange="onStockDateChange(this.value)">
     <button class="stock-date-today-btn" onclick="stockDateNav(1)" style="padding:7px 10px;">▶</button>
     <button class="stock-date-today-btn" onclick="resetStockToToday()">오늘</button>
+    <button class="stock-date-today-btn" onclick="recalcStockFromOrders()" title="출고 누락 재계산" style="color:var(--accent);">🔄</button>
   </div>
   <div class="stock-history-banner" id="stockHistoryBanner">
     <div class="stock-history-banner-title">🕐 과거 재고 조회 중</div>

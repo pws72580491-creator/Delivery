@@ -165,19 +165,11 @@ function _actualPaid(o) {
 
 // 안정적 hash: 객체 키 삽입 순서에 무관하게 동일한 결과 보장
 function dataHash(v) {
-    // JSON.stringify 후 djb2 해시 — 키 정렬 제거로 속도 개선, 변경 감지 정확도 유지
-    const str = JSON.stringify(v) || '';
-    return _fastStrHash(str);
-}
-
-function _fastStrHash(str) {
-    // djb2 알고리즘 - 빠르고 충돌 적음
-    let h = 5381;
-    for (let i = 0; i < str.length; i++) {
-        h = ((h << 5) + h) ^ str.charCodeAt(i);
-        h = h & h; // 32bit 정수 유지
-    }
-    return (h >>> 0).toString(36);
+    return JSON.stringify(v, (_, val) =>
+        (val && typeof val === 'object' && !Array.isArray(val))
+            ? Object.keys(val).sort().reduce((acc, k) => { acc[k] = val[k]; return acc; }, {})
+            : val
+    );
 }
 
 function toArray(v) {
@@ -348,7 +340,7 @@ function _fbValueHandler(snap) {
         return s ? new Date(s).getTime() : 0;
     })();
     const localWriteMs = Math.max(_localWriteTime, lastLocalMs);
-    if (localWriteMs > 0 && localWriteMs > serverUpdatedAt) return;
+    if (localWriteMs > 0 && localWriteMs >= serverUpdatedAt) return;
     let changed = false;
     if (d.clients) {
         const inc = toArray(d.clients).map(_normClientFromFb);
@@ -382,7 +374,6 @@ let backupDirHandle = null;  // File System Access API 디렉토리 핸들
 const _localHash = { clients: null, orders: null, prices: null, stock: null };
 
 function saveToLocal() {
-    // 워크스페이스 ID가 있으면 Firebase 연결 중이거나 곧 연결될 예정
     // → isConnected가 아직 false여도 경량 저장으로 용량 절약
     const hasWorkspace = !!(localStorage.getItem('workspaceId'));
     const useLightMode = isConnected || hasWorkspace;
@@ -390,23 +381,13 @@ function saveToLocal() {
         const ordersToSave = useLightMode ? _getLightOrders() : orders.map(_minifyOrder);
         const stockToSave  = useLightMode ? _getLightStock()  : stockItems;
         _cleanPrices();
-
-        // 변경된 데이터만 저장 (해시 비교)
-        const ch = dataHash(clients);
-        const oh = dataHash(ordersToSave);
-        const ph = dataHash(prices);
-        const sh = dataHash(stockToSave);
-
-        if (ch !== _localHash.clients) { localStorage.setItem('p_clients', JSON.stringify(clients.map(_minifyClient))); _localHash.clients = ch; }
-        if (oh !== _localHash.orders)  { localStorage.setItem('p_orders',  JSON.stringify(ordersToSave));               _localHash.orders  = oh; }
-        if (ph !== _localHash.prices)  { localStorage.setItem('prices',    JSON.stringify(prices));                     _localHash.prices  = ph; }
-        if (sh !== _localHash.stock)   { localStorage.setItem('p_stock',   JSON.stringify(stockToSave));                _localHash.stock   = sh; }
+        localStorage.setItem('p_clients', JSON.stringify(clients.map(_minifyClient)));
+        localStorage.setItem('p_orders',  JSON.stringify(ordersToSave));
+        localStorage.setItem('prices',    JSON.stringify(prices));
+        localStorage.setItem('p_stock',   JSON.stringify(stockToSave));
     } catch(e) {
         // ── 자동 긴급 정리: 기존 키 먼저 제거 → 공간 확보 → 경량 재저장 ──
         toast('⚠️ 저장공간 부족 → 자동 정리 중...', 'var(--orange)');
-        // 캐시 초기화 → 전체 재저장 강제
-        _localHash.clients = null; _localHash.orders = null;
-        _localHash.prices  = null; _localHash.stock  = null;
         try {
             // 1단계: 기존 대용량 키 제거로 공간 확보 (데이터는 메모리에 있음)
             localStorage.removeItem('p_orders');
@@ -1402,6 +1383,45 @@ function normItemName(n) {
 function findStockByName(name) {
     const key = normItemName(name);
     return stockItems.find(s => normItemName(s.name) === key);
+}
+
+// ─── 출고 누락 재고 재계산 (새로고침 시 실행) ───
+// 동기화 오류 등으로 auto 차감 로그가 빠진 주문을 찾아 재고에 반영
+function recalcStockFromOrders() {
+    if (!stockAutoDeduct) return 0;
+    let fixedCount = 0;
+    orders.forEach(o => {
+        if (o.isVoid || !(o.items||[]).length) return;
+        o.items.forEach(it => {
+            const si = findStockByName(it.name);
+            if (!si) return;
+            // 이 주문·품목에 대한 auto 로그가 이미 있는지 확인
+            const alreadyLogged = (si.log || []).some(l =>
+                l.type === 'auto' &&
+                l.date === o.date &&
+                l.reason && l.reason.includes(o.clientName) &&
+                Math.abs(l.qty) === Number(it.qty)
+            );
+            if (alreadyLogged) return;
+            // 누락된 차감 적용
+            const before = si.qty;
+            si.qty = Math.max(0, si.qty - (Number(it.qty) || 0));
+            (si.log = si.log || []).push({
+                type: 'auto', qty: si.qty - before, before, after: si.qty,
+                reason: '납품차감(' + o.clientName + ') [재계산]',
+                date: o.date, at: new Date().toISOString()
+            });
+            si.log = _trimLogByDate(si.log);
+            fixedCount++;
+        });
+    });
+    if (fixedCount > 0) {
+        saveData();
+        _markDirty('stock');
+        if (document.getElementById('pane-stock')?.classList.contains('active')) renderStock();
+        toast(`🔄 재고 재계산 완료 — ${fixedCount}건 출고 반영`, 'var(--green)');
+    }
+    return fixedCount;
 }
 
 // ─── 납품 등록 ───
@@ -6234,14 +6254,13 @@ function _doConnect(id, auto=false) {
                 lastHash.prices  = dataHash(prices);
                 lastHash.stock   = dataHash(stockItems);
                 if (data.lastUpdated) localStorage.setItem('lastLocalUpdated', data.lastUpdated);
-                // localStorage 캐시 초기화 → 서버 데이터 전체 재저장
-                _localHash.clients = null; _localHash.orders = null;
-                _localHash.prices  = null; _localHash.stock  = null;
                 saveToLocal();
                 _fullRender();
                 setSyncStatus('online');
                 if (!auto) toast('☁️ 서버 데이터를 불러왔습니다', 'var(--green)');
                 else       toast('🟢 자동 연결 완료', 'var(--green)');
+                // 동기화 후 출고 누락 재고 재계산
+                setTimeout(() => recalcStockFromOrders(), 500);
 
             } else if (localHasData) {
                 // ── 서버 비어있음 → 로컬 데이터 업로드 ──
@@ -6925,12 +6944,14 @@ function deletePrevMemo(orderId) {
 }
 
 function deleteMemoById(orderId) {
+    const o = orders.find(x => x.id === orderId);
     if (!o) return;
     if (!confirm(`📅 ${o.date} 메모를 삭제할까요?\n\n"${o.note}"`)) return;
 
     o.note = '';
+    o.updatedAt = new Date().toISOString();
     saveData();
-    _flushSync(); // 즉시 Firebase 업로드 (debounce 대기 없이)
+    _flushSync();
     toast('🗑️ 메모 삭제됨', 'var(--text3)');
 
     // 현재 항목 제거 (애니메이션)
