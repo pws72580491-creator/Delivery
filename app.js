@@ -3214,7 +3214,7 @@ function showClientStatement(clientName, month) {
         </div>
         <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;">
             ${phone?`<a href="sms:${phone}?body=${encodeURIComponent(smsText)}" class="btn btn-success" style="flex:1;min-width:80px;text-decoration:none;text-align:center;">💬 문자</a>`:''}
-            <button class="btn btn-primary" style="flex:1;min-width:80px;" onclick="saveStatementJPG('${escapeAttr(clientName)}','${escapeAttr(month)}')">🖼️ JPG 저장</button>
+            <button class="btn btn-primary" style="flex:1;min-width:80px;" onclick="saveStatementPNG('${escapeAttr(clientName)}','${escapeAttr(month)}')">🖼️ PNG 저장</button>
         </div>
         <button onclick="shareStatement()" style="width:100%;margin-top:8px;padding:13px;border-radius:var(--radius-s);border:none;background:#FEE500;color:#191919;font-size:14px;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;letter-spacing:-.3px;">
             <svg width="20" height="20" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg"><ellipse cx="20" cy="18" rx="18" ry="14" fill="#191919"/><path fill="#FEE500" d="M11 18a2.5 2.5 0 1 0 5 0 2.5 2.5 0 0 0-5 0zm8.5 0a1 1 0 1 0 2 0 1 1 0 0 0-2 0zm3.5 0a2.5 2.5 0 1 0 5 0 2.5 2.5 0 0 0-5 0z"/><path fill="#191919" d="M15 25l-2 6 5-3"/></svg>
@@ -3232,7 +3232,7 @@ function showClientStatement(clientName, month) {
 
 // ─── 거래처 명세표 JPG 저장 ───
 
-function saveStatementJPG(clientName, month) {
+function saveStatementPNG(clientName, month) {
     const monthStart = month + '-01';
     const filt = orders.filter(o => o.clientName === clientName && o.date.startsWith(month))
                        .sort((a, b) => a.date.localeCompare(b.date));
@@ -3273,7 +3273,7 @@ function saveStatementJPG(clientName, month) {
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<title>jpg_render</title>
+<title>png_render</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
   body {
@@ -3549,10 +3549,10 @@ function saveStatementJPG(clientName, month) {
         }).then(canvas => {
             document.body.removeChild(iframe);
             const link = document.createElement('a');
-            link.download = `${clientName}_${month}_거래명세표.jpg`;
-            link.href = canvas.toDataURL('image/jpeg', 0.95);
+            link.download = `${clientName}_${month}_거래명세표.png`;
+            link.href = canvas.toDataURL('image/png');
             link.click();
-            toast('✅ JPG 이미지가 저장되었습니다!');
+            toast('✅ PNG 이미지가 저장되었습니다!');
         }).catch(err => {
             document.body.removeChild(iframe);
             console.error(err);
