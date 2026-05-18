@@ -6860,6 +6860,25 @@ function _getMemoViewRange() {
     }
 }
 
+function deleteAllMemoInView() {
+    const range = _getMemoViewRange();
+    const targets = (orders || []).filter(o => {
+        if (!o.note || !o.note.trim()) return false;
+        if (range.dates) return range.dates.includes(o.date);
+        return o.date >= range.start && o.date <= range.end;
+    });
+    if (!targets.length) return toast('삭제할 메모가 없습니다', 'var(--text3)');
+    const clientNames = [...new Set(targets.map(o => o.clientName))].join(', ');
+    if (!confirm(`📋 현재 기간의 메모 ${targets.length}건을 모두 삭제할까요?\n\n대상: ${clientNames}`)) return;
+    const now = new Date().toISOString();
+    targets.forEach(o => { o.note = ''; o.updatedAt = now; });
+    saveData();
+    _flushSync();
+    renderMemoView();
+    renderOrders();
+    toast(`🗑️ 메모 ${targets.length}건 삭제됨`, 'var(--text3)');
+}
+
 function renderMemoView() {
     const range = _getMemoViewRange();
     document.getElementById('memoViewPeriodLabel').textContent = range.label;

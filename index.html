@@ -1347,7 +1347,10 @@
     <div class="memo-view-box">
         <div class="memo-view-header">
             <span class="memo-view-title">📋 메모 모아보기</span>
-            <button class="memo-view-close" onclick="closeMemoView()">✕</button>
+            <div style="display:flex;gap:8px;align-items:center;">
+                <button onclick="deleteAllMemoInView()" style="background:none;border:1px solid #f8717150;color:#f87171;border-radius:7px;padding:4px 10px;font-size:12px;font-weight:700;cursor:pointer;">🗑️ 모두삭제</button>
+                <button class="memo-view-close" onclick="closeMemoView()">✕</button>
+            </div>
         </div>
         <div class="memo-view-unit-tabs">
             <button class="memo-unit-tab active" data-unit="cycle" onclick="setMemoUnit('cycle',this)">납품주기</button>
