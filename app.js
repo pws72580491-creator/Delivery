@@ -1385,9 +1385,9 @@ function findStockByName(name) {
     return stockItems.find(s => normItemName(s.name) === key);
 }
 
-// ─── 출고 누락 재고 재계산 (새로고침 시 실행) ───
-// 동기화 오류 등으로 auto 차감 로그가 빠진 주문을 찾아 재고에 반영
-function recalcStockFromOrders() {
+// ─── 납품 등록 ───
+
+function recalcStockFromOrders(silent = false) {
     if (!stockAutoDeduct) return 0;
     let fixedCount = 0;
     orders.forEach(o => {
@@ -1395,7 +1395,6 @@ function recalcStockFromOrders() {
         o.items.forEach(it => {
             const si = findStockByName(it.name);
             if (!si) return;
-            // 이 주문·품목에 대한 auto 로그가 이미 있는지 확인
             const alreadyLogged = (si.log || []).some(l =>
                 l.type === 'auto' &&
                 l.date === o.date &&
@@ -1403,7 +1402,6 @@ function recalcStockFromOrders() {
                 Math.abs(l.qty) === Number(it.qty)
             );
             if (alreadyLogged) return;
-            // 누락된 차감 적용
             const before = si.qty;
             si.qty = Math.max(0, si.qty - (Number(it.qty) || 0));
             (si.log = si.log || []).push({
@@ -1416,15 +1414,17 @@ function recalcStockFromOrders() {
         });
     });
     if (fixedCount > 0) {
-        saveData();
-        _markDirty('stock');
-        if (document.getElementById('pane-stock')?.classList.contains('active')) renderStock();
-        toast(`🔄 재고 재계산 완료 — ${fixedCount}건 출고 반영`, 'var(--green)');
+        if (silent) {
+            saveToLocal();
+        } else {
+            saveData();
+            _markDirty('stock');
+            if (document.getElementById('pane-stock')?.classList.contains('active')) renderStock();
+            toast(`🔄 재고 재계산 완료 — ${fixedCount}건 출고 반영`, 'var(--green)');
+        }
     }
     return fixedCount;
 }
-
-// ─── 납품 등록 ───
 
 function searchDeliveryClient(q) {
     const drop = document.getElementById('clientDropdown');
@@ -4549,11 +4549,7 @@ function getInOutAtDate(si, targetDateStr) {
         const t = l.at ? new Date(l.at).getTime() : 0;
         return t >= startUTC && t <= endUTC;
     });
-    const inQty  = Math.max(0,
-        dayLogs.filter(l => l.type === 'in').reduce((s, l) => s + Math.abs(l.qty), 0)
-        + dayLogs.filter(l => l.type === 'in_adj').reduce((s, l) => s + l.qty, 0)
-    );
-    // restore는 originalDate가 targetDate인 것만 해당 날짜 출고 상쇄
+    const inQty  = dayLogs.filter(l => l.type === 'in').reduce((s, l) => s + Math.abs(l.qty), 0);
     const restoreQty = dayLogs.filter(l => (l.type === 'restore' && (l.originalDate || l.date) === targetDateStr)
                                         || (l.type === 'edit_adj' && (l.qty||0) > 0)).reduce((s, l) => s + Math.abs(l.qty), 0);
     const logOutQty = Math.max(0, dayLogs.filter(l => l.type === 'out' || l.type === 'auto' || (l.type === 'edit_adj' && l.qty < 0)).reduce((s, l) => s + Math.abs(l.qty), 0) - restoreQty);
@@ -4619,14 +4615,9 @@ function getTodayInOut(si) {
         return t >= todayStartUTC && t < tomorrowStartUTC;
     });
     // 입고: type=in (carryover는 이전재고 이월이므로 입고로 보지 않음)
-    const inQty = Math.max(0,
-        todayLogs
-            .filter(l => l.type === 'in')
-            .reduce((s, l) => s + Math.abs(l.qty), 0)
-        + todayLogs
-            .filter(l => l.type === 'in_adj')
-            .reduce((s, l) => s + l.qty, 0)  // in_adj는 음수로 입고 수량 차감
-    );
+    const inQty = todayLogs
+        .filter(l => l.type === 'in')
+        .reduce((s, l) => s + Math.abs(l.qty), 0);
     // 출고 상쇄: 납품삭제복구(restore) + 납품수정보정 증가(edit_adj>0)
     // restore는 originalDate가 오늘인 것만 상쇄 (이전 날짜 전표 삭제는 오늘 출고에 영향 없음)
     const restoreQty = todayLogs
@@ -5245,6 +5236,8 @@ function saveStockItem() {
                 type: logType, qty: diff, before, after: qty,
                 reason: logReason, date: todayKST(), at: new Date().toISOString()
             });
+            si.log = _trimLogByDate(si.log);
+
             // ── 오늘 입고 로그가 있는데 수정으로 수량이 감소한 경우 →
             //    입고 수량 표시도 보정 (in_adj 로그로 inQty 차감)
             if (!_carryMode && diff < 0) {
@@ -5272,7 +5265,6 @@ function saveStockItem() {
                     }
                 }
             }
-            si.log = _trimLogByDate(si.log);
         }
         toast('✅ 품목이 수정되었습니다', 'var(--green)');
     } else {
@@ -5404,7 +5396,7 @@ function openStockLog(id) {
     if (!si) return;
     document.getElementById('slName').textContent = si.name + '  현재: ' + fmt(si.qty) + ' ' + si.unit;
     const log = (si.log || []);
-    const typeLabel = { in:'📥 입고', out:'📤 출고', set:'✏️ 설정', auto:'🚚 납품차감', carryover:'🔄 이월', edit_adj:'✏️ 수정보정', restore:'↩ 납품삭제복구', in_adj:'📥 입고수정' };
+    const typeLabel = { in:'📥 입고', out:'📤 출고', set:'✏️ 설정', auto:'🚚 납품차감', carryover:'🔄 이월', edit_adj:'✏️ 수정보정', restore:'↩ 납품삭제복구' };
     const typeCls   = { in:'in', out:'out', set:'set', auto:'auto', carryover:'in', edit_adj:'set', restore:'in' };
 
     if (!log.length) {
@@ -6259,8 +6251,6 @@ function _doConnect(id, auto=false) {
                 setSyncStatus('online');
                 if (!auto) toast('☁️ 서버 데이터를 불러왔습니다', 'var(--green)');
                 else       toast('🟢 자동 연결 완료', 'var(--green)');
-                // 동기화 후 출고 누락 재고 재계산
-                setTimeout(() => recalcStockFromOrders(), 500);
 
             } else if (localHasData) {
                 // ── 서버 비어있음 → 로컬 데이터 업로드 ──
@@ -6284,8 +6274,6 @@ function _doConnect(id, auto=false) {
 
             // 초기 로드 완료 → 이후부턴 실시간 리스너가 처리
             _initialLoadDone = true;
-            // 동기화 후 출고 누락 재고 재계산
-            setTimeout(() => recalcStockFromOrders(), 500);
 
             if (!auto) closeModal('firebaseModal');
 
@@ -6681,8 +6669,6 @@ window.addEventListener('DOMContentLoaded', () => {
     renderDashboard();
     updateInfoCounts();
     updateItemDatalist();
-    // 로컬 데이터 기준 즉시 재고 재계산 (Firebase 연결 전에도 정확한 재고 표시)
-    setTimeout(() => recalcStockFromOrders(), 100);
     // 워크스페이스 ID 복원 및 잠금 UI 적용
     const savedWs  = localStorage.getItem('workspaceId');
     const isLocked = localStorage.getItem('wsLocked') === '1';
@@ -6726,7 +6712,6 @@ window.addEventListener('DOMContentLoaded', () => {
                     invalidateOrdersCache();
                     saveToLocal();
                     _fullRender();
-                    setTimeout(() => recalcStockFromOrders(), 300);
                 }).catch(() => {});
             }
         } else {
