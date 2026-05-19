@@ -6872,6 +6872,8 @@ function deleteAllMemoInView() {
     if (!confirm(`📋 현재 기간의 메모 ${targets.length}건을 모두 삭제할까요?\n\n대상: ${clientNames}`)) return;
     const now = new Date().toISOString();
     targets.forEach(o => { o.note = ''; o.updatedAt = now; });
+    // lastHash 강제 초기화 → _flushSync가 반드시 Firebase에 업로드하도록
+    lastHash.orders = '';
     saveData();
     _flushSync();
     renderMemoView();
@@ -6956,6 +6958,7 @@ function deletePrevMemo(orderId) {
     if (!confirm(`📅 ${o.date} 이전 메모를 삭제할까요?\n\n"${o.note}"`)) return;
     o.note = '';
     o.updatedAt = new Date().toISOString();
+    lastHash.orders = '';
     saveData();
     _flushSync();
     renderOrders();
@@ -6969,6 +6972,7 @@ function deleteMemoById(orderId) {
 
     o.note = '';
     o.updatedAt = new Date().toISOString();
+    lastHash.orders = '';
     saveData();
     _flushSync();
     toast('🗑️ 메모 삭제됨', 'var(--text3)');
@@ -7025,6 +7029,7 @@ function saveMemoPopup() {
     const text = document.getElementById('memoTextarea').value.trim();
     o.note = text;
     o.updatedAt = new Date().toISOString();
+    lastHash.orders = '';
     saveData();
     _flushSync(); // 즉시 Firebase 업로드
     closeMemoPopup();
