@@ -6284,6 +6284,8 @@ function _doConnect(id, auto=false) {
 
             // 초기 로드 완료 → 이후부턴 실시간 리스너가 처리
             _initialLoadDone = true;
+            // 동기화 후 출고 누락 재고 재계산
+            setTimeout(() => recalcStockFromOrders(), 500);
 
             if (!auto) closeModal('firebaseModal');
 
@@ -6679,6 +6681,8 @@ window.addEventListener('DOMContentLoaded', () => {
     renderDashboard();
     updateInfoCounts();
     updateItemDatalist();
+    // 로컬 데이터 기준 즉시 재고 재계산 (Firebase 연결 전에도 정확한 재고 표시)
+    setTimeout(() => recalcStockFromOrders(), 100);
     // 워크스페이스 ID 복원 및 잠금 UI 적용
     const savedWs  = localStorage.getItem('workspaceId');
     const isLocked = localStorage.getItem('wsLocked') === '1';
@@ -6722,6 +6726,7 @@ window.addEventListener('DOMContentLoaded', () => {
                     invalidateOrdersCache();
                     saveToLocal();
                     _fullRender();
+                    setTimeout(() => recalcStockFromOrders(), 300);
                 }).catch(() => {});
             }
         } else {
@@ -6872,10 +6877,10 @@ function deleteAllMemoInView() {
     if (!confirm(`📋 현재 기간의 메모 ${targets.length}건을 모두 삭제할까요?\n\n대상: ${clientNames}`)) return;
     const now = new Date().toISOString();
     targets.forEach(o => { o.note = ''; o.updatedAt = now; });
-    // lastHash 강제 초기화 → _flushSync가 반드시 Firebase에 업로드하도록
-    lastHash.orders = '';
     saveData();
+    if (debouncedSync.cancel) debouncedSync.cancel();
     _flushSync();
+    saveToLocal();
     renderMemoView();
     renderOrders();
     toast(`🗑️ 메모 ${targets.length}건 삭제됨`, 'var(--text3)');
@@ -6958,9 +6963,10 @@ function deletePrevMemo(orderId) {
     if (!confirm(`📅 ${o.date} 이전 메모를 삭제할까요?\n\n"${o.note}"`)) return;
     o.note = '';
     o.updatedAt = new Date().toISOString();
-    lastHash.orders = '';
     saveData();
+    if (debouncedSync.cancel) debouncedSync.cancel();
     _flushSync();
+    saveToLocal();
     renderOrders();
     toast('🗑️ 이전 메모 삭제됨', 'var(--text3)');
 }
@@ -6972,9 +6978,10 @@ function deleteMemoById(orderId) {
 
     o.note = '';
     o.updatedAt = new Date().toISOString();
-    lastHash.orders = '';
     saveData();
+    if (debouncedSync.cancel) debouncedSync.cancel();
     _flushSync();
+    saveToLocal();
     toast('🗑️ 메모 삭제됨', 'var(--text3)');
 
     // 현재 항목 제거 (애니메이션)
@@ -7029,9 +7036,10 @@ function saveMemoPopup() {
     const text = document.getElementById('memoTextarea').value.trim();
     o.note = text;
     o.updatedAt = new Date().toISOString();
-    lastHash.orders = '';
     saveData();
-    _flushSync(); // 즉시 Firebase 업로드
+    if (debouncedSync.cancel) debouncedSync.cancel();
+    _flushSync();
+    saveToLocal();
     closeMemoPopup();
     renderOrders();
     toast(text ? '📝 메모 저장됨' : '🗑️ 메모 삭제됨', 'var(--accent)');
