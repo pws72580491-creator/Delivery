@@ -303,6 +303,14 @@ let _initialLoadDone = false;  // 전역 선언 — _fbValueHandler에서 접근
 const SESSION_ID = Math.random().toString(36).slice(2);
 let lastHash = { clients:'', orders:'', prices:'', stock:'' };
 
+// ─── Delta sync 트래킹 ───
+// 변경된 order id만 추적 → debouncedSync에서 건별 업로드 (payload 최소화)
+const _dirtyOrders   = new Set(); // 변경/추가된 order id
+const _deletedOrders = new Set(); // 삭제된 order id
+function _markDirtyOrder(id)   { _dirtyOrders.add(String(id));   _deletedOrders.delete(String(id)); }
+function _markDeletedOrder(id) { _deletedOrders.add(String(id)); _dirtyOrders.delete(String(id)); }
+function _clearOrderDelta()    { _dirtyOrders.clear(); _deletedOrders.clear(); }
+
 // ─── Firebase 데이터 정규화 헬퍼 ───
 // Firebase에서 받은 raw 데이터를 앱 내부 포맷으로 변환 (4곳 공통 사용)
 function _normClientFromFb(c) {
@@ -614,13 +622,19 @@ const debouncedSync = debounce(() => {
     const sh = dataHash(stockItems);
     let changed = false;
     const updates = {};
-    if (ch !== lastHash.clients) { updates.clients    = clients;    changed = true; }
+    if (ch !== lastHash.clients) { updates.clients    = clients.map(_minifyClient); changed = true; }
     if (oh !== lastHash.orders)  {
-        // _noItems 플래그는 로컬 저장 전용 — Firebase에 올리기 전 반드시 제거
-        updates.orders = orders.map(o => {
-            if (!o._noItems) return o;
-            const clean = { ...o }; delete clean._noItems; return clean;
-        });
+        const _nd = _dirtyOrders.size + _deletedOrders.size;
+        if (_nd > 0 && _nd < 20) {
+            // delta: 변경된 항목만 개별 경로 업로드 (전체 배열 대신 orders/{id} 경로)
+            for (const id of _dirtyOrders)   { const o = orders.find(x=>x.id===id); if (o) updates[`orders/${id}`] = _minifyOrder(o); }
+            for (const id of _deletedOrders) { updates[`orders/${id}`] = null; } // null = RTDB 삭제
+        } else {
+            // full: bulk 작업·첫 동기화 시 전체 map 업로드 (배열→맵 마이그레이션 포함)
+            const ordersMap = {};
+            orders.forEach(o => { ordersMap[o.id] = _minifyOrder(o); });
+            updates.orders = ordersMap;
+        }
         changed = true;
     }
     if (ph !== lastHash.prices)  { updates.prices     = prices;     changed = true; }
@@ -637,6 +651,7 @@ const debouncedSync = debounce(() => {
     setSyncStatus('syncing');
     workspaceRef.update(updates)
         .then(() => {
+            _clearOrderDelta(); // 성공 시 delta 추적 초기화
             setSyncStatus('online');
         })
         .catch(e => {
@@ -648,7 +663,7 @@ const debouncedSync = debounce(() => {
             console.error('동기화 실패:', e);
             setSyncStatus('error');
         });
-}, 600);
+}, 200);
 
 function saveData() {
     invalidateOrdersCache();
@@ -1056,6 +1071,7 @@ function saveClient() {
                         if (!o.clientId || o.clientId !== editingClientId) {
                             o.clientId = editingClientId;
                         }
+                        _markDirtyOrder(o.id); // delta sync 마킹
                         orderCount++;
                     }
                 });
@@ -1802,6 +1818,7 @@ function submitOrder() {
         };
         if (isVoid) order.isVoid = true;
         orders.push(order);
+        _markDirtyOrder(order.id); // delta sync 마킹
         // 단가 캐시 갱신
         (group.items||[]).forEach(it => { if (it.price > 0) prices[it.name] = it.price; });
     });
@@ -2184,6 +2201,7 @@ function togglePaid(id) {
         if (!confirm('완납을 취소하고 미수로 되돌릴까요?')) return;
         o.isPaid = false; o.paidAmount = 0;
         delete o.paidAt; delete o.paidNote; delete o.paidMethod; delete o.discount; delete o.paidMethodDetail;
+        _markDirtyOrder(id); // delta sync 마킹
         saveData(); renderOrders(); renderDashboard(); updateInfoCounts(); updateNavBadges();
         if (document.getElementById('pane-unpaid')?.classList.contains('active')) renderUnpaid();
         _markDirty('settlement'); if (document.getElementById('pane-settlement')?.classList.contains('active')) { _dirty['settlement'] = false;
@@ -2260,6 +2278,7 @@ function confirmQuickPayDiscount(method) {
     o.paidAt     = new Date().toISOString();
     o.paidMethod = method;
     if (discount > 0) o.discount = (o.discount || 0) + discount;
+    _markDirtyOrder(orderId); // delta sync 마킹
     closeQuickPay(true);
     saveData(); renderOrders(); renderDashboard(); updateInfoCounts(); updateNavBadges();
     if (document.getElementById('pane-unpaid')?.classList.contains('active')) renderUnpaid();
@@ -2309,6 +2328,7 @@ function confirmQuickPay(method) {
     o.paidAmount = o.total;
     o.paidAt     = new Date().toISOString();
     o.paidMethod = method;
+    _markDirtyOrder(orderId); // delta sync 마킹
     closeQuickPay(true);
     saveData(); renderOrders(); renderDashboard(); updateInfoCounts(); updateNavBadges();
     if (document.getElementById('pane-unpaid')?.classList.contains('active')) renderUnpaid();
@@ -2325,6 +2345,7 @@ function toggleVoidOrder(id) {
     const o = orders.find(o => o.id === id);
     if (!o) return;
     o.isVoid = !o.isVoid;
+    _markDirtyOrder(id); // delta sync 마킹
     saveData(); renderOrders(); renderDashboard(); updateInfoCounts(); updateNavBadges();
     if (document.getElementById('pane-unpaid')?.classList.contains('active')) renderUnpaid();
     _markDirty('settlement'); if (document.getElementById('pane-settlement')?.classList.contains('active')) { _dirty['settlement'] = false;
@@ -2370,6 +2391,7 @@ function deleteOrder(id) {
     }
 
     orders = orders.filter(o=>o.id!==id);
+    _markDeletedOrder(id); // delta sync 마킹
     saveData(); renderOrders(); updateInfoCounts(); renderDashboard(); updateNavBadges();
     if (document.getElementById('pane-unpaid')?.classList.contains('active')) renderUnpaid();
     _markDirty('stock'); if (document.getElementById('pane-stock')?.classList.contains('active')) { renderStock(); _dirty['stock'] = false; }
@@ -2439,6 +2461,7 @@ function saveClientEditFromHistory() {
                 if (!o.clientId || o.clientId !== id) {
                     o.clientId = id;
                 }
+                _markDirtyOrder(o.id); // delta sync 마킹
                 orderCount++;
             }
         });
@@ -2638,6 +2661,7 @@ function saveOrderEdit() {
     o.totalAmount = total;
     o.note  = note;
     o.updatedAt = new Date().toISOString();
+    _markDirtyOrder(o.id); // delta sync 마킹
     // ③ 타인거래 토글 반영
     const knob = document.getElementById('oeditVoidKnob');
     const newIsVoid = knob ? knob.style.transform === 'translateX(20px)' : !!o.isVoid;
@@ -6171,7 +6195,11 @@ function connectWorkspace(auto=false) {
 
 function _doConnect(id, auto=false) {
     try {
-        if (!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
+        if (!firebase.apps.length) {
+            firebase.initializeApp(FIREBASE_CONFIG);
+            // RTDB 오프라인 지속성: 디스크 캐시로 초기 로드 속도 향상
+            try { firebase.database().setPersistenceEnabled(true); } catch(e) {}
+        }
         if (workspaceRef) workspaceRef.off();
         workspaceRef = firebase.database().ref('workspaces/'+id);
         localStorage.setItem('workspaceId', id);
@@ -7080,12 +7108,13 @@ function _flushSync() {
     const sh = dataHash(stockItems);
     let changed = false;
     const updates = {};
-    if (ch !== lastHash.clients) { updates.clients    = clients;    changed = true; }
+    if (ch !== lastHash.clients) { updates.clients    = clients.map(_minifyClient); changed = true; }
     if (oh !== lastHash.orders)  {
-        updates.orders = orders.map(o => {
-            if (!o._noItems) return o;
-            const clean = { ...o }; delete clean._noItems; return clean;
-        });
+        // flushSync는 항상 full map (비상 저장 — delta 미사용)
+        const ordersMap = {};
+        orders.forEach(o => { ordersMap[o.id] = _minifyOrder(o); });
+        updates.orders = ordersMap;
+        _clearOrderDelta();
         changed = true;
     }
     if (ph !== lastHash.prices)  { updates.prices     = prices;     changed = true; }
