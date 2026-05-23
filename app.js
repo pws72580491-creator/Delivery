@@ -6214,6 +6214,27 @@ function _doConnect(id, auto=false) {
         // ── 실시간 리스너를 .get() 이전에 먼저 등록 (이벤트 유실 방지) ──
         workspaceRef.on('value', _fbValueHandler);
 
+        // ── Firebase 소켓 실제 연결 상태 추적 (.info/connected) ──
+        // window.online/offline 이벤트는 WiFi 수준만 감지 → 슬립·방화벽·모바일 백그라운드 후
+        // Firebase 소켓이 끊겨도 isConnected=true로 남는 문제를 해소
+        firebase.database().ref('.info/connected').on('value', snap => {
+            const fbConnected = snap.val() === true;
+            if (fbConnected) {
+                if (!isConnected) {
+                    // 소켓 재연결 감지 → 오프라인 중 쌓인 변경 즉시 플러시
+                    isConnected = true;
+                    setSyncStatus('online');
+                    if (_initialLoadDone) debouncedSync();
+                }
+            } else {
+                if (isConnected) {
+                    isConnected = false;
+                    debouncedSync.cancel();
+                    setSyncStatus('error');
+                }
+            }
+        });
+
         // ── 최초 1회 스냅샷: 서버↔로컬 병합 판단 ──
         workspaceRef.get().then(snap => {
             const data = snap.val();
@@ -6330,6 +6351,8 @@ function _doConnect(id, auto=false) {
 
 function disconnectWorkspace() {
     if (workspaceRef) workspaceRef.off();
+    // .info/connected 리스너 해제 (연결 해제 시 불필요한 상태 변경 차단)
+    try { firebase.database().ref('.info/connected').off(); } catch(e) {}
     debouncedSync.cancel();
     workspaceRef=null; isConnected=false;
     // 재연결 시 변경사항을 정확히 업로드하도록 lastHash 초기화
@@ -6715,33 +6738,67 @@ window.addEventListener('DOMContentLoaded', () => {
     // 백업 저장 위치 복원
     loadBackupDir();
     // 네트워크 끊김/복구 감지
+    // ※ .info/connected 리스너가 Firebase 소켓 수준 감지를 담당
+    //   window.online/offline은 .info/connected가 미동작하는 엣지 케이스 보완용으로 유지
     window.addEventListener('online', () => {
         const sid = localStorage.getItem('workspaceId');
-        if (isConnected && workspaceRef) {
-            setSyncStatus('online');
-            if (sid) {
-                // ── 업로드 완료 후 서버 데이터 재로드 (경쟁 조건 방지) ──
-                debouncedSync.cancel();
-                const ch=dataHash(clients),oh=dataHash(orders),ph=dataHash(prices),sh=dataHash(stockItems);
-                workspaceRef.update({
-                    clients, orders, prices, stockItems,
-                    lastUpdated: new Date().toISOString(),
-                    writtenBy: SESSION_ID
-                }).then(() => {
-                    lastHash.clients=ch; lastHash.orders=oh; lastHash.prices=ph; lastHash.stock=sh;
-                    // 업로드 완료 후 서버 재로드
-                    return workspaceRef.get();
-                }).then(snap => {
-                    const d = snap.val(); if (!d) return;
+        if (workspaceRef) {
+            // ── 서버 먼저 읽기 → 시간 비교 → 로컬이 더 최신일 때만 업로드 ──
+            // (기존: 무조건 업로드 후 서버 재로드 → 멀티기기 경쟁 조건 발생)
+            debouncedSync.cancel();
+            workspaceRef.get().then(snap => {
+                const d = snap.val();
+                isConnected = true;
+                setSyncStatus('online');
+                if (!d) {
+                    // 서버 비어있음 → 로컬 업로드
+                    const ch=dataHash(clients),oh=dataHash(orders),ph=dataHash(prices),sh=dataHash(stockItems);
+                    const ordersMap = {}; orders.forEach(o => { ordersMap[o.id] = _minifyOrder(o); });
+                    workspaceRef.update({
+                        clients: clients.map(_minifyClient),
+                        orders: ordersMap, prices, stockItems,
+                        lastUpdated: new Date().toISOString(), writtenBy: SESSION_ID
+                    }).then(() => {
+                        lastHash.clients=ch; lastHash.orders=oh; lastHash.prices=ph; lastHash.stock=sh;
+                        _clearOrderDelta();
+                    }).catch(() => {});
+                    return;
+                }
+                // 서버·로컬 시간 비교
+                const serverTime = d.lastUpdated ? new Date(d.lastUpdated).getTime() : 0;
+                const lastLocalUpdated = localStorage.getItem('lastLocalUpdated');
+                const localTime = Math.max(
+                    _localWriteTime,
+                    lastLocalUpdated ? new Date(lastLocalUpdated).getTime() : 0
+                );
+                if (localTime > serverTime) {
+                    // 로컬이 더 최신 → minify 적용 후 업로드
+                    const ch=dataHash(clients),oh=dataHash(orders),ph=dataHash(prices),sh=dataHash(stockItems);
+                    const ordersMap = {}; orders.forEach(o => { ordersMap[o.id] = _minifyOrder(o); });
+                    workspaceRef.update({
+                        clients: clients.map(_minifyClient),
+                        orders: ordersMap, prices, stockItems,
+                        lastUpdated: new Date().toISOString(), writtenBy: SESSION_ID
+                    }).then(() => {
+                        lastHash.clients=ch; lastHash.orders=oh; lastHash.prices=ph; lastHash.stock=sh;
+                        _clearOrderDelta();
+                    }).catch(() => {});
+                } else {
+                    // 서버가 더 최신 (오프라인 중 다른 기기가 변경) → 서버 데이터 적용
                     if (d.clients)    clients    = toArray(d.clients).map(_normClientFromFb);
                     if (d.orders)     orders     = toArray(d.orders).map(_normOrderFromFb);
                     if (d.prices)     prices     = d.prices;
                     if (d.stockItems) stockItems = toArray(d.stockItems).map(normStock);
+                    lastHash.clients=dataHash(clients); lastHash.orders=dataHash(orders);
+                    lastHash.prices=dataHash(prices);   lastHash.stock=dataHash(stockItems);
+                    _clearOrderDelta();
                     invalidateOrdersCache();
                     saveToLocal();
                     _fullRender();
-                }).catch(() => {});
-            }
+                }
+            }).catch(() => {
+                // .get() 실패 시 .info/connected가 재연결 후 debouncedSync() 트리거
+            });
         } else {
             if (sid) {
                 document.getElementById('workspaceId').value = sid;
@@ -6750,8 +6807,9 @@ window.addEventListener('DOMContentLoaded', () => {
         }
     });
     window.addEventListener('offline', () => {
+        // .info/connected 리스너가 주 처리 담당 — 여기서는 즉각 UI 반영만
         if (isConnected) {
-            isConnected = false; // 오프라인 중엔 업로드 시도 차단
+            isConnected = false;
             debouncedSync.cancel();
             setSyncStatus('error');
         }
