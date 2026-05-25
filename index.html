@@ -9,9 +9,9 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="납품관리">
-    <link rel="apple-touch-icon" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAALQAAAC0CAYAAAA9zQYyAAADgElEQVR4nO3csXEUQRCG0RVFEjgkgUEQhAEmRAMeEAZBYJAEDmEI6+C4UgmdNDPd++97pgzd3Pan1lyVStsGAAAAAAAAAAAAAAAAI91UH2CF929vb6vP0MWnrzfRM497c+K9XlLkEW9ExOPsPe7dHl7E8+0x7t0dWMjr7Sns3RxUyPX2EHb7Awq5n85hP6s+wH3E3FPnubT8Sev8wPhXt23dbkOLeV+6zatV0N0eDg/TaW4tfl10eiA8TfUVpHxDizlL9TxLg65+88xROdeyoMWcrWq+JUGL+Rgq5lx+h4aRlgdtOx/L6nkvDVrMx7Ry7suCFvOxrZq/OzRRlgRtO7NtazqYHrSYOTe7B1cOokwN2nbmLjO7sKGJMi1o25n7zOrDhibKlKBtZx5iRic2NFEETZThQbtucI3RvdjQRBE0UYYG7brBY4zsxoYmiqCJImiiCJoow4L2gZCnGNWPDU0UQRNF0EQRNFGeVx9gto9ftm/VZ+jmw7vtTfUZZrGhiSJoogiaKIImiqCJImiiCJoogiaKoIkiaKIImijxf8uxfX8V+3cLj/ej+gDT2NBEETRRBE0UQRMl/0Ph6x+/Kl/+w7vt5+XXPn7ZXlac5Y/P24vS15/IhiaKoIkiaKIImiiCJoqgiSJoogiaKIImiqCJImiiCJoogiaKoIkiaKIImiiCJoqgiSJoogiaKIImiqCJImiiCJoogiaKoIkiaKIImiiCJoqgiSJoogiaKIImiqCJImiiCJoogiaKoIkiaKLcjPpG79/e3o76XhzTp683T+7RhiaKoIkiaKIImijDgh5xoee4RvVjQxNF0EQRNFEETZShQftgyGOM7MaGJoqgiTI8aNcOrjG6FxuaKIImypSgXTt4iBmd2NBEmRa0Lc19ZvVhQxNlatC2NHeZ2YUNTZTpQdvSnJvdw5INLWq2bU0HrhxEWRa0LX1sq+a/dEOL+phWzn35lUPUx7J63u7QRCkJ2pY+hoo5l21oUWermm/plUPUmSrnWn6HFnWW6nm2isk/Td+v6pBPyjf0uS4Phet0mluroLet18Ph/7rNq9VhLrmC9NUt5JN2G/pc14d2dJ3n0vZgl2zrep1DPml/wEvCXm8PIZ/s5qCXhD3fnkI+2d2B7yLucfYY8bldH/4u4r7e3iM+F/NG7iPyv5LiBQAAAAAAAAAAAAAAmvoNL57jyrjjuqMAAAAASUVORK5CYII=">
+    <link rel="apple-touch-icon" href="./icon-192.png">
     <link rel="manifest" href="./manifest.json">
-    <title>납품 관리 Pro v80</title>
+    <title>납품 관리 Pro v81</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js" defer></script>
@@ -38,7 +38,7 @@
             <div class="logo-icon">📦</div>
             <div>
                 <div class="logo-text">납품 관리 Pro</div>
-                <div class="logo-sub">v80 · PWA 앱 설치 지원</div>
+                <div class="logo-sub">v81 · PWA 앱 설치 지원</div>
             </div>
         </div>
         <div class="header-btns">
@@ -597,7 +597,7 @@
     <div class="card">
         <div class="card-title">앱 정보</div>
         <div style="font-size:13px;color:var(--text2);line-height:2;margin-bottom:12px;">
-            버전: <strong style="color:var(--accent);">v80</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
+            버전: <strong style="color:var(--accent);">v81</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
             거래처: <span id="infoClients">0</span>개 &nbsp;·&nbsp;
             납품내역: <span id="infoOrders">0</span>건
         </div>
@@ -607,7 +607,17 @@
             <div id="changelogList" style="display:flex;flex-direction:column;gap:6px;">
                 <!-- 현재 버전 -->
                 <div class="changelog-item">
-                    <span class="changelog-ver" style="color:var(--green);">v80</span>
+                    <span class="changelog-ver" style="color:var(--green);">v81</span>
+                    <span class="changelog-desc">동기화 불안정 수정 5건 + 코드품질 개선 8건 — ① _connectGuard 도입: .on() 리스너와 .get() 초기 처리 간 레이스 컨디션 차단 ② _syncGuard 도입: debouncedSync 업로드 중 리스너 echo 덮어쓰기 차단 ③ delta dirty set 스냅샷 복원: 업로드 실패 시 변경 누락 방지 ④ .info/connected 재연결 시 서버·로컬 최신 비교 후 방향 결정(기존: 무조건 로컬→서버) ⑤ _fbValueHandler localWriteMs 조건 30초 윈도우 적용(기존: 오래된 로컬 기록도 서버 차단) ⑥ confirm() → customConfirm() Promise 다이얼로그 교체(22곳) ⑦ isHidden 개별 제어 + 거래처 카드 숨기기/표시 버튼 추가 ⑧ 몽키패치 → _safeWrap 헬퍼 교체(5곳) ⑨ sw.js Stale-While-Revalidate 전략 적용 ⑩ manifest.json maskable 아이콘 ⑪ 가격 캐시 사전 빌드(_fullRender 시 호출) ⑫ Firebase 자동 연결 충돌 처리: 로컬 최신 시 조용히 서버 업로드(기존: 서버 데이터 덮어씌움) ⑬ disconnectWorkspace 시 _syncGuard·_connectGuard 초기화</span>
+                </div>
+                <!-- 이전 이력 토글 버튼 -->
+                <button id="changelogToggleBtn" onclick="toggleOldChangelog()" style="display:flex;align-items:center;justify-content:center;gap:5px;width:100%;padding:7px 12px;margin-top:2px;background:var(--surf3);border:1px solid var(--border);border-radius:var(--radius-s);color:var(--text2);font-size:11px;font-weight:700;cursor:pointer;transition:all .15s;letter-spacing:.3px;">
+                    <span id="changelogToggleIcon">▼</span>
+                    <span id="changelogToggleLabel">이전 이력 보기 (v80 ~ v24_4-3-3)</span>
+                </button>
+                <div id="oldChangelogItems" style="display:none;flex-direction:column;gap:6px;">
+                <div class="changelog-item">
+                    <span class="changelog-ver">v80</span>
                     <span class="changelog-desc">안정성·기능 개선 11건 — ① 메모 삭제·저장 즉시 Firebase 반영(lastHash 강제 초기화→cancel+flushSync 패턴 적용) ② 모두삭제 버튼 추가(메모 모아보기) ③ 이전 메모 🗑️ 삭제 버튼 추가 ④ 재고 재계산 앱 시작 즉시 실행(출고 누락 즉시 반영) ⑤ 오프라인→온라인 복구 시 재고 재계산 자동 실행 ⑥ 혼합 수금 UI 개선(이체·현금 금액 분리 입력·저장) ⑦ 수금 취소 시 paidMethodDetail 삭제 ⑧ 메모 삭제 복원 방지(_fbValueHandler 차단 조건 강화) ⑨ 할인완납 혼합방법 차단 ⑩ PNG 저장으로 변경 ⑪ 동기화 오류 수정(dataHash·saveToLocal 원복)</span>
                 </div>
                 <div class="changelog-item">
@@ -626,12 +636,6 @@
                     <span class="changelog-ver">v76</span>
                     <span class="changelog-desc">메모 모아보기 — 더보기 메뉴에서 거래처별 주·월 단위 메모 모아보기, 메모 삭제, 뒤로가기 닫기 지원. 납품 카드 메모 항상 표시 + 이전 메모 표시. 거래처 카드 오늘 납품 시 최근 메모 뱃지 표시. 기간별 거래 건수·금액 위젯 개선. 메모 글색 주황색 통일.</span>
                 </div>
-                <!-- 이전 이력 토글 버튼 -->
-                <button id="changelogToggleBtn" onclick="toggleOldChangelog()" style="display:flex;align-items:center;justify-content:center;gap:5px;width:100%;padding:7px 12px;margin-top:2px;background:var(--surf3);border:1px solid var(--border);border-radius:var(--radius-s);color:var(--text2);font-size:11px;font-weight:700;cursor:pointer;transition:all .15s;letter-spacing:.3px;">
-                    <span id="changelogToggleIcon">▼</span>
-                    <span id="changelogToggleLabel">이전 이력 보기 (v75 ~ v24_4-3-3)</span>
-                </button>
-                <div id="oldChangelogItems" style="display:none;flex-direction:column;gap:6px;">
                 <div class="changelog-item">
                     <span class="changelog-ver">v75</span>
                     <span class="changelog-desc">재고 이력 정리 기준 수정 — 어제·오늘만 유지(기존 30일 유지 버그 수정). 전표 메모 기능 추가 — 납품 카드 메모 버튼, 거래처 카드 탭 시 메모 말풍선 표시. 버튼 순서 통일(취소→저장). 코드 정리.</span>
@@ -1190,6 +1194,18 @@
         <div class="modal-handle"></div>
         <div id="statementContent"></div>
         <button class="btn btn-ghost btn-full" style="margin-top:14px;" onclick="closeModal('statementModal')">닫기</button>
+    </div>
+</div>
+
+<!-- 커스텀 확인 다이얼로그 (confirm() 대체) -->
+<div class="modal-overlay" id="customConfirmModal" style="z-index:9000;">
+    <div class="modal-sheet">
+        <div class="modal-handle"></div>
+        <div id="customConfirmMsg" style="font-size:14px;line-height:1.8;color:var(--text1);white-space:pre-wrap;margin-bottom:4px;"></div>
+        <div style="display:flex;gap:8px;margin-top:16px;">
+            <button class="btn btn-ghost" style="flex:1;" id="customConfirmCancelBtn">취소</button>
+            <button class="btn btn-danger" style="flex:2;" id="customConfirmOkBtn">확인</button>
+        </div>
     </div>
 </div>
 

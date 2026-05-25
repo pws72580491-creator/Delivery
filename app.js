@@ -41,8 +41,8 @@ clients = clients.map(c => {
     c.id = String(c.id);                          // int id → string 타입 통일
     if (!c.note && c.memo) c.note = c.memo;       // memo → note 이관
     if (!c.note) c.note = '';
-    // 모든 거래처는 항상 숨김 상태 (보이기/숨기기 버튼으로만 확인 가능)
-    c.isHidden = true;
+    // isHidden: 저장된 값 보존 (false면 목록에 표시, true면 숨겨짐)
+    if (c.isHidden === undefined) c.isHidden = false;
     return c;
 });
 
@@ -226,6 +226,34 @@ function matchSearch(target, q) {
     return false;
 }
 
+// ─── 함수 래퍼 (monkey-patch 안전화) ───
+// fn이 존재하는 함수일 때만 래핑 → 정의 순서 무관하게 안전
+function _safeWrap(fn, extra) {
+    if (typeof fn !== 'function') { console.warn('_safeWrap: 대상 함수를 찾을 수 없습니다'); return fn || (() => {}); }
+    return function(...args) { const r = fn.apply(this, args); extra.apply(this, args); return r; };
+}
+
+// ─── 커스텀 confirm 다이얼로그 (Promise 기반) ───
+// 사용법: if (!await customConfirm('삭제할까요?')) return;
+// okLabel: 확인 버튼 텍스트 / okClass: 버튼 CSS 클래스 (btn-danger|btn-primary)
+function customConfirm(msg, okLabel = '확인', okClass = 'btn-danger') {
+    return new Promise(resolve => {
+        const modal     = document.getElementById('customConfirmModal');
+        const msgEl     = document.getElementById('customConfirmMsg');
+        const okBtn     = document.getElementById('customConfirmOkBtn');
+        const cancelBtn = document.getElementById('customConfirmCancelBtn');
+        if (!modal) { resolve(window.confirm(msg)); return; } // fallback
+        msgEl.textContent = msg;
+        okBtn.textContent = okLabel;
+        okBtn.className   = `btn ${okClass}`;
+        okBtn.style.flex  = '2';
+        const cleanup = (val) => { closeModal('customConfirmModal'); resolve(val); };
+        okBtn.onclick     = () => cleanup(true);
+        cancelBtn.onclick = () => cleanup(false);
+        openModal('customConfirmModal');
+    });
+}
+
 // ─── 로컬 저장 (스마트 모드) ───
 // Firebase 연결 중이거나 워크스페이스 ID가 설정된 경우: 경량 저장 (용량 최소화)
 // 순수 오프라인(워크스페이스 ID 없음): 전체 저장
@@ -311,6 +339,14 @@ function _markDirtyOrder(id)   { _dirtyOrders.add(String(id));   _deletedOrders.
 function _markDeletedOrder(id) { _deletedOrders.add(String(id)); _dirtyOrders.delete(String(id)); }
 function _clearOrderDelta()    { _dirtyOrders.clear(); _deletedOrders.clear(); }
 
+// ─── 동기화 가드 플래그 ───
+// _syncGuard: debouncedSync 업로드가 진행 중일 때 true
+//   → 리스너가 업로드 응답 echo를 받아 로컬 데이터를 덮어쓰는 것을 차단
+let _syncGuard = false;
+// _connectGuard: _doConnect의 초기 .get() 처리가 완료되기 전 true
+//   → .on() 리스너가 먼저 실행되는 레이스 컨디션 방지
+let _connectGuard = false;
+
 // ─── Firebase 데이터 정규화 헬퍼 ───
 // Firebase에서 받은 raw 데이터를 앱 내부 포맷으로 변환 (4곳 공통 사용)
 function _normClientFromFb(c) {
@@ -318,7 +354,7 @@ function _normClientFromFb(c) {
     c.id = String(c.id);
     if (!c.note && c.memo) c.note = c.memo;
     if (!c.note) c.note = '';
-    c.isHidden = true;
+    if (c.isHidden === undefined) c.isHidden = false;
     return c;
 }
 function _normOrderFromFb(o) {
@@ -338,17 +374,23 @@ function _normOrderFromFb(o) {
 function _fbValueHandler(snap) {
     const d = snap.val();
     if (!d) return;
-    if (!_initialLoadDone) return;
+    if (!_initialLoadDone) return;  // 초기 .get() 처리 전 차단
+    if (_connectGuard)     return;  // 초기 연결 중 레이스 컨디션 차단 (Problem 1)
+    if (_syncGuard)        return;  // 자체 업로드 echo 차단 (Problem 2)
     if (d.writtenBy === SESSION_ID) return;
     const serverUpdatedAt = d.lastUpdated ? new Date(d.lastUpdated).getTime() : 0;
     // 로컬 변경이 서버보다 최신이면 덮어쓰기 차단
-    // _localWriteTime: 메모리 (현재 세션), lastLocalUpdated: localStorage (재시작 후에도 유효)
+    // ★ Problem 5 수정: lastLocalUpdated가 오래됐어도 무조건 차단하던 문제 해소
+    //   → 로컬 변경이 서버보다 최신이고, 그 차이가 30초 이내인 경우만 차단
+    //   (30초 이상 지난 로컬 기록은 이미 서버에 반영됐다고 보고 서버 우선)
     const lastLocalMs = (() => {
         const s = localStorage.getItem('lastLocalUpdated');
         return s ? new Date(s).getTime() : 0;
     })();
     const localWriteMs = Math.max(_localWriteTime, lastLocalMs);
-    if (localWriteMs > 0 && localWriteMs >= serverUpdatedAt) return;
+    const RECENT_WINDOW_MS = 30_000; // 30초
+    if (localWriteMs > 0 && localWriteMs >= serverUpdatedAt &&
+        (Date.now() - localWriteMs) < RECENT_WINDOW_MS) return;
     let changed = false;
     if (d.clients) {
         const inc = toArray(d.clients).map(_normClientFromFb);
@@ -489,7 +531,7 @@ function _minifyOrder(o) {
 }
 
 function _minifyClient(c) {
-    // isHidden: 항상 true → 로드 시 재주입하므로 저장 불필요
+    // isHidden: false(기본)는 생략, true일 때만 저장 (용량 절약)
     // memo → note 이관 완료 → 제거
     const r = {
         id: c.id,
@@ -500,6 +542,7 @@ function _minifyClient(c) {
     if (c.phone)     r.phone     = c.phone;
     if (c.address)   r.address   = c.address;
     if (c.note)      r.note      = c.note;
+    if (c.isHidden)  r.isHidden  = true;   // true일 때만 저장 (false는 기본값이므로 생략)
     const ua = _compactTs(c.updatedAt);
     if (ua)          r.updatedAt = ua;
     return r;
@@ -560,7 +603,7 @@ function normalizeBackupData(data) {
         c.id = String(c.id);                          // int id → string 타입 통일
         if (!c.note && c.memo) c.note = c.memo;       // memo → note 이관
         if (!c.note) c.note = '';
-        c.isHidden = true;
+        if (c.isHidden === undefined) c.isHidden = false;
         return c;
     });
 
@@ -643,6 +686,12 @@ const debouncedSync = debounce(() => {
     // writtenBy를 데이터와 함께 업로드 — 리스너가 자기 업데이트를 정확히 무시하도록
     updates.lastUpdated = new Date().toISOString();
     updates.writtenBy   = SESSION_ID;
+    // ★ Problem 3 수정: 업로드 전에 dirty set을 스냅샷으로 복사해 두고
+    //   실패 시 해당 id들을 다시 dirty로 복원 → 재시도 시 누락 방지
+    const dirtySnap   = new Set(_dirtyOrders);
+    const deletedSnap = new Set(_deletedOrders);
+    // ★ Problem 2 수정: 업로드 진행 중에는 리스너가 echo를 덮어쓰지 못하도록 가드 설정
+    _syncGuard = true;
     // ★ 업로드 직전 lastHash 선점 갱신 → 리스너 echo 수신 시 hash 일치로 무시
     if (updates.clients)    lastHash.clients = ch;
     if (updates.orders)     lastHash.orders  = oh;
@@ -652,6 +701,7 @@ const debouncedSync = debounce(() => {
     workspaceRef.update(updates)
         .then(() => {
             _clearOrderDelta(); // 성공 시 delta 추적 초기화
+            _syncGuard = false;
             setSyncStatus('online');
         })
         .catch(e => {
@@ -660,6 +710,10 @@ const debouncedSync = debounce(() => {
             if (updates.orders)     lastHash.orders  = '';
             if (updates.prices)     lastHash.prices  = '';
             if (updates.stockItems) lastHash.stock   = '';
+            // ★ Problem 3 수정: 스냅샷된 dirty/deleted id 복원
+            dirtySnap.forEach(id   => _dirtyOrders.add(id));
+            deletedSnap.forEach(id => _deletedOrders.add(id));
+            _syncGuard = false;
             console.error('동기화 실패:', e);
             setSyncStatus('error');
         });
@@ -848,7 +902,8 @@ const _MODAL_IDS = [
     'firebaseModal','detailModal','statementModal',
     'clientEditModal','orderEditModal',
     'stockEditModal','stockAdjModal','stockLogModal',
-    'bulkPayPopup','deliveryConfirmPopup'
+    'bulkPayPopup','deliveryConfirmPopup',
+    'customConfirmModal'
 ];
 
 function _anyModalOpen() {
@@ -958,11 +1013,7 @@ function closeMoreSheet() {
 }
 
 // showTab 호출 시 바텀 네비 자동 동기화
-const _origShowTab = showTab;
-showTab = function(name) {
-    _origShowTab(name);
-    updateBnavActive(name);
-};
+showTab = _safeWrap(showTab, function(name) { updateBnavActive(name); });
 
 // ─── 미수금 배지 업데이트 ───
 
@@ -1082,7 +1133,7 @@ function saveClient() {
             }
         }
     } else {
-        clients.push({ id:_uid(), name, phone, address, note, isHidden:true, createdAt:new Date().toISOString(), updatedAt:new Date().toISOString() });
+        clients.push({ id:_uid(), name, phone, address, note, isHidden:false, createdAt:new Date().toISOString(), updatedAt:new Date().toISOString() });
         // ★ 로컬 변경 시각 갱신 → Firebase 리스너가 구 서버 데이터로 덮어쓰는 경쟁 방지
         _localWriteTime = Date.now();
         toast('✅ 거래처 등록 완료', 'var(--green)');
@@ -1121,14 +1172,14 @@ function editClient(id) {
     document.getElementById('mainContent').scrollTop = 0;
 }
 
-function deleteClient(id) {
+async function deleteClient(id) {
     const c = clients.find(c => c.id === id);
     if (!c) return;
     const hasOrders = orders.some(o => o.clientId === id);
     const msg = hasOrders
         ? `'${c.name}'은 납품 내역이 있습니다.\n삭제할까요? (납품 내역은 유지됩니다)`
         : `'${c.name}'을 삭제할까요?`;
-    if (!confirm(msg)) return;
+    if (!await customConfirm(msg)) return;
     clients = clients.filter(c => c.id !== id);
     saveData(); renderClients(); updateInfoCounts(); updateNavBadges();
     toast('🗑️ 삭제되었습니다');
@@ -1150,6 +1201,16 @@ function toggleShowHidden() {
         btn.style.borderColor = showHiddenClients ? 'var(--orange)' : '';
     }
     renderClients();
+}
+
+// 개별 거래처 숨기기/보이기 토글
+function hideClient(id) {
+    const c = clients.find(c => c.id === id);
+    if (!c) return;
+    c.isHidden = !c.isHidden;
+    c.updatedAt = new Date().toISOString();
+    saveData(); renderClients();
+    toast(c.isHidden ? '🙈 거래처를 숨겼습니다' : '👁 거래처를 표시합니다');
 }
 
 let clientSortMode = 'name'; // 'name' | 'recent' | 'unpaid' | 'total'
@@ -1260,6 +1321,7 @@ function _clientCardHTML(c, statsMap, q) {
             <div class="client-actions">
                 ${c.phone ? `<a href="tel:${escapeHtml(c.phone)}" class="btn-call">📞</a>` : ''}
                 <button class="btn-deliver" onclick="quickDeliver('${safeId}','${safeName}')">🚚</button>
+                <button class="btn btn-ghost btn-sm" onclick="hideClient('${safeId}')" title="${c.isHidden ? '거래처 표시' : '거래처 숨기기'}">${c.isHidden ? '👁' : '🙈'}</button>
                 <button class="btn btn-ghost btn-sm" onclick="editClient('${safeId}')">수정</button>
                 <button class="btn btn-danger btn-sm" onclick="deleteClient('${safeId}')">삭제</button>
             </div>
@@ -1366,14 +1428,14 @@ function initClientSwipe() {
     });
 }
 
-function deleteClientWithAnim(id, wrapEl) {
+async function deleteClientWithAnim(id, wrapEl) {
     const c = clients.find(c => c.id === id);
     if (!c) return;
     const hasOrders = orders.some(o => o.clientId === id);
     const msg = hasOrders
         ? `'${c.name}'은 납품 내역이 있습니다.\n삭제할까요? (납품 내역은 유지됩니다)`
         : `'${c.name}'을 삭제할까요?`;
-    if (!confirm(msg)) return;
+    if (!await customConfirm(msg)) return;
     if (wrapEl) {
         wrapEl.classList.add('card-deleting');
         setTimeout(() => {
@@ -1636,8 +1698,8 @@ function removeTempGroupItem(gi, ii) {
     renderTempGroups();
 }
 
-function removeTempGroup(gi) {
-    if (!confirm(`${tempGroups[gi].date} 날짜의 품목을 모두 삭제할까요?`)) return;
+async function removeTempGroup(gi) {
+    if (!await customConfirm(`${tempGroups[gi].date} 날짜의 품목을 모두 삭제할까요?`)) return;
     tempGroups.splice(gi,1); renderTempGroups();
 }
 
@@ -1690,7 +1752,7 @@ function renderTempGroups() {
     confirmBtn.style.display = 'block';
 }
 
-function openDeliveryConfirm() {
+async function openDeliveryConfirm() {
     const clientId = document.getElementById('selectedClientId').value;
     if (!clientId)          return toast('❗ 거래처를 선택하세요');
     if (!tempGroups.length) return toast('❗ 품목을 추가하세요');
@@ -1719,9 +1781,7 @@ function openDeliveryConfirm() {
             const msg = shortages.map(s =>
                 `· ${s.name}: 필요 ${s.need}${s.unit} / 현재 ${s.have}${s.unit} (${s.need - s.have}${s.unit} 부족)`
             ).join('\n');
-            const proceed = confirm(
-                `⚠️ 재고가 부족한 품목이 있습니다.\n\n${msg}\n\n그래도 납품을 진행할까요?`
-            );
+            const proceed = await customConfirm(`⚠️ 재고가 부족한 품목이 있습니다.\n\n${msg}\n\n그래도 납품을 진행할까요?`, '납품 진행', 'btn-primary');
             if (!proceed) return;
         }
     }
@@ -1788,7 +1848,7 @@ function _updateDeliveryVoidToggle() {
     }
 }
 
-function submitOrder() {
+async function submitOrder() {
     const clientId = document.getElementById('selectedClientId').value;
     const client = clients.find(c => c.id===clientId);
     if (!clientId || !client || !tempGroups.length) return;
@@ -2193,12 +2253,12 @@ function renderOrders() {
         </div>`).join('');
 }
 
-function togglePaid(id) {
+async function togglePaid(id) {
     // 완납 → 미수 복귀 전용 (미수→완납은 openQuickPay로)
     const o = orders.find(o=>o.id===id);
     if (!o) return;
     if (o.isPaid) {
-        if (!confirm('완납을 취소하고 미수로 되돌릴까요?')) return;
+        if (!await customConfirm('완납을 취소하고 미수로 되돌릴까요?')) return;
         o.isPaid = false; o.paidAmount = 0;
         delete o.paidAt; delete o.paidNote; delete o.paidMethod; delete o.discount; delete o.paidMethodDetail;
         _markDirtyOrder(id); // delta sync 마킹
@@ -2356,8 +2416,8 @@ function toggleVoidOrder(id) {
     toast(o.isVoid ? '👤 타인거래로 변경 — 재고 차감 미반영' : '↩ 내 거래로 변경 — 재고는 수동 확인 필요', o.isVoid ? 'var(--orange)' : 'var(--green)');
 }
 
-function deleteOrder(id) {
-    if (!confirm('전표를 삭제할까요?')) return;
+async function deleteOrder(id) {
+    if (!await customConfirm('전표를 삭제할까요?')) return;
     const o = orders.find(o=>o.id===id);
     if (!o) return;
 
@@ -2365,11 +2425,12 @@ function deleteOrder(id) {
     if (stockAutoDeduct && !o.isVoid) {
         const matchedItems = (o.items||[]).filter(it => findStockByName(it.name));
         if (matchedItems.length > 0) {
-            const doRestore = confirm(
+            const doRestore = await customConfirm(
                 `자동 재고 차감이 켜져 있습니다.\n\n` +
                 `이 납품 전표(${o.clientName} · ${o.date})의\n` +
                 `재고를 복구할까요?\n\n` +
-                matchedItems.map(it => `· ${it.name} +${it.qty}${findStockByName(it.name)?.unit||''}`).join('\n')
+                matchedItems.map(it => `· ${it.name} +${it.qty}${findStockByName(it.name)?.unit||''}`).join('\n'),
+                '재고 복구', 'btn-primary'
             );
             if (doRestore) {
                 matchedItems.forEach(it => {
@@ -3820,7 +3881,7 @@ function togglePpDiscount() {
 }
 
 // 입금처리 모달 — 할인 완납: 입금액만큼 받고 나머지 차액은 할인으로 완납 처리
-function confirmPartialPayDiscount() {
+async function confirmPartialPayDiscount() {
     const clientName = document.getElementById('ppClientName').value;
     const month      = document.getElementById('ppMonth').value;
     const amount     = Number(document.getElementById('ppAmount').value);
@@ -3836,9 +3897,10 @@ function confirmPartialPayDiscount() {
     const total = list.reduce((s, o) => s + o.total - (o.paidAmount || 0), 0);
     if (amount > total) return toast('❗ 실수령액이 총 미수금보다 많습니다');
 
-    if (!confirm(
+    if (!await customConfirm(
         `총 미수금 ${fmt(total)}원 중\n` +
-        `실수령 ${fmt(amount)}원, 할인 ${fmt(total - amount)}원으로\n✅ 전체 완납 처리할까요?`
+        `실수령 ${fmt(amount)}원, 할인 ${fmt(total - amount)}원으로\n✅ 전체 완납 처리할까요?`,
+        '완납 처리', 'btn-primary'
     )) return;
 
     const now = new Date().toISOString();
@@ -3874,7 +3936,7 @@ function confirmPartialPayDiscount() {
     toast(`✂️ 할인 완납 처리 (할인 ${fmt(discount)}원)`, 'var(--green)');
 }
 
-function confirmPartialPay() {
+async function confirmPartialPay() {
     const clientName = document.getElementById('ppClientName').value;
     const month      = document.getElementById('ppMonth').value;
     const note       = document.getElementById('ppNote').value.trim();
@@ -3892,7 +3954,7 @@ function confirmPartialPay() {
         if (!list.length) return toast('✅ 미수금이 없습니다');
         const unpaid = list.reduce((s, o) => s + o.total - (o.paidAmount || 0), 0);
         if (total > unpaid) {
-            if (!confirm(`입금액(${fmt(total)}원)이 미수금(${fmt(unpaid)}원)보다 많습니다.\n전체 완납으로 처리할까요?`)) return;
+            if (!await customConfirm(`입금액(${fmt(total)}원)이 미수금(${fmt(unpaid)}원)보다 많습니다.\n전체 완납으로 처리할까요?`, '전체 완납')) return;
         }
 
         let remain = total, fullCnt = 0, partCnt = 0;
@@ -3945,8 +4007,9 @@ function confirmPartialPay() {
 
     const total = list.reduce((s, o) => s + o.total - (o.paidAmount || 0), 0);
     if (amount > total) {
-        if (!confirm(
-            '입금액(' + fmt(amount) + '원)이 미수금(' + fmt(total) + '원)보다 많습니다.\n전체 완납으로 처리할까요?'
+        if (!await customConfirm(
+            '입금액(' + fmt(amount) + '원)이 미수금(' + fmt(total) + '원)보다 많습니다.\n전체 완납으로 처리할까요?',
+            '전체 완납'
         )) return;
     }
 
@@ -4087,8 +4150,8 @@ function confirmPayEdit() {
     }
 }
 
-function confirmPayEditCancel() {
-    if (!confirm('이 전표의 수금을 취소하고 미수로 되돌릴까요?')) return;
+async function confirmPayEditCancel() {
+    if (!await customConfirm('이 전표의 수금을 취소하고 미수로 되돌릴까요?')) return;
     document.getElementById('peAmount').value = 0;
     confirmPayEdit();
 }
@@ -4791,7 +4854,7 @@ function egQuickClose(id) {
     if (bar) bar.classList.remove('visible');
 }
 
-function egQuickConfirm(id) {
+async function egQuickConfirm(id) {
     if (!stockAutoDeduct) { toast('🔒 자동 차감 OFF 상태에서는 재고 조정이 불가합니다', 'var(--orange)'); return; }
     const type = _egQuickState[id];
     if (!type) return;
@@ -4810,7 +4873,7 @@ function egQuickConfirm(id) {
         return;
     }
     if (type === 'out' && val > before) {
-        if (!confirm(`⚠️ ${si.name} 재고(${fmt(before)}${si.unit})보다 출고 수량(${fmt(val)}${si.unit})이 많습니다.\n재고는 0이 됩니다. 계속하시겠습니까?`)) return;
+        if (!await customConfirm(`⚠️ ${si.name} 재고(${fmt(before)}${si.unit})보다 출고 수량(${fmt(val)}${si.unit})이 많습니다.\n재고는 0이 됩니다. 계속하시겠습니까?`)) return;
     }
 
     let after, logType;
@@ -5325,10 +5388,10 @@ function saveStockItem() {
     closeModal('stockEditModal');
 }
 
-function deleteStockItem(id) {
+async function deleteStockItem(id) {
     const si = stockItems.find(s => s.id === id);
     if (!si) return;
-    if (!confirm(`'${si.name}' 품목을 삭제할까요?\n재고 이력도 함께 삭제됩니다.`)) return;
+    if (!await customConfirm(`'${si.name}' 품목을 삭제할까요?\n재고 이력도 함께 삭제됩니다.`)) return;
     stockItems = stockItems.filter(s => s.id !== id);
     saveData(); _markDirty('stock'); renderStock();
     toast('🗑️ 품목 삭제 완료');
@@ -5382,7 +5445,7 @@ function previewAdj() {
         : '';
 }
 
-function applyAdj() {
+async function applyAdj() {
     const id     = document.getElementById('saId').value;
     const valRaw = document.getElementById('saQty').value;
     const reason = document.getElementById('saReason').value.trim();
@@ -5770,7 +5833,7 @@ async function renderBackupTab() {
 
 async function restoreBackup(key) {
     if (!isConnected||!workspaceRef) return toast('❗ Firebase 연결 후 복원 가능합니다');
-    if (!confirm('이 백업으로 복원하면 현재 데이터가 덮어씌워집니다. 계속하시겠습니까?')) return;
+    if (!await customConfirm('이 백업으로 복원하면 현재 데이터가 덮어씌워집니다. 계속하시겠습니까?')) return;
     try {
         const snap=await workspaceRef.child('backups').child(key).once('value');
         const data=snap.val();
@@ -5820,7 +5883,7 @@ async function restoreBackup(key) {
 }
 
 async function deleteBackup(key) {
-    if (!confirm('이 백업을 삭제하시겠습니까? 삭제 후 복구할 수 없습니다.')) return;
+    if (!await customConfirm('이 백업을 삭제하시겠습니까? 삭제 후 복구할 수 없습니다.')) return;
     try { await workspaceRef.child('backups').child(key).remove(); showBackupBanner('🗑️ 삭제 완료','success'); renderBackupTab(); }
     catch(e) { showBackupBanner('❌ 삭제 실패: '+e.message,'error'); }
 }
@@ -5878,8 +5941,8 @@ function updateStorageBar() {
 
 // ─── 🚨 긴급 localStorage 정리 (한도 초과 시) ───
 
-function emergencyCleanStorage() {
-    if (!confirm('⚠️ 로컬 저장 데이터를 모두 지우고 경량 재저장합니다.\n\nFirebase에 연결되어 있으면 데이터가 안전하게 유지됩니다.\n계속하시겠습니까?')) return;
+async function emergencyCleanStorage() {
+    if (!await customConfirm('⚠️ 로컬 저장 데이터를 모두 지우고 경량 재저장합니다.\n\nFirebase에 연결되어 있으면 데이터가 안전하게 유지됩니다.\n계속하시겠습니까?')) return;
     try {
         // 앱 데이터 키 삭제 (설정 키는 유지)
         ['p_clients','p_orders','prices','p_stock'].forEach(k => localStorage.removeItem(k));
@@ -5928,12 +5991,12 @@ function trimStockLog() {
 
 // ─── ② 오래된 전표 자동 정리 ───
 
-function trimOldOrders() {
+async function trimOldOrders() {
     const months = parseInt(document.getElementById('autoTrimMonths').value) || 6;
     const cutoff = _kstMonthsAgo(months);
     const targets = orders.filter(o => o.isPaid && o.date < cutoff);
     if (!targets.length) return toast(`✅ ${months}개월 이상 된 완납 전표가 없습니다`);
-    if (!confirm(`완납된 전표 중 ${months}개월 이상 된 ${targets.length}건을 삭제합니다.\n(미수금 전표는 보존됩니다)\n\n삭제 전 JSON 백업을 권장합니다.`)) return;
+    if (!await customConfirm(`완납된 전표 중 ${months}개월 이상 된 ${targets.length}건을 삭제합니다.\n(미수금 전표는 보존됩니다)\n\n삭제 전 JSON 백업을 권장합니다.`)) return;
     orders = orders.filter(o => !(o.isPaid && o.date < cutoff));
     invalidateOrdersCache();
     saveData();
@@ -6046,10 +6109,10 @@ function importJSON(e) {
             if (!data.clients && !data.orders) throw new Error('clients/orders 필드가 없습니다');
             const imp_clients = toArray(data.clients);
             const imp_orders  = toArray(data.orders);
-            if (!confirm(`가져올 데이터:\n거래처 ${imp_clients.length}개 · 전표 ${imp_orders.length}건\n\n기존 데이터를 덮어씌웁니다. 계속하시겠습니까?`)) { e.target.value=''; return; }
+            if (!await customConfirm(`가져올 데이터:\n거래처 ${imp_clients.length}개 · 전표 ${imp_orders.length}건\n\n기존 데이터를 덮어씌웁니다. 계속하시겠습니까?`, '가져오기', 'btn-primary')) { e.target.value=''; return; }
             if (clients.length||orders.length) {
                 try { await runBackupCloudOnly('가져오기전'); } catch(err) {
-                    if (!confirm('백업 실패. 백업 없이 계속하시겠습니까?')) { e.target.value=''; return; }
+                    if (!await customConfirm('백업 실패. 백업 없이 계속하시겠습니까?')) { e.target.value=''; return; }
                 }
             }
             // ── 공통 정규화 함수로 처리 ──
@@ -6093,10 +6156,10 @@ function loadSample() {
 async function resetAllData() {
     const total = clients.length + orders.length;
     if (!total) return toast('❗ 삭제할 데이터가 없습니다');
-    if (!confirm(`거래처 ${clients.length}개 · 전표 ${orders.length}건을 모두 삭제합니다.\n이 작업은 되돌릴 수 없습니다!`)) return;
-    if (!confirm('마지막 확인입니다. 삭제 전 백업이 실행됩니다. 계속하시겠습니까?')) return;
+    if (!await customConfirm(`거래처 ${clients.length}개 · 전표 ${orders.length}건을 모두 삭제합니다.\n이 작업은 되돌릴 수 없습니다!`)) return;
+    if (!await customConfirm('마지막 확인입니다. 삭제 전 백업이 실행됩니다. 계속하시겠습니까?', '백업 후 삭제')) return;
     try { await runBackup('전체초기화전',false); } catch(e) {
-        if (!confirm('백업 실패. 백업 없이 삭제하시겠습니까?')) return;
+        if (!await customConfirm('백업 실패. 백업 없이 삭제하시겠습니까?')) return;
     }
     clients=[]; orders=[]; prices={}; stockItems=[];
     localStorage.removeItem('p_stock');
@@ -6207,6 +6270,8 @@ function _doConnect(id, auto=false) {
         // isConnected는 .get() 성공 후에 true로 설정 (조기 설정 방지)
         isConnected = false;
         _initialLoadDone = false;  // 재연결 시 초기화
+        _connectGuard    = true;   // ★ Problem 1: .get() 완료 전까지 리스너 차단
+        _syncGuard       = false;  // 재연결 시 가드 초기화
         setSyncStatus('syncing');
         document.getElementById('connectBtn').style.display    = 'none';
         document.getElementById('disconnectBtn').style.display = 'block';
@@ -6221,10 +6286,26 @@ function _doConnect(id, auto=false) {
             const fbConnected = snap.val() === true;
             if (fbConnected) {
                 if (!isConnected) {
-                    // 소켓 재연결 감지 → 오프라인 중 쌓인 변경 즉시 플러시
+                    // ★ Problem 4 수정: 소켓 재연결 시 서버 최신 상태 먼저 확인 후 플러시
+                    // (직접 debouncedSync 호출 시 서버에서 변경된 내용을 놓칠 수 있음)
                     isConnected = true;
                     setSyncStatus('online');
-                    if (_initialLoadDone) debouncedSync();
+                    if (_initialLoadDone) {
+                        workspaceRef.get().then(snap => {
+                            const d = snap.val();
+                            if (!d) { debouncedSync(); return; }
+                            const serverTime = d.lastUpdated ? new Date(d.lastUpdated).getTime() : 0;
+                            const lastLocalMs = (() => { const s = localStorage.getItem('lastLocalUpdated'); return s ? new Date(s).getTime() : 0; })();
+                            const localWriteMs = Math.max(_localWriteTime, lastLocalMs);
+                            if (localWriteMs > serverTime) {
+                                // 로컬이 최신 → 서버에 올리기
+                                debouncedSync();
+                            } else {
+                                // 서버가 최신 → 리스너가 받아서 처리 (강제 트리거)
+                                _fbValueHandler(snap);
+                            }
+                        }).catch(() => debouncedSync()); // 실패 시 일단 올리기
+                    }
                 }
             } else {
                 if (isConnected) {
@@ -6236,7 +6317,7 @@ function _doConnect(id, auto=false) {
         });
 
         // ── 최초 1회 스냅샷: 서버↔로컬 병합 판단 ──
-        workspaceRef.get().then(snap => {
+        workspaceRef.get().then(async snap => {
             const data = snap.val();
             // 연결 성공 확인 시점에 isConnected=true 설정
             isConnected = true;
@@ -6264,21 +6345,35 @@ function _doConnect(id, auto=false) {
                 }, lastLocalUpdated ? new Date(lastLocalUpdated).getTime() : 0);
                 const localIsNewer = localHasData && localLatestOrder > serverTime;
 
-                if (localIsNewer && !auto) {
-                    // 로컬이 더 최신 (수동 연결) → 사용자에게 선택 요청
-                    const useLocal = confirm(
-                        '⚠️ 로컬 데이터가 서버보다 최신입니다.\n\n' +
-                        '· 확인: 로컬 데이터를 서버에 업로드\n' +
-                        '· 취소: 서버 데이터를 내려받기'
-                    );
-                    if (useLocal) {
+                if (localIsNewer) {
+                    if (auto) {
+                        // 자동 연결에서 로컬이 더 최신 → 조용히 로컬 데이터를 서버에 업로드
+                        // (오프라인 중 작업한 데이터 유실 방지)
                         const ch=dataHash(clients),oh=dataHash(orders),ph=dataHash(prices),sh=dataHash(stockItems);
                         workspaceRef.update({ clients, orders: orders.map(o=>{if(!o._noItems)return o;const c={...o};delete c._noItems;return c;}), prices, stockItems, lastUpdated:new Date().toISOString(), writtenBy:SESSION_ID })
-                            .then(()=>{ lastHash.clients=ch;lastHash.orders=oh;lastHash.prices=ph;lastHash.stock=sh; setSyncStatus('online'); toast('☁️ 로컬 데이터를 서버에 업로드했습니다','var(--green)'); })
+                            .then(()=>{ lastHash.clients=ch;lastHash.orders=oh;lastHash.prices=ph;lastHash.stock=sh; setSyncStatus('online'); toast('🟢 자동 연결 완료 (로컬→서버 업로드)', 'var(--green)'); })
                             .catch(e=>{ console.error('업로드 실패:',e); setSyncStatus('error'); });
+                        _connectGuard    = false; // ★ 업로드 트리거 후 리스너 해제
                         _initialLoadDone = true;
-                        closeModal('firebaseModal');
                         return;
+                    } else {
+                        // 수동 연결에서 로컬이 더 최신 → 사용자에게 선택 요청
+                        const useLocal = await customConfirm(
+                            '⚠️ 로컬 데이터가 서버보다 최신입니다.\n\n' +
+                            '· 확인: 로컬 데이터를 서버에 업로드\n' +
+                            '· 취소: 서버 데이터를 내려받기',
+                            '로컬 업로드', 'btn-primary'
+                        );
+                        if (useLocal) {
+                            const ch=dataHash(clients),oh=dataHash(orders),ph=dataHash(prices),sh=dataHash(stockItems);
+                            workspaceRef.update({ clients, orders: orders.map(o=>{if(!o._noItems)return o;const c={...o};delete c._noItems;return c;}), prices, stockItems, lastUpdated:new Date().toISOString(), writtenBy:SESSION_ID })
+                                .then(()=>{ lastHash.clients=ch;lastHash.orders=oh;lastHash.prices=ph;lastHash.stock=sh; setSyncStatus('online'); toast('☁️ 로컬 데이터를 서버에 업로드했습니다','var(--green)'); })
+                                .catch(e=>{ console.error('업로드 실패:',e); setSyncStatus('error'); });
+                            _connectGuard    = false;
+                            _initialLoadDone = true;
+                            closeModal('firebaseModal');
+                            return;
+                        }
                     }
                 }
                 const newClients = toArray(data.clients).map(_normClientFromFb);
@@ -6322,11 +6417,13 @@ function _doConnect(id, auto=false) {
             }
 
             // 초기 로드 완료 → 이후부턴 실시간 리스너가 처리
+            _connectGuard    = false; // ★ Problem 1: 초기 처리 완료, 리스너 차단 해제
             _initialLoadDone = true;
 
             if (!auto) closeModal('firebaseModal');
 
         }).catch(err => {
+            _connectGuard    = false; // 실패해도 리스너 차단 해제
             _initialLoadDone = true; // 실패해도 리스너는 활성화
             console.error('Firebase 연결 실패:', err);
             isConnected = false;
@@ -6355,6 +6452,7 @@ function disconnectWorkspace() {
     try { firebase.database().ref('.info/connected').off(); } catch(e) {}
     debouncedSync.cancel();
     workspaceRef=null; isConnected=false;
+    _syncGuard=false; _connectGuard=false; // 가드 초기화
     // 재연결 시 변경사항을 정확히 업로드하도록 lastHash 초기화
     lastHash = { clients:'', orders:'', prices:'', stock:'' };
     setSyncStatus('offline');
@@ -6379,16 +6477,12 @@ function initSystemTheme() {
 }
 
 // ─── 대시보드 렌더 후 sparklines & count-up 실행 ───
-// renderDashboard를 후킹해서 sparklines 추가
 let _dashSparkTimer = null;
-const _origRenderDashboard = renderDashboard;
-renderDashboard = function() {
-    _origRenderDashboard();
+renderDashboard = _safeWrap(renderDashboard, function() {
     if (_dashSparkTimer) clearTimeout(_dashSparkTimer);
     _dashSparkTimer = setTimeout(() => {
         _dashSparkTimer = null;
         renderSparklines();
-        // 카운트업
         ['dashSales','dashUnpaid'].forEach(id => {
             const el = document.getElementById(id);
             if (!el) return;
@@ -6397,41 +6491,27 @@ renderDashboard = function() {
             if (!isNaN(num) && num > 0) animateCount(el, num);
         });
     }, 50);
-};
+});
 
 // ─── renderSettlement 후킹 (바차트 추가) ───
-const _origRenderSettlement = renderSettlement;
-renderSettlement = function() {
-    _origRenderSettlement();
+renderSettlement = _safeWrap(renderSettlement, function() {
     const month = document.getElementById('settlementMonth')?.value || todayKST().slice(0,7);
     renderSettleBarChart(month);
-};
-const _origRenderSettlementDaily = renderSettlementDaily;
-renderSettlementDaily = function() {
-    _origRenderSettlementDaily();
+});
+renderSettlementDaily = _safeWrap(renderSettlementDaily, function() {
     const date = document.getElementById('settlementDateDaily')?.value || todayKST();
     renderSettleBarChart(date.slice(0,7));
-};
-const _origRenderSettlementQuarterly = renderSettlementQuarterly;
-renderSettlementQuarterly = function() {
-    _origRenderSettlementQuarterly();
+});
+renderSettlementQuarterly = _safeWrap(renderSettlementQuarterly, function() {
     const year = document.getElementById('settlementYear')?.value || todayKST().slice(0,4);
     renderSettleBarChart(year + '-01');
-};
+});
 
 // ─── updateInfoCounts 후킹 (배지 갱신) ───
-const _origUpdateInfoCounts = updateInfoCounts;
-updateInfoCounts = function() {
-    _origUpdateInfoCounts();
-    updateNavBadges();
-};
+updateInfoCounts = _safeWrap(updateInfoCounts, function() { updateNavBadges(); });
 
 // ─── renderClients 후킹 (스와이프 초기화) ───
-const _origRenderClients = renderClients;
-renderClients = function() {
-    _origRenderClients();
-    initClientSwipe();
-};
+renderClients = _safeWrap(renderClients, function() { initClientSwipe(); });
 
 
 // ─── 달걀 품목 초기 등록 ───
@@ -6534,7 +6614,7 @@ function initPullToRefresh() {
                     _fullRender();
                     // Firebase 연결 중이면 서버 최신 데이터 받아서 반영
                     if (isConnected && workspaceRef) {
-                        workspaceRef.get().then(snap => {
+                        workspaceRef.get().then(async snap => {
                             const d = snap.val();
                             if (!d) return;
                             if (d.clients)    { clients    = toArray(d.clients).map(_normClientFromFb); }
@@ -6588,6 +6668,8 @@ function toggleOldChangelog() {
 
 function _fullRender() {
     invalidateOrdersCache();
+    // 캐시 사전 빌드 (첫 입력 시 딜레이 제거)
+    _buildRecentPricesCache();
     // 모든 탭 더티 마킹 → 탭 진입 시 각자 렌더링
     _markDirty();
     // 거래처 목록 display 상태 보장
@@ -6746,7 +6828,7 @@ window.addEventListener('DOMContentLoaded', () => {
             // ── 서버 먼저 읽기 → 시간 비교 → 로컬이 더 최신일 때만 업로드 ──
             // (기존: 무조건 업로드 후 서버 재로드 → 멀티기기 경쟁 조건 발생)
             debouncedSync.cancel();
-            workspaceRef.get().then(snap => {
+            workspaceRef.get().then(async snap => {
                 const d = snap.val();
                 isConnected = true;
                 setSyncStatus('online');
@@ -6936,7 +7018,7 @@ function _getMemoViewRange() {
     }
 }
 
-function deleteAllMemoInView() {
+async function deleteAllMemoInView() {
     const range = _getMemoViewRange();
     const targets = (orders || []).filter(o => {
         if (!o.note || !o.note.trim()) return false;
@@ -6945,7 +7027,7 @@ function deleteAllMemoInView() {
     });
     if (!targets.length) return toast('삭제할 메모가 없습니다', 'var(--text3)');
     const clientNames = [...new Set(targets.map(o => o.clientName))].join(', ');
-    if (!confirm(`📋 현재 기간의 메모 ${targets.length}건을 모두 삭제할까요?\n\n대상: ${clientNames}`)) return;
+    if (!await customConfirm(`📋 현재 기간의 메모 ${targets.length}건을 모두 삭제할까요?\n\n대상: ${clientNames}`)) return;
     const now = new Date().toISOString();
     targets.forEach(o => { o.note = ''; o.updatedAt = now; });
     saveData();
@@ -7028,10 +7110,10 @@ function openMemoDetail(clientName) {
     _modalHistoryPushed = true;
 }
 
-function deletePrevMemo(orderId) {
+async function deletePrevMemo(orderId) {
     const o = orders.find(x => x.id === orderId);
     if (!o || !o.note) return;
-    if (!confirm(`📅 ${o.date} 이전 메모를 삭제할까요?\n\n"${o.note}"`)) return;
+    if (!await customConfirm(`📅 ${o.date} 이전 메모를 삭제할까요?\n\n"${o.note}"`)) return;
     o.note = '';
     o.updatedAt = new Date().toISOString();
     saveData();
@@ -7042,10 +7124,10 @@ function deletePrevMemo(orderId) {
     toast('🗑️ 이전 메모 삭제됨', 'var(--text3)');
 }
 
-function deleteMemoById(orderId) {
+async function deleteMemoById(orderId) {
     const o = orders.find(x => x.id === orderId);
     if (!o) return;
-    if (!confirm(`📅 ${o.date} 메모를 삭제할까요?\n\n"${o.note}"`)) return;
+    if (!await customConfirm(`📅 ${o.date} 메모를 삭제할까요?\n\n"${o.note}"`)) return;
 
     o.note = '';
     o.updatedAt = new Date().toISOString();
