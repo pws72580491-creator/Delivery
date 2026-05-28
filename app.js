@@ -6086,7 +6086,7 @@ function exportSettlementExcel() {
 }
 
 function exportJSON() {
-    const data = { clients, orders, prices, stockItems, exportDate:new Date().toISOString(), version:'75' };
+    const data = { clients, orders, prices, stockItems, exportDate:new Date().toISOString(), version:'82' };
     const blob = new Blob([JSON.stringify(data,null,2)], { type:'application/json' });
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement('a');
@@ -6229,6 +6229,9 @@ function setSyncStatus(state) {
     else if (state==='syncing') { el.innerHTML='🟡 동기화 중...'; el.classList.add('status-syncing'); }
     else if (state==='error')   { el.innerHTML='🔴 동기화 오류 — 재연결 시도 중'; el.classList.add('status-error'); }
     else                        { el.innerHTML='⬡ 오프라인 모드'; el.classList.add('status-offline'); }
+    // 연결 중일 때만 "현재 워크스페이스 삭제" 버튼 표시
+    const delRow = document.getElementById('deleteCurrentWsRow');
+    if (delRow) delRow.style.display = (state === 'online') ? 'block' : 'none';
 }
 
 // Firebase SDK 로드 완료 대기 (defer 스크립트 타이밍 보정)
@@ -6460,6 +6463,67 @@ function disconnectWorkspace() {
     document.getElementById('disconnectBtn').style.display='none';
     applyWsLockUI();
     toast('🔌 연결 해제됨');
+}
+
+// ─── 워크스페이스 Firebase 데이터 삭제 ───
+
+async function deleteWorkspaceData(targetId) {
+    const id = (targetId || '').trim().toLowerCase();
+    if (!id) return toast('❗ 삭제할 워크스페이스 ID를 입력하세요');
+
+    const isCurrentWs = (id === (localStorage.getItem('workspaceId') || '').toLowerCase());
+
+    const confirmed = await customConfirm(
+        `⚠️ 워크스페이스 "${id}"의 모든 Firebase 데이터를 삭제합니다.\n\n` +
+        `거래처·전표·재고·백업 등 서버에 저장된 모든 데이터가 영구 삭제됩니다.\n` +
+        `이 작업은 되돌릴 수 없습니다!`,
+        '삭제', 'btn-danger'
+    );
+    if (!confirmed) return;
+
+    const confirmed2 = await customConfirm(
+        `마지막 확인입니다.\n워크스페이스 "${id}" Firebase 데이터를 완전히 삭제합니다.`,
+        '최종 삭제', 'btn-danger'
+    );
+    if (!confirmed2) return;
+
+    try {
+        waitFirebase(async () => {
+            try {
+                if (!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
+                const ref = firebase.database().ref('workspaces/' + id);
+                await ref.remove();
+
+                toast(`🗑️ 워크스페이스 "${id}" Firebase 데이터 삭제 완료`, 'var(--green)');
+
+                // 현재 연결된 워크스페이스였다면 자동 연결 해제
+                if (isCurrentWs && isConnected) {
+                    disconnectWorkspace();
+                    toast(`🔌 연결 해제 및 데이터 삭제 완료`);
+                }
+
+                // 삭제 후 입력 필드 초기화
+                const inp = document.getElementById('deleteWsInput');
+                if (inp) inp.value = '';
+            } catch(e) {
+                console.error('워크스페이스 삭제 오류:', e);
+                const msg = e.code === 'PERMISSION_DENIED'
+                    ? '❗ 권한 오류: Firebase 보안 규칙에서 삭제가 허용되지 않습니다'
+                    : '❗ 삭제 실패: ' + (e.message || '알 수 없는 오류');
+                toast(msg);
+            }
+        });
+    } catch(e) {
+        toast('❗ Firebase 초기화 오류: ' + e.message);
+    }
+}
+
+// ─── 현재 연결된 워크스페이스 삭제 (연결 상태 필요) ───
+async function deleteCurrentWorkspaceData() {
+    const id = localStorage.getItem('workspaceId') || '';
+    if (!id) return toast('❗ 연결된 워크스페이스가 없습니다');
+    if (!isConnected || !workspaceRef) return toast('❗ Firebase에 연결 후 삭제할 수 있습니다');
+    await deleteWorkspaceData(id);
 }
 
 // ╔══════════════════════════════════════════════════════════════╗

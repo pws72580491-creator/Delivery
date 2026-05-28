@@ -11,7 +11,7 @@
     <meta name="apple-mobile-web-app-title" content="납품관리">
     <link rel="apple-touch-icon" href="./icon-192.png">
     <link rel="manifest" href="./manifest.json">
-    <title>납품 관리 Pro v81</title>
+    <title>납품 관리 Pro v82</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js" defer></script>
@@ -38,7 +38,7 @@
             <div class="logo-icon">📦</div>
             <div>
                 <div class="logo-text">납품 관리 Pro</div>
-                <div class="logo-sub">v81 · PWA 앱 설치 지원</div>
+                <div class="logo-sub">v82 · PWA 앱 설치 지원</div>
             </div>
         </div>
         <div class="header-btns">
@@ -597,7 +597,7 @@
     <div class="card">
         <div class="card-title">앱 정보</div>
         <div style="font-size:13px;color:var(--text2);line-height:2;margin-bottom:12px;">
-            버전: <strong style="color:var(--accent);">v81</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
+            버전: <strong style="color:var(--accent);">v82</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
             거래처: <span id="infoClients">0</span>개 &nbsp;·&nbsp;
             납품내역: <span id="infoOrders">0</span>건
         </div>
@@ -607,15 +607,19 @@
             <div id="changelogList" style="display:flex;flex-direction:column;gap:6px;">
                 <!-- 현재 버전 -->
                 <div class="changelog-item">
-                    <span class="changelog-ver" style="color:var(--green);">v81</span>
-                    <span class="changelog-desc">동기화 불안정 수정 5건 + 코드품질 개선 8건 — ① _connectGuard 도입: .on() 리스너와 .get() 초기 처리 간 레이스 컨디션 차단 ② _syncGuard 도입: debouncedSync 업로드 중 리스너 echo 덮어쓰기 차단 ③ delta dirty set 스냅샷 복원: 업로드 실패 시 변경 누락 방지 ④ .info/connected 재연결 시 서버·로컬 최신 비교 후 방향 결정(기존: 무조건 로컬→서버) ⑤ _fbValueHandler localWriteMs 조건 30초 윈도우 적용(기존: 오래된 로컬 기록도 서버 차단) ⑥ confirm() → customConfirm() Promise 다이얼로그 교체(22곳) ⑦ isHidden 개별 제어 + 거래처 카드 숨기기/표시 버튼 추가 ⑧ 몽키패치 → _safeWrap 헬퍼 교체(5곳) ⑨ sw.js Stale-While-Revalidate 전략 적용 ⑩ manifest.json maskable 아이콘 ⑪ 가격 캐시 사전 빌드(_fullRender 시 호출) ⑫ Firebase 자동 연결 충돌 처리: 로컬 최신 시 조용히 서버 업로드(기존: 서버 데이터 덮어씌움) ⑬ disconnectWorkspace 시 _syncGuard·_connectGuard 초기화</span>
+                    <span class="changelog-ver" style="color:var(--green);">v82</span>
+                    <span class="changelog-desc">Firebase 워크스페이스 데이터 삭제 기능 추가 — ① 사용하지 않는 워크스페이스 ID 입력 후 Firebase 데이터 완전 삭제 ② 현재 연결된 워크스페이스 삭제 버튼(온라인 상태일 때만 표시) ③ 삭제 시 이중 확인 다이얼로그 적용 ④ 삭제 후 자동 연결 해제 ⑤ 버전 표기 전체 통일(제목·로고·앱 정보·캐시·백업)</span>
                 </div>
                 <!-- 이전 이력 토글 버튼 -->
                 <button id="changelogToggleBtn" onclick="toggleOldChangelog()" style="display:flex;align-items:center;justify-content:center;gap:5px;width:100%;padding:7px 12px;margin-top:2px;background:var(--surf3);border:1px solid var(--border);border-radius:var(--radius-s);color:var(--text2);font-size:11px;font-weight:700;cursor:pointer;transition:all .15s;letter-spacing:.3px;">
                     <span id="changelogToggleIcon">▼</span>
-                    <span id="changelogToggleLabel">이전 이력 보기 (v80 ~ v24_4-3-3)</span>
+                    <span id="changelogToggleLabel">이전 이력 보기 (v81 ~ v24_4-3-3)</span>
                 </button>
                 <div id="oldChangelogItems" style="display:none;flex-direction:column;gap:6px;">
+                <div class="changelog-item">
+                    <span class="changelog-ver">v81</span>
+                    <span class="changelog-desc">동기화 불안정 수정 5건 + 코드품질 개선 8건 — ① _connectGuard 도입: .on() 리스너와 .get() 초기 처리 간 레이스 컨디션 차단 ② _syncGuard 도입: debouncedSync 업로드 중 리스너 echo 덮어쓰기 차단 ③ delta dirty set 스냅샷 복원: 업로드 실패 시 변경 누락 방지 ④ .info/connected 재연결 시 서버·로컬 최신 비교 후 방향 결정(기존: 무조건 로컬→서버) ⑤ _fbValueHandler localWriteMs 조건 30초 윈도우 적용(기존: 오래된 로컬 기록도 서버 차단) ⑥ confirm() → customConfirm() Promise 다이얼로그 교체(22곳) ⑦ isHidden 개별 제어 + 거래처 카드 숨기기/표시 버튼 추가 ⑧ 몽키패치 → _safeWrap 헬퍼 교체(5곳) ⑨ sw.js Stale-While-Revalidate 전략 적용 ⑩ manifest.json maskable 아이콘 ⑪ 가격 캐시 사전 빌드(_fullRender 시 호출) ⑫ Firebase 자동 연결 충돌 처리: 로컬 최신 시 조용히 서버 업로드(기존: 서버 데이터 덮어씌움) ⑬ disconnectWorkspace 시 _syncGuard·_connectGuard 초기화</span>
+                </div>
                 <div class="changelog-item">
                     <span class="changelog-ver">v80</span>
                     <span class="changelog-desc">안정성·기능 개선 11건 — ① 메모 삭제·저장 즉시 Firebase 반영(lastHash 강제 초기화→cancel+flushSync 패턴 적용) ② 모두삭제 버튼 추가(메모 모아보기) ③ 이전 메모 🗑️ 삭제 버튼 추가 ④ 재고 재계산 앱 시작 즉시 실행(출고 누락 즉시 반영) ⑤ 오프라인→온라인 복구 시 재고 재계산 자동 실행 ⑥ 혼합 수금 UI 개선(이체·현금 금액 분리 입력·저장) ⑦ 수금 취소 시 paidMethodDetail 삭제 ⑧ 메모 삭제 복원 방지(_fbValueHandler 차단 조건 강화) ⑨ 할인완납 혼합방법 차단 ⑩ PNG 저장으로 변경 ⑪ 동기화 오류 수정(dataHash·saveToLocal 원복)</span>
@@ -905,7 +909,29 @@
             <button class="btn btn-primary" style="flex:1;" id="connectBtn" onclick="connectWorkspace(false)">🔌 연결</button>
             <button class="btn btn-danger"  style="flex:1;display:none;" id="disconnectBtn" onclick="disconnectWorkspace()">연결 해제</button>
         </div>
-        <button class="btn btn-ghost btn-full" style="margin-top:8px;" onclick="closeModal('firebaseModal')">닫기</button>
+
+        <!-- 현재 워크스페이스 Firebase 데이터 삭제 -->
+        <div id="deleteCurrentWsRow" style="display:none;margin-top:10px;">
+            <button class="btn btn-ghost btn-full" style="border:1px solid #ef444450;color:#ef4444;font-size:13px;" onclick="deleteCurrentWorkspaceData()">
+                🗑️ 현재 워크스페이스 Firebase 데이터 삭제
+            </button>
+        </div>
+
+        <!-- 구분선 -->
+        <div style="margin:16px 0 12px;border-top:1px solid var(--border);"></div>
+
+        <!-- 다른 워크스페이스 삭제 -->
+        <div style="font-size:12px;color:var(--text2);margin-bottom:8px;font-weight:600;">🗑️ 사용하지 않는 워크스페이스 삭제</div>
+        <p style="font-size:12px;color:var(--text2);margin-bottom:10px;line-height:1.6;">
+            ID를 입력하면 해당 워크스페이스의 Firebase 데이터를 완전히 삭제합니다.<br>
+            <span style="color:#ef4444;font-weight:600;">삭제 후 복구 불가</span> — 백업 후 진행하세요.
+        </p>
+        <div style="display:flex;gap:6px;">
+            <input type="text" class="form-input" id="deleteWsInput" placeholder="삭제할 워크스페이스 ID" style="flex:1;font-size:13px;">
+            <button class="btn btn-danger btn-sm" style="white-space:nowrap;flex-shrink:0;" onclick="deleteWorkspaceData(document.getElementById('deleteWsInput').value)">삭제</button>
+        </div>
+
+        <button class="btn btn-ghost btn-full" style="margin-top:12px;" onclick="closeModal('firebaseModal')">닫기</button>
     </div>
 </div>
 
