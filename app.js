@@ -298,7 +298,7 @@ function _buildClientItemsCache() {
     // clientId → 날짜 내림차순으로 품목명 첫 등장만 수집
     // clientId 없는 전표는 clientName을 fallback 키로 사용
     const tmp = {}; // key → [{name,price,date}]
-    const sorted = [...orders].sort((a,b) => b.date.localeCompare(a.date));
+    const sorted = [...orders].sort((a,b) => (b.date||"").localeCompare(a.date||""));
     for (const o of sorted) {
         const cid = o.clientId || ('name:' + (o.clientName || ''));
         if (!cid) continue;
@@ -367,6 +367,8 @@ function _normOrderFromFb(o) {
     if (!o.note) o.note = '';
     // isVoid: Firebase에서 undefined로 오면 명시적으로 false 처리
     if (!o.isVoid) o.isVoid = false;
+    // date: undefined이면 startsWith() 호출 시 TypeError 방지
+    if (!o.date) o.date = '';
     return o;
 }
 
@@ -1561,7 +1563,7 @@ function updateItemDatalist(clientId) {
 function _buildRecentPricesCache() {
     if (_recentPricesCache) return _recentPricesCache;
     const cache = {}; // name → [price, ...]  (최신 납품일 순, 중복 제거, 최대 4개)
-    const sorted = [...orders].sort((a, b) => b.date.localeCompare(a.date));
+    const sorted = [...orders].sort((a, b) => (b.date||"").localeCompare(a.date||""));
     for (const o of sorted) {
         for (const it of (o.items || [])) {
             if (!it.name || it.price <= 0) continue;
@@ -1663,7 +1665,7 @@ function addItemToGroup() {
     if (price < 0)      return toast('❗ 단가는 0 이상이어야 합니다');
     if (!date)   return toast('❗ 납품일자를 선택하세요');
     let group = tempGroups.find(g => g.date===date);
-    if (!group) { group={date,items:[]}; tempGroups.push(group); tempGroups.sort((a,b)=>a.date.localeCompare(b.date)); }
+    if (!group) { group={date,items:[]}; tempGroups.push(group); tempGroups.sort((a,b)=>(a.date||"").localeCompare(b.date||"")); }
     group.items.push({ name, qty, price, total:qty*price });
 
     // ── 재고 부족 경고 (자동차감 ON이고 재고 등록된 품목일 때) ──
@@ -2919,7 +2921,7 @@ function renderSummaryBox(totalSales, paidAmount, unpaidAmount) {
 function renderSettlement() {
     const month = document.getElementById('settlementMonth').value;
     if (!month) return;
-    let filtered = applyPayFilter(orders.filter(o=>o.date.startsWith(month)));
+    let filtered = applyPayFilter(orders.filter(o=>o.date?.startsWith(month)));
     const _et = o => o.isPaid && o.discount > 0 ? o.total - o.discount : o.total;
     const totalSales   = filtered.reduce((s,o)=>s+_et(o),0);
     const paidAmount   = filtered.reduce((s,o)=>s+_actualPaid(o),0);
@@ -3025,7 +3027,7 @@ function renderSettlementQuarterly() {
         { label:'4분기', months:['10','11','12'], emoji:'❄️' },
     ];
 
-    let allYearOrders = applyPayFilter(orders.filter(o=>o.date.startsWith(String(year))));
+    let allYearOrders = applyPayFilter(orders.filter(o=>o.date?.startsWith(String(year))));
     const _et = o => o.isPaid && o.discount > 0 ? o.total - o.discount : o.total;
     const yearTotal  = allYearOrders.reduce((s,o)=>s+_et(o),0);
     const yearPaid   = allYearOrders.reduce((s,o)=>s+_actualPaid(o),0);
@@ -3033,12 +3035,12 @@ function renderSettlementQuarterly() {
 
     const qData = quarters.map(q => {
         const mos = q.months.map(m=>`${year}-${m}`);
-        const list = applyPayFilter(orders.filter(o=> mos.some(m=>o.date.startsWith(m))));
+        const list = applyPayFilter(orders.filter(o=> mos.some(m=>o.date?.startsWith(m))));
         const sales  = list.reduce((s,o)=>s+_et(o),0);
         const paid   = list.reduce((s,o)=>s+_actualPaid(o),0);
         // 월별 세부
         const monthRows = q.months.map(m => {
-            const ml = applyPayFilter(orders.filter(o=>o.date.startsWith(`${year}-${m}`)));
+            const ml = applyPayFilter(orders.filter(o=>o.date?.startsWith(`${year}-${m}`)));
             const ms = ml.reduce((s,o)=>s+_et(o),0);
             const mp = ml.reduce((s,o)=>s+_actualPaid(o),0);
             return { month:`${year}-${m}`, sales:ms, paid:mp, count:ml.length };
@@ -3190,19 +3192,19 @@ async function shareStatement() {
 
 function showClientStatement(clientName, month) {
     const monthStart = month+'-01';
-    const filt = orders.filter(o=>o.clientName===clientName&&o.date.startsWith(month)).sort((a,b)=>a.date.localeCompare(b.date));
+    const filt = orders.filter(o=>o.clientName===clientName&&o.date?.startsWith(month)).sort((a,b)=>(a.date||'').localeCompare(b.date||''));
     // 할인 완납된 전표는 실청구액(total - discount)으로 집계
     const _effectiveTotal = o => o.isPaid && o.discount > 0 ? o.total - o.discount : o.total;
     const monthTotal  = filt.reduce((s,o)=>s+_effectiveTotal(o),0);
     // 수금액 = 완납전표 합산 + 부분입금 누적액
     const monthPaid   = filt.reduce((s,o)=>s+_actualPaid(o),0);
     const monthUnpaid = monthTotal - monthPaid;
-    const carryOrders = orders.filter(o=>o.clientName===clientName&&o.date<monthStart&&!o.isPaid).sort((a,b)=>a.date.localeCompare(b.date));
+    const carryOrders = orders.filter(o=>o.clientName===clientName&&o.date<monthStart&&!o.isPaid).sort((a,b)=>(a.date||"").localeCompare(b.date||""));
     const carryAmt    = carryOrders.reduce((s,o)=>s+o.total-(o.paidAmount||0),0);
     const grandUnpaid = carryAmt + monthUnpaid;
     // ── 오늘 이전까지(어제까지) 해당 거래처 전체 납품 합계 ──
     const todayStr = todayKST();
-    const beforeTodayOrders = orders.filter(o=>o.clientName===clientName && o.date < todayStr && o.date.startsWith(month));
+    const beforeTodayOrders = orders.filter(o=>o.clientName===clientName && o.date < todayStr && o.date?.startsWith(month));
     const beforeTodayTotal  = beforeTodayOrders.reduce((s,o)=>s+_effectiveTotal(o),0);
     const client = clients.find(c=>c.name===clientName);
     const phone  = client?.phone||'';
@@ -3360,14 +3362,14 @@ function showClientStatement(clientName, month) {
 
 function saveStatementPNG(clientName, month) {
     const monthStart = month + '-01';
-    const filt = orders.filter(o => o.clientName === clientName && o.date.startsWith(month))
-                       .sort((a, b) => a.date.localeCompare(b.date));
+    const filt = orders.filter(o => o.clientName === clientName && o.date?.startsWith(month))
+                       .sort((a, b) => (a.date||"").localeCompare(b.date||""));
     const _effectiveTotal = o => o.isPaid && o.discount > 0 ? o.total - o.discount : o.total;
     const monthTotal  = filt.reduce((s, o) => s + _effectiveTotal(o), 0);
     const monthPaid   = filt.reduce((s,o)=>s+_actualPaid(o),0);
     const monthUnpaid = monthTotal - monthPaid;
     const carryOrders = orders.filter(o => o.clientName === clientName && o.date < monthStart && !o.isPaid)
-                              .sort((a, b) => a.date.localeCompare(b.date));
+                              .sort((a, b) => (a.date||"").localeCompare(b.date||""));
     const carryAmt    = carryOrders.reduce((s, o) => s + o.total - (o.paidAmount || 0), 0);
     const grandUnpaid = carryAmt + monthUnpaid;
 
@@ -3692,7 +3694,7 @@ function _getUnpaidList(clientName, month) {
     const monthStart = month + '-01';
     return orders
         .filter(o => o.clientName === clientName && !o.isPaid &&
-                     (o.date.startsWith(month) || o.date < monthStart))
+                     (o.date?.startsWith(month) || o.date < monthStart))
         .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
 }
 
@@ -4165,7 +4167,7 @@ function bulkPayClient(clientName, month) {
     const monthStart = month + '-01';
     const unpaidList = orders.filter(o =>
         o.clientName === clientName &&
-        (o.date.startsWith(month) || o.date < monthStart) &&
+        (o.date?.startsWith(month) || o.date < monthStart) &&
         !o.isPaid
     );
     if (!unpaidList.length) return toast('✅ 미수금이 없습니다');
@@ -4208,7 +4210,7 @@ function _doBulkPay(selectedMethod) {
 
 function renderDashboard() {
     const month = todayKST().slice(0,7);
-    const curr  = orders.filter(o=>o.date.startsWith(month));
+    const curr  = orders.filter(o=>o.date?.startsWith(month));
     const _et   = o => o.isPaid && o.discount > 0 ? o.total - o.discount : o.total;
     const sales  = curr.reduce((s,o)=>s+_et(o),0);
     // 미수금: 전체 기간 누적 미수금
@@ -4225,7 +4227,7 @@ function renderDashboard() {
     // ─── 최근 납품 내역 (최근 7건) ───
     const recentEl = document.getElementById('dashRecentSection');
     if (!recentEl) return;
-    const recent = [...orders].sort((a,b)=>b.date.localeCompare(a.date)||b.createdAt?.localeCompare(a.createdAt||'')).slice(0,7);
+    const recent = [...orders].sort((a,b)=>(b.date||"").localeCompare(a.date||"")||b.createdAt?.localeCompare(a.createdAt||"")).slice(0,7);
     if (!recent.length) {
         recentEl.innerHTML = '';
         return;
@@ -4409,7 +4411,7 @@ function renderUnpaid() {
         const badgeCls = days >= 90 ? 'severe' : days >= 60 ? 'danger' : days >= 30 ? 'warn' : '';
         const ageLabel = days >= 90 ? `🚨 최장 ${days}일 경과` : days >= 60 ? `🔴 최장 ${days}일 경과` : days >= 30 ? `🟠 최장 ${days}일 경과` : `🟢 최장 ${days}일 경과`;
         const curMonth = today.slice(0, 7);
-        const sortedOrders = [...u.orders].sort((a, b) => a.date.localeCompare(b.date));
+        const sortedOrders = [...u.orders].sort((a, b) => (a.date||"").localeCompare(b.date||""));
         const orderRows = sortedOrders.slice(0, 4).map(o => {
             const d = Math.floor((new Date(today) - new Date(o.date)) / 86400000);
             const dCls = d >= 90 ? 'severe' : d >= 60 ? 'danger' : d >= 30 ? 'warn' : '';
@@ -4508,7 +4510,7 @@ function renderSettleBarChart(monthKey) {
         while (m <= 0) { m += 12; y--; }
         while (m > 12) { m -= 12; y++; }
         const ym = `${y}-${String(m).padStart(2,'0')}`;
-        const mos = orders.filter(o => o.date.startsWith(ym));
+        const mos = orders.filter(o => o.date?.startsWith(ym));
         const _et  = o => o.isPaid && o.discount > 0 ? o.total - o.discount : o.total;
         const total = mos.reduce((s, o) => s + _et(o), 0);
         const paid  = mos.reduce((s, o) => s + _actualPaid(o), 0);
@@ -6020,7 +6022,7 @@ function updateInfoCounts() {
 
 function exportHistoryExcel() {
     if (!orders.length) return toast('❗ 내보낼 데이터가 없습니다');
-    const rows = [...orders].sort((a,b)=>a.date.localeCompare(b.date)).flatMap(o => {
+    const rows = [...orders].sort((a,b)=>(a.date||"").localeCompare(b.date||"")).flatMap(o => {
         if ((o.items||[]).length === 0) {
             return [{ 날짜: o.date, 거래처: o.clientName, 품목: '(오프라인 저장 — 품목 상세 없음)', 수량: '-', 단가: '-', 금액: o.total, 합계: o.total, 납품상태: o.isPaid?'완납':'미수', 타인거래: o.isVoid?'Y':'', 메모: o.note||'' }];
         }
@@ -6055,7 +6057,7 @@ function exportSettlementExcel() {
     if (settleUnit === 'quarterly') {
         const year = document.getElementById('settlementYear').value;
         if (!year) return toast('❗ 연도를 선택하세요');
-        const filtered = applyPayFilter(orders.filter(o=>o.date.startsWith(String(year))));
+        const filtered = applyPayFilter(orders.filter(o=>o.date?.startsWith(String(year))));
         if (!filtered.length) return toast('❗ 해당 연도 데이터가 없습니다');
         const qMap = { '1분기':{매출:0,수금:0,건수:0}, '2분기':{매출:0,수금:0,건수:0}, '3분기':{매출:0,수금:0,건수:0}, '4분기':{매출:0,수금:0,건수:0} };
         filtered.forEach(o => {
@@ -6075,7 +6077,7 @@ function exportSettlementExcel() {
     // 기본 월별
     const month = document.getElementById('settlementMonth').value;
     if (!month) return toast('❗ 정산 월을 선택하세요');
-    const filtered = applyPayFilter(orders.filter(o=>o.date.startsWith(month)));
+    const filtered = applyPayFilter(orders.filter(o=>o.date?.startsWith(month)));
     if (!filtered.length) return toast('❗ 해당 월 데이터가 없습니다');
     const rows = filtered.map(o=>({ 날짜:o.date, 거래처:o.clientName, 품목:(o.items||[]).map(i=>`${i.name}(${i.qty})`).join(','), 금액:o.total, 수금상태:o.isPaid?'완납':'미수', 수금방법:o.paidMethod==='transfer'?'계좌이체':o.paidMethod==='other'?'기타':'현금', 메모:o.note||'' }));
     const ws = XLSX.utils.json_to_sheet(rows);
@@ -7149,7 +7151,7 @@ function openMemoDetail(clientName) {
             if (range.dates) return range.dates.includes(o.date);
             return o.date >= range.start && o.date <= range.end;
         })
-        .sort((a, b) => b.date.localeCompare(a.date));
+        .sort((a, b) => (b.date||"").localeCompare(a.date||""));
 
     document.getElementById('memoDetailTitle').textContent = `📋 ${clientName}`;
     document.getElementById('memoDetailPeriodLabel').textContent = range.label;
