@@ -18,7 +18,7 @@ const FIREBASE_CONFIG = {
 
 // ─── 사용설명서 URL (GitHub raw 주소 — 직접 수정하세요) ───
 // 예: 'https://raw.githubusercontent.com/YOUR_ID/YOUR_REPO/main/manual.md'
-const MANUAL_URL = 'https://raw.githubusercontent.com/YOUR_ID/YOUR_REPO/main/manual.md';
+const MANUAL_URL = 'https://raw.githubusercontent.com/pws72580491-creator/Delivery/main/manual.md';
 
 // ─── 탭 순서 ───
 const TAB_ORDER = ['dashboard','clients','unpaid','delivery','history','stock','settlement','backup','settings'];
