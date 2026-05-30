@@ -343,6 +343,8 @@ function _clearOrderDelta()    { _dirtyOrders.clear(); _deletedOrders.clear(); }
 // _syncGuard: debouncedSync 업로드가 진행 중일 때 true
 //   → 리스너가 업로드 응답 echo를 받아 로컬 데이터를 덮어쓰는 것을 차단
 let _syncGuard = false;
+let _pendingFbSnap = null;   // _syncGuard 중 도착한 타기기 변경 스냅샷 (처리 보류)
+let _rtPollTimer   = null;   // 실시간 폴링 백업 타이머
 // _connectGuard: _doConnect의 초기 .get() 처리가 완료되기 전 true
 //   → .on() 리스너가 먼저 실행되는 레이스 컨디션 방지
 let _connectGuard = false;
@@ -374,46 +376,57 @@ function _normOrderFromFb(o) {
 
 // ─── Firebase 실시간 리스너 핸들러 (workspaceRef.on('value', ...) 공용) ───
 function _fbValueHandler(snap) {
-    const d = snap.val();
-    if (!d) return;
-    if (!_initialLoadDone) return;  // 초기 .get() 처리 전 차단
-    if (_connectGuard)     return;  // 초기 연결 중 레이스 컨디션 차단 (Problem 1)
-    if (_syncGuard)        return;  // 자체 업로드 echo 차단 (Problem 2)
-    if (d.writtenBy === SESSION_ID) return;
-    const serverUpdatedAt = d.lastUpdated ? new Date(d.lastUpdated).getTime() : 0;
-    // 로컬 변경이 서버보다 최신이면 덮어쓰기 차단
-    // ★ Problem 5 수정: lastLocalUpdated가 오래됐어도 무조건 차단하던 문제 해소
-    //   → 로컬 변경이 서버보다 최신이고, 그 차이가 30초 이내인 경우만 차단
-    //   (30초 이상 지난 로컬 기록은 이미 서버에 반영됐다고 보고 서버 우선)
-    const lastLocalMs = (() => {
-        const s = localStorage.getItem('lastLocalUpdated');
-        return s ? new Date(s).getTime() : 0;
-    })();
-    const localWriteMs = Math.max(_localWriteTime, lastLocalMs);
-    const RECENT_WINDOW_MS = 30_000; // 30초
-    if (localWriteMs > 0 && localWriteMs >= serverUpdatedAt &&
-        (Date.now() - localWriteMs) < RECENT_WINDOW_MS) return;
-    let changed = false;
-    if (d.clients) {
-        const inc = toArray(d.clients).map(_normClientFromFb);
-        const h = dataHash(inc);
-        if (h !== lastHash.clients) { clients = inc; lastHash.clients = h; changed = true; }
+    try {
+        const d = snap.val();
+        if (!d) return;
+        if (!_initialLoadDone) return;  // 초기 .get() 처리 전 차단
+        if (_connectGuard)     return;  // 초기 연결 중 레이스 컨디션 차단
+        if (d.writtenBy === SESSION_ID) return; // 자기 자신이 올린 echo 차단
+
+        // ★ _syncGuard 중 도착한 타기기 변경 → 버리지 않고 보류, 업로드 완료 후 처리
+        if (_syncGuard) { _pendingFbSnap = snap; return; }
+
+        const serverUpdatedAt = d.lastUpdated ? new Date(d.lastUpdated).getTime() : 0;
+        // 로컬 변경이 서버보다 최신이고 3초 이내인 경우만 차단 (클럭 드리프트 방어)
+        const lastLocalMs = (() => {
+            const s = localStorage.getItem('lastLocalUpdated');
+            return s ? new Date(s).getTime() : 0;
+        })();
+        const localWriteMs = Math.max(_localWriteTime, lastLocalMs);
+        const RECENT_WINDOW_MS = 3_000; // 30초 → 3초로 단축 (실시간성 향상)
+        if (localWriteMs > 0 && localWriteMs >= serverUpdatedAt &&
+            (Date.now() - localWriteMs) < RECENT_WINDOW_MS) return;
+
+        let changed = false;
+        if (d.clients) {
+            const inc = toArray(d.clients).map(_normClientFromFb);
+            const h = dataHash(inc);
+            if (h !== lastHash.clients) { clients = inc; lastHash.clients = h; changed = true; }
+        }
+        if (d.orders) {
+            const inc = toArray(d.orders).map(_normOrderFromFb);
+            const h = dataHash(inc);
+            if (h !== lastHash.orders) { orders = inc; lastHash.orders = h; changed = true; }
+        }
+        if (d.prices) {
+            const h = dataHash(d.prices);
+            if (h !== lastHash.prices) { prices = d.prices; lastHash.prices = h; }
+        }
+        if (d.stockItems) {
+            const inc = toArray(d.stockItems).map(normStock);
+            const h = dataHash(inc);
+            if (h !== lastHash.stock) { stockItems = inc; lastHash.stock = h; changed = true; }
+        }
+        if (changed) {
+            saveToLocal();
+            _fullRender();
+            setSyncStatus('online');
+            toast('🔄 다른 기기에서 변경된 내용이 반영됐습니다', 'var(--accent)', 2500);
+        }
+    } catch(e) {
+        console.error('[_fbValueHandler] 처리 중 오류:', e);
+        // 오류가 발생해도 리스너는 유지됨 — 다음 이벤트에서 재시도
     }
-    if (d.orders) {
-        const inc = toArray(d.orders).map(_normOrderFromFb);
-        const h = dataHash(inc);
-        if (h !== lastHash.orders) { orders = inc; lastHash.orders = h; changed = true; }
-    }
-    if (d.prices) {
-        const h = dataHash(d.prices);
-        if (h !== lastHash.prices) { prices = d.prices; lastHash.prices = h; }
-    }
-    if (d.stockItems) {
-        const inc = toArray(d.stockItems).map(normStock);
-        const h = dataHash(inc);
-        if (h !== lastHash.stock) { stockItems = inc; lastHash.stock = h; changed = true; }
-    }
-    if (changed) { saveToLocal(); _fullRender(); setSyncStatus('online'); }
 }
 let _localWriteTime = 0; // 로컬 변경 시각 — Firebase 리스너 경쟁 방지용
 let backupDirHandle = null;  // File System Access API 디렉토리 핸들
@@ -705,6 +718,8 @@ const debouncedSync = debounce(() => {
             _clearOrderDelta(); // 성공 시 delta 추적 초기화
             _syncGuard = false;
             setSyncStatus('online');
+            // ★ 업로드 중 보류됐던 타기기 변경 처리
+            if (_pendingFbSnap) { const s = _pendingFbSnap; _pendingFbSnap = null; _fbValueHandler(s); }
         })
         .catch(e => {
             // 실패 시 lastHash 롤백 → 다음 saveData() 때 재시도
@@ -718,6 +733,8 @@ const debouncedSync = debounce(() => {
             _syncGuard = false;
             console.error('동기화 실패:', e);
             setSyncStatus('error');
+            // ★ 업로드 실패해도 보류됐던 타기기 변경 처리
+            if (_pendingFbSnap) { const s = _pendingFbSnap; _pendingFbSnap = null; _fbValueHandler(s); }
         });
 }, 200);
 
@@ -6425,6 +6442,15 @@ function _doConnect(id, auto=false) {
             _connectGuard    = false; // ★ Problem 1: 초기 처리 완료, 리스너 차단 해제
             _initialLoadDone = true;
 
+            // ★ 실시간 폴링 백업: 15초마다 서버 확인 (이벤트 유실 대비)
+            if (_rtPollTimer) clearInterval(_rtPollTimer);
+            _rtPollTimer = setInterval(() => {
+                if (!workspaceRef || !isConnected || _syncGuard) return;
+                workspaceRef.get().then(snap => {
+                    if (snap.val()) _fbValueHandler(snap);
+                }).catch(() => {});
+            }, 15000);
+
             if (!auto) closeModal('firebaseModal');
 
         }).catch(err => {
@@ -6455,6 +6481,8 @@ function disconnectWorkspace() {
     if (workspaceRef) workspaceRef.off();
     // .info/connected 리스너 해제 (연결 해제 시 불필요한 상태 변경 차단)
     try { firebase.database().ref('.info/connected').off(); } catch(e) {}
+    // 실시간 폴링 백업 타이머 정리
+    if (_rtPollTimer) { clearInterval(_rtPollTimer); _rtPollTimer = null; }
     debouncedSync.cancel();
     workspaceRef=null; isConnected=false;
     _syncGuard=false; _connectGuard=false; // 가드 초기화

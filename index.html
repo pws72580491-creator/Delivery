@@ -608,7 +608,7 @@
                 <!-- 현재 버전 -->
                 <div class="changelog-item">
                     <span class="changelog-ver" style="color:var(--green);">v82</span>
-                    <span class="changelog-desc">Firebase 워크스페이스 데이터 삭제 기능 추가 + 동기화 오류 수정 — ① 사용하지 않는 워크스페이스 ID 입력 후 Firebase 데이터 완전 삭제 ② 현재 연결된 워크스페이스 삭제 버튼(온라인 상태일 때만 표시) ③ 삭제 시 이중 확인 다이얼로그 적용 ④ 삭제 후 자동 연결 해제 ⑤ 버전 표기 전체 통일(제목·로고·앱 정보·캐시·백업) ⑥ 【버그수정】Firebase 연결 시 date 필드 누락 전표로 인한 "Cannot read properties of undefined (reading 'startsWith')" 크래시 수정 — _normOrderFromFb에서 date 기본값 보장, 전체 date?.startsWith() 옵셔널 체이닝 + localeCompare 방어 처리(8곳)</span>
+                    <span class="changelog-desc">Firebase 워크스페이스 데이터 삭제 + 실시간 동기화 개선 + 동기화 오류 수정 — ① 사용하지 않는 워크스페이스 ID 입력 후 Firebase 데이터 완전 삭제 ② 현재 연결된 워크스페이스 삭제 버튼(온라인 상태일 때만 표시) ③ 삭제 시 이중 확인 다이얼로그 적용 ④ 삭제 후 자동 연결 해제 ⑤ 버전 표기 전체 통일 ⑥ 【실시간 동기화】_syncGuard 중 도착한 타기기 변경 보류→완료 후 처리(기존: 데이터 버림) ⑦ _fbValueHandler try/catch 추가로 오류 시 리스너 유지 ⑧ 차단 윈도우 30초→3초 단축 ⑨ 15초 폴링 백업으로 이벤트 유실 대비 ⑩ 타기기 변경 반영 시 토스트 알림 ⑪ 【버그수정】date 필드 누락 전표 startsWith 크래시 수정</span>
                 </div>
                 <!-- 이전 이력 토글 버튼 -->
                 <button id="changelogToggleBtn" onclick="toggleOldChangelog()" style="display:flex;align-items:center;justify-content:center;gap:5px;width:100%;padding:7px 12px;margin-top:2px;background:var(--surf3);border:1px solid var(--border);border-radius:var(--radius-s);color:var(--text2);font-size:11px;font-weight:700;cursor:pointer;transition:all .15s;letter-spacing:.3px;">
