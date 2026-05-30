@@ -18,7 +18,7 @@ const FIREBASE_CONFIG = {
 
 // ─── 사용설명서 URL (GitHub raw 주소 — 직접 수정하세요) ───
 // 예: 'https://raw.githubusercontent.com/YOUR_ID/YOUR_REPO/main/manual.md'
-const MANUAL_URL = 'https://raw.githubusercontent.com/pws72580491-creator/Delivery/main/manual.md';
+const MANUAL_URL = 'https://raw.githubusercontent.com/YOUR_ID/YOUR_REPO/main/manual.md';
 
 // ─── 탭 순서 ───
 const TAB_ORDER = ['dashboard','clients','unpaid','delivery','history','stock','settlement','backup','settings'];
@@ -6685,9 +6685,7 @@ async function openManual() {
 
     // 현재 버전 주입
     const curVer = document.querySelector('.changelog-ver[style*="green"]')?.textContent || 'v82';
-    raw = raw.replace('납품 관리 Pro — 사용설명서', `납품 관리 Pro — 사용설명서  \n<span style="font-size:12px;color:var(--text3);">현재 버전: ${curVer}</span>`);
-
-    const html = _md2html(raw);
+    const html = _md2html(raw).replace('납품 관리 Pro — 사용설명서', `납품 관리 Pro — 사용설명서 <span style="font-size:12px;color:var(--text3);">현재 버전: ${curVer}</span>`);
     content.innerHTML = `<div class="manual-body">${html}</div>`;
 
     // 목차 자동 생성
