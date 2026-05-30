@@ -700,7 +700,7 @@ const debouncedSync = debounce(() => {
         changed = true;
     }
     if (ph !== lastHash.prices)  { updates.prices     = prices;     changed = true; }
-    if (sh !== lastHash.stock)   { updates.stockItems = stockItems; changed = true; }
+    if (sh !== lastHash.stock)   { updates.stockItems = _getLightStock(); changed = true; }
     if (!changed) return;
     // writtenBy를 데이터와 함께 업로드 — 리스너가 자기 업데이트를 정확히 무시하도록
     updates.lastUpdated = new Date().toISOString();
@@ -741,6 +741,35 @@ const debouncedSync = debounce(() => {
             if (_pendingFbSnap) { const s = _pendingFbSnap; _pendingFbSnap = null; _fbValueHandler(s); }
         });
 }, 200);
+
+// ─── settlement / stock / unpaid 탭 조건부 즉시 렌더 헬퍼 ───
+// 각 함수에서 반복되던 동일 패턴을 하나로 통합
+function _refreshSettlementIfActive() {
+    _markDirty('settlement');
+    if (document.getElementById('pane-settlement')?.classList.contains('active')) {
+        _dirty['settlement'] = false;
+        if (settleUnit === 'monthly')   renderSettlement();
+        if (settleUnit === 'daily')     renderSettlementDaily();
+        if (settleUnit === 'quarterly') renderSettlementQuarterly();
+    }
+}
+function _refreshStockIfActive() {
+    _markDirty('stock');
+    if (document.getElementById('pane-stock')?.classList.contains('active')) {
+        renderStock(); _dirty['stock'] = false;
+    }
+}
+function _refreshUnpaidIfActive() {
+    _refreshUnpaidIfActive();
+}
+
+// ─── 메모 즉시 동기화 헬퍼 (메모 저장/삭제 공통 패턴) ───
+function _saveAndFlush() {
+    saveData();
+    debouncedSync.cancel();
+    _flushSync();
+    saveToLocal();
+}
 
 function saveData() {
     invalidateOrdersCache();
@@ -1104,7 +1133,7 @@ function updateNavBadges() {
         }
     }
     // _markDirty unpaid (데이터 변경 시 미수 탭 갱신)
-    if (unpaidCount >= 0) _markDirty('unpaid');
+    _markDirty('unpaid'); // 미수 현황 변경 시 항상 갱신
 }
 
 // ╔══════════════════════════════════════════════════════════════╗
@@ -1163,11 +1192,7 @@ function saveClient() {
     }
     cancelClientEdit();
     saveData(); renderClients(); renderOrders(); updateInfoCounts(); renderDashboard(); updateNavBadges();
-    _markDirty('settlement'); if (document.getElementById('pane-settlement')?.classList.contains('active')) { _dirty['settlement'] = false;
-        if (settleUnit==='monthly')   renderSettlement();
-        if (settleUnit==='daily')     renderSettlementDaily();
-        if (settleUnit==='quarterly') renderSettlementQuarterly();
-    }
+    _refreshSettlementIfActive();
 }
 
 function cancelClientEdit() {
@@ -1520,7 +1545,7 @@ function recalcStockFromOrders(silent = false) {
         } else {
             saveData();
             _markDirty('stock');
-            if (document.getElementById('pane-stock')?.classList.contains('active')) renderStock();
+            _refreshStockIfActive();
             toast(`🔄 재고 재계산 완료 — ${fixedCount}건 출고 반영`, 'var(--green)');
         }
     }
@@ -1927,13 +1952,9 @@ async function submitOrder() {
     renderTempGroups(); saveData(); updateInfoCounts(); updateNavBadges();
     renderDashboard();
     updateItemDatalist('');
-    _markDirty('settlement'); if (document.getElementById('pane-settlement')?.classList.contains('active')) { _dirty['settlement'] = false;
-        if (settleUnit==='monthly')   renderSettlement();
-        if (settleUnit==='daily')     renderSettlementDaily();
-        if (settleUnit==='quarterly') renderSettlementQuarterly();
-    }
-    _markDirty('stock'); if (document.getElementById('pane-stock')?.classList.contains('active')) { renderStock(); _dirty['stock'] = false; }
-    if (document.getElementById('pane-unpaid')?.classList.contains('active')) renderUnpaid();
+    _refreshSettlementIfActive();
+    _refreshStockIfActive();
+    _refreshUnpaidIfActive();
     // 납품 확정 후: 내역 탭 전환 → 거래명세서 자동 오픈
     setTimeout(() => {
         showTab('history');
@@ -2286,12 +2307,8 @@ async function togglePaid(id) {
         delete o.paidAt; delete o.paidNote; delete o.paidMethod; delete o.discount; delete o.paidMethodDetail;
         _markDirtyOrder(id); // delta sync 마킹
         saveData(); renderOrders(); renderDashboard(); updateInfoCounts(); updateNavBadges();
-        if (document.getElementById('pane-unpaid')?.classList.contains('active')) renderUnpaid();
-        _markDirty('settlement'); if (document.getElementById('pane-settlement')?.classList.contains('active')) { _dirty['settlement'] = false;
-            if (settleUnit==='monthly')   renderSettlement();
-            if (settleUnit==='daily')     renderSettlementDaily();
-            if (settleUnit==='quarterly') renderSettlementQuarterly();
-        }
+        _refreshUnpaidIfActive();
+        _refreshSettlementIfActive();
         toast('🔴 미수로 변경');
     } else {
         openQuickPay(id);
@@ -2364,7 +2381,7 @@ function confirmQuickPayDiscount(method) {
     _markDirtyOrder(orderId); // delta sync 마킹
     closeQuickPay(true);
     saveData(); renderOrders(); renderDashboard(); updateInfoCounts(); updateNavBadges();
-    if (document.getElementById('pane-unpaid')?.classList.contains('active')) renderUnpaid();
+    _refreshUnpaidIfActive();
     _markDirty('settlement');
     if (document.getElementById('pane-settlement')?.classList.contains('active')) {
         _dirty['settlement'] = false;
@@ -2414,12 +2431,8 @@ function confirmQuickPay(method) {
     _markDirtyOrder(orderId); // delta sync 마킹
     closeQuickPay(true);
     saveData(); renderOrders(); renderDashboard(); updateInfoCounts(); updateNavBadges();
-    if (document.getElementById('pane-unpaid')?.classList.contains('active')) renderUnpaid();
-    _markDirty('settlement'); if (document.getElementById('pane-settlement')?.classList.contains('active')) { _dirty['settlement'] = false;
-        if (settleUnit==='monthly')   renderSettlement();
-        if (settleUnit==='daily')     renderSettlementDaily();
-        if (settleUnit==='quarterly') renderSettlementQuarterly();
-    }
+    _refreshUnpaidIfActive();
+    _refreshSettlementIfActive();
     const icon = method === 'transfer' ? '🏦' : '💵';
     toast(icon + ' ' + (method === 'transfer' ? '계좌이체' : '현금') + ' 완납 처리', 'var(--green)');
 }
@@ -2430,12 +2443,8 @@ function toggleVoidOrder(id) {
     o.isVoid = !o.isVoid;
     _markDirtyOrder(id); // delta sync 마킹
     saveData(); renderOrders(); renderDashboard(); updateInfoCounts(); updateNavBadges();
-    if (document.getElementById('pane-unpaid')?.classList.contains('active')) renderUnpaid();
-    _markDirty('settlement'); if (document.getElementById('pane-settlement')?.classList.contains('active')) { _dirty['settlement'] = false;
-        if (settleUnit==='monthly')   renderSettlement();
-        if (settleUnit==='daily')     renderSettlementDaily();
-        if (settleUnit==='quarterly') renderSettlementQuarterly();
-    }
+    _refreshUnpaidIfActive();
+    _refreshSettlementIfActive();
     toast(o.isVoid ? '👤 타인거래로 변경 — 재고 차감 미반영' : '↩ 내 거래로 변경 — 재고는 수동 확인 필요', o.isVoid ? 'var(--orange)' : 'var(--green)');
 }
 
@@ -2477,13 +2486,9 @@ async function deleteOrder(id) {
     orders = orders.filter(o=>o.id!==id);
     _markDeletedOrder(id); // delta sync 마킹
     saveData(); renderOrders(); updateInfoCounts(); renderDashboard(); updateNavBadges();
-    if (document.getElementById('pane-unpaid')?.classList.contains('active')) renderUnpaid();
-    _markDirty('stock'); if (document.getElementById('pane-stock')?.classList.contains('active')) { renderStock(); _dirty['stock'] = false; }
-    _markDirty('settlement'); if (document.getElementById('pane-settlement')?.classList.contains('active')) { _dirty['settlement'] = false;
-        if (settleUnit==='monthly')   renderSettlement();
-        if (settleUnit==='daily')     renderSettlementDaily();
-        if (settleUnit==='quarterly') renderSettlementQuarterly();
-    }
+    _refreshUnpaidIfActive();
+    _refreshStockIfActive();
+    _refreshSettlementIfActive();
     toast('🗑️ 전표 삭제 완료');
 }
 
@@ -2562,11 +2567,7 @@ function saveClientEditFromHistory() {
     renderClients();
     renderDashboard();
     updateNavBadges();
-    _markDirty('settlement'); if (document.getElementById('pane-settlement')?.classList.contains('active')) { _dirty['settlement'] = false;
-        if (settleUnit==='monthly')   renderSettlement();
-        if (settleUnit==='daily')     renderSettlementDaily();
-        if (settleUnit==='quarterly') renderSettlementQuarterly();
-    }
+    _refreshSettlementIfActive();
     closeModal('clientEditModal');
     if (!newName) toast('✅ 거래처 정보가 수정되었습니다', 'var(--green)');
 }
@@ -2593,6 +2594,8 @@ function _applyOeditVoidUI(isVoid) {
     const sw   = document.getElementById('oeditVoidSwitch');
     const knob = document.getElementById('oeditVoidKnob');
     if (!sw || !knob) return;
+    // data-void 속성으로 상태 관리 (DOM 스타일 비교 취약점 제거)
+    sw.dataset.void = isVoid ? '1' : '0';
     if (isVoid) {
         sw.style.background   = 'rgba(245,166,35,0.25)';
         sw.style.borderColor  = 'rgba(245,166,35,0.6)';
@@ -2612,7 +2615,7 @@ function toggleOeditVoid() {
     if (!sw) return;
     // 현재 ON 여부: knob이 오른쪽으로 이동해 있으면 ON
     const knob = document.getElementById('oeditVoidKnob');
-    const isCurrentlyVoid = knob.style.transform === 'translateX(20px)';
+    const isCurrentlyVoid = sw.dataset.void === '1';
     _applyOeditVoidUI(!isCurrentlyVoid);
 }
 
@@ -2747,8 +2750,8 @@ function saveOrderEdit() {
     o.updatedAt = new Date().toISOString();
     _markDirtyOrder(o.id); // delta sync 마킹
     // ③ 타인거래 토글 반영
-    const knob = document.getElementById('oeditVoidKnob');
-    const newIsVoid = knob ? knob.style.transform === 'translateX(20px)' : !!o.isVoid;
+    const oeditSw = document.getElementById('oeditVoidSwitch');
+    const newIsVoid = oeditSw ? oeditSw.dataset.void === '1' : !!o.isVoid;
     const wasVoid = !!o.isVoid;
     o.isVoid = newIsVoid;
     // 타인거래 → 내거래 전환 시 자동 재고 차감 보정 (위 품목 차이 보정과 별도로 처리됨)
@@ -2787,13 +2790,9 @@ function saveOrderEdit() {
     updateInfoCounts();
     updateNavBadges();
     updateItemDatalist(o.clientId || '');
-    if (document.getElementById('pane-unpaid')?.classList.contains('active')) renderUnpaid();
-    _markDirty('stock'); if (document.getElementById('pane-stock')?.classList.contains('active')) { renderStock(); _dirty['stock'] = false; }
-    _markDirty('settlement'); if (document.getElementById('pane-settlement')?.classList.contains('active')) { _dirty['settlement'] = false;
-        if (settleUnit==='monthly')   renderSettlement();
-        if (settleUnit==='daily')     renderSettlementDaily();
-        if (settleUnit==='quarterly') renderSettlementQuarterly();
-    }
+    _refreshUnpaidIfActive();
+    _refreshStockIfActive();
+    _refreshSettlementIfActive();
     // 명세표가 열려 있으면 자동 갱신
     if (document.getElementById('statementModal')?.classList.contains('open')) {
         showClientStatement(o.clientName, o.date.slice(0, 7));
@@ -3946,7 +3945,7 @@ async function confirmPartialPayDiscount() {
     saveData();
     closeModal('partialPayModal');
     renderOrders(); renderDashboard(); updateInfoCounts(); updateNavBadges();
-    if (document.getElementById('pane-unpaid')?.classList.contains('active')) renderUnpaid();
+    _refreshUnpaidIfActive();
     _markDirty('settlement');
     if (document.getElementById('pane-settlement')?.classList.contains('active')) {
         _dirty['settlement'] = false;
@@ -4007,7 +4006,7 @@ async function confirmPartialPay() {
         }
         saveData(); closeModal('partialPayModal');
         renderOrders(); renderDashboard(); updateInfoCounts(); updateNavBadges();
-        if (document.getElementById('pane-unpaid')?.classList.contains('active')) renderUnpaid();
+        _refreshUnpaidIfActive();
         _markDirty('settlement');
         if (document.getElementById('pane-settlement')?.classList.contains('active')) {
             _dirty['settlement'] = false;
@@ -4066,7 +4065,7 @@ async function confirmPartialPay() {
     saveData();
     closeModal('partialPayModal');
     renderOrders(); renderDashboard(); updateInfoCounts(); updateNavBadges();
-    if (document.getElementById('pane-unpaid')?.classList.contains('active')) renderUnpaid();
+    _refreshUnpaidIfActive();
     _markDirty('settlement'); if (document.getElementById('pane-settlement')?.classList.contains('active')) { _dirty['settlement'] = false;
         if (settleUnit === 'monthly')   renderSettlement();
         if (settleUnit === 'daily')     renderSettlementDaily();
@@ -4163,7 +4162,7 @@ function confirmPayEdit() {
     closeModal('payEditModal');
     showClientStatement(clientName, month);
     renderOrders(); renderDashboard(); updateInfoCounts(); updateNavBadges();
-    if (document.getElementById('pane-unpaid')?.classList.contains('active')) renderUnpaid();
+    _refreshUnpaidIfActive();
     _markDirty('settlement');
     if (document.getElementById('pane-settlement')?.classList.contains('active')) {
         _dirty['settlement'] = false;
@@ -4216,12 +4215,8 @@ function _doBulkPay(selectedMethod) {
     saveData();
     showClientStatement(clientName, month);
     renderOrders(); renderDashboard(); updateInfoCounts(); updateNavBadges();
-    if (document.getElementById('pane-unpaid')?.classList.contains('active')) renderUnpaid();
-    _markDirty('settlement'); if (document.getElementById('pane-settlement')?.classList.contains('active')) { _dirty['settlement'] = false;
-        if (settleUnit==='monthly')   renderSettlement();
-        if (settleUnit==='daily')     renderSettlementDaily();
-        if (settleUnit==='quarterly') renderSettlementQuarterly();
-    }
+    _refreshUnpaidIfActive();
+    _refreshSettlementIfActive();
     toast(`💚 ${unpaidList.length}건 완납 처리 완료 · ${_methodLabel(selectedMethod)}`, 'var(--green)');
 }
 
@@ -6561,7 +6556,7 @@ async function deleteCurrentWorkspaceData() {
 }
 
 // ╔══════════════════════════════════════════════════════════════╗
-// ║  § 14  사용설명서                                                   ║
+// ║  § 16  사용설명서                                                   ║
 // ╚══════════════════════════════════════════════════════════════╝
 
 // ─── 경량 Markdown → HTML 렌더러 ───
@@ -6685,15 +6680,49 @@ async function openManual() {
 
     // 현재 버전 주입
     const curVer = document.querySelector('.changelog-ver[style*="green"]')?.textContent || 'v82';
-    const html = _md2html(raw).replace('납품 관리 Pro — 사용설명서', `납품 관리 Pro — 사용설명서 <span style="font-size:12px;color:var(--text3);">현재 버전: ${curVer}</span>`);
+    raw = raw.replace('납품 관리 Pro — 사용설명서', `납품 관리 Pro — 사용설명서  \n<span style="font-size:12px;color:var(--text3);">현재 버전: ${curVer}</span>`);
+
+    const html = _md2html(raw);
     content.innerHTML = `<div class="manual-body">${html}</div>`;
 
-    // 목차 자동 생성
+    // ★ PWA 재실행 방지: 앵커 클릭 가로채기 → scrollIntoView로 교체
+    content.addEventListener('click', e => {
+        const a = e.target.closest('a');
+        if (!a) return;
+        const href = a.getAttribute('href');
+        if (!href || !href.startsWith('#')) return;
+        e.preventDefault();
+        e.stopPropagation();
+
+        const id = href.slice(1); // '#시작하기' → '시작하기'
+
+        // 1순위: 동적으로 부여된 mh-N id로 직접 탐색
+        let target = document.getElementById(id);
+
+        // 2순위: 헤딩 텍스트와 매칭 (한글 앵커)
+        if (!target) {
+            const normalize = s => s.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^\w가-힣-]/g, '');
+            const needle = normalize(id);
+            target = [...content.querySelectorAll('h1,h2,h3,h4,h5,h6')]
+                .find(h => h.dataset.slug === needle ||
+                           normalize(h.textContent) === needle ||
+                           normalize(h.textContent) === id.replace(/-/g, ' '));
+        }
+
+        if (target) {
+            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+    }, true); // capture phase — a 태그보다 먼저 처리
+
+    // 목차 자동 생성 + 헤딩에 한글 슬러그 id 부여
     const headings = content.querySelectorAll('h2, h3');
     if (headings.length) {
+        const normalize = s => s.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^\w가-힣-]/g, '');
         let tocHtml = '<div style="font-size:11px;font-weight:700;color:var(--text2);letter-spacing:.5px;margin-bottom:8px;">목차</div>';
         headings.forEach((h, idx) => {
             h.id = 'mh-' + idx;
+            // 한글 앵커 id도 data 속성으로 추가 (클릭 매칭용)
+            h.dataset.slug = normalize(h.textContent);
             const indent = h.tagName === 'H3' ? 'padding-left:12px;font-size:12px;color:var(--text3);' : 'font-size:13px;font-weight:700;';
             tocHtml += `<div style="${indent}margin:4px 0;cursor:pointer;" onclick="document.getElementById('mh-${idx}').scrollIntoView({behavior:'smooth'})">${h.textContent.trim()}</div>`;
         });
@@ -6709,7 +6738,7 @@ function closeManual() {
 }
 
 // ╔══════════════════════════════════════════════════════════════╗
-// ║  § 15  앱 초기화 (DOMContentLoaded)                               ║
+// ║  § 17  앱 초기화 (DOMContentLoaded)                               ║
 // ╚══════════════════════════════════════════════════════════════╝
 
 // ─── 시스템 다크모드 자동 감지 ───
@@ -6899,14 +6928,18 @@ function toggleOldChangelog() {
     const icon  = document.getElementById('changelogToggleIcon');
     const label = document.getElementById('changelogToggleLabel');
     const isOpen = items.style.display === 'flex';
+    // 첫 번째 이전 이력 버전명을 DOM에서 동적으로 읽어 레이블 구성
+    const firstOldVer = items.querySelector('.changelog-ver')?.textContent?.trim() || '';
+    const lastOldVer  = [...items.querySelectorAll('.changelog-ver')].pop()?.textContent?.trim() || '';
+    const rangeLabel  = firstOldVer && lastOldVer ? `(${firstOldVer} ~ ${lastOldVer})` : '';
     if (isOpen) {
         items.style.display = 'none';
         icon.textContent  = '▼';
-        label.textContent = '이전 이력 보기 (v46 ~ v24_4-3-3)';
+        label.textContent = `이전 이력 보기 ${rangeLabel}`;
     } else {
         items.style.display = 'flex';
         icon.textContent  = '▲';
-        label.textContent = '이전 이력 접기 (v46 ~ v24_4-3-3)';
+        label.textContent = `이전 이력 접기 ${rangeLabel}`;
     }
 }
 
@@ -7056,10 +7089,9 @@ window.addEventListener('DOMContentLoaded', () => {
         document.getElementById('workspaceId').value = savedWs;
     }
     applyWsLockUI(); // 잠금 여부와 무관하게 항상 UI 동기화
-    // 자동 재연결: savedWs가 없어도 wsLocked=1이면 재시도
-    const wsToConnect = savedWs || (isLocked ? localStorage.getItem('workspaceId') : null);
-    if (wsToConnect) {
-        waitFirebase(() => _doConnect(wsToConnect, true));
+    // 자동 재연결: workspaceId가 저장돼 있으면 연결 시도
+    if (savedWs) {
+        waitFirebase(() => _doConnect(savedWs, true));
     }
     // 자동 백업 체크
     setTimeout(checkAutoBackup, 2000);
@@ -7199,8 +7231,7 @@ let _memoDetailClient = '';    // 상세 팝업에 표시 중인 거래처명
 function openMemoView() {
     _memoViewOffset = 0;
     document.getElementById('memoViewPopup').classList.add('open');
-    history.pushState({ modalOpen: true }, '');
-    _modalHistoryPushed = true;
+    if (!_modalHistoryPushed) { history.pushState({ modalOpen: true }, ''); _modalHistoryPushed = true; }
     renderMemoView();
 }
 function closeMemoView() {
@@ -7276,10 +7307,7 @@ async function deleteAllMemoInView() {
     if (!await customConfirm(`📋 현재 기간의 메모 ${targets.length}건을 모두 삭제할까요?\n\n대상: ${clientNames}`)) return;
     const now = new Date().toISOString();
     targets.forEach(o => { o.note = ''; o.updatedAt = now; });
-    saveData();
-    if (debouncedSync.cancel) debouncedSync.cancel();
-    _flushSync();
-    saveToLocal();
+    _saveAndFlush();
     renderMemoView();
     renderOrders();
     toast(`🗑️ 메모 ${targets.length}건 삭제됨`, 'var(--text3)');
@@ -7352,8 +7380,7 @@ function openMemoDetail(clientName) {
         : `<div style="text-align:center;padding:36px 0;color:var(--text3);font-size:14px;">📭 메모가 없습니다</div>`;
 
     document.getElementById('memoDetailPopup').classList.add('open');
-    history.pushState({ modalOpen: true }, '');
-    _modalHistoryPushed = true;
+    if (!_modalHistoryPushed) { history.pushState({ modalOpen: true }, ''); _modalHistoryPushed = true; }
 }
 
 async function deletePrevMemo(orderId) {
@@ -7362,10 +7389,7 @@ async function deletePrevMemo(orderId) {
     if (!await customConfirm(`📅 ${o.date} 이전 메모를 삭제할까요?\n\n"${o.note}"`)) return;
     o.note = '';
     o.updatedAt = new Date().toISOString();
-    saveData();
-    if (debouncedSync.cancel) debouncedSync.cancel();
-    _flushSync();
-    saveToLocal();
+    _saveAndFlush();
     renderOrders();
     toast('🗑️ 이전 메모 삭제됨', 'var(--text3)');
 }
@@ -7377,10 +7401,7 @@ async function deleteMemoById(orderId) {
 
     o.note = '';
     o.updatedAt = new Date().toISOString();
-    saveData();
-    if (debouncedSync.cancel) debouncedSync.cancel();
-    _flushSync();
-    saveToLocal();
+    _saveAndFlush();
     toast('🗑️ 메모 삭제됨', 'var(--text3)');
 
     // 현재 항목 제거 (애니메이션)
@@ -7435,10 +7456,7 @@ function saveMemoPopup() {
     const text = document.getElementById('memoTextarea').value.trim();
     o.note = text;
     o.updatedAt = new Date().toISOString();
-    saveData();
-    if (debouncedSync.cancel) debouncedSync.cancel();
-    _flushSync();
-    saveToLocal();
+    _saveAndFlush();
     closeMemoPopup();
     renderOrders();
     toast(text ? '📝 메모 저장됨' : '🗑️ 메모 삭제됨', 'var(--accent)');
@@ -7504,7 +7522,7 @@ function _flushSync() {
         changed = true;
     }
     if (ph !== lastHash.prices)  { updates.prices     = prices;     changed = true; }
-    if (sh !== lastHash.stock)   { updates.stockItems = stockItems; changed = true; }
+    if (sh !== lastHash.stock)   { updates.stockItems = _getLightStock(); changed = true; }
     if (!changed) return;
     updates.lastUpdated = new Date().toISOString();
     updates.writtenBy   = SESSION_ID;

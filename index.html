@@ -612,7 +612,7 @@
                 <!-- 현재 버전 -->
                 <div class="changelog-item">
                     <span class="changelog-ver" style="color:var(--green);">v82</span>
-                    <span class="changelog-desc">Firebase 워크스페이스 데이터 삭제 + 실시간 동기화 개선 + 동기화 오류 수정 — ① 사용하지 않는 워크스페이스 ID 입력 후 Firebase 데이터 완전 삭제 ② 현재 연결된 워크스페이스 삭제 버튼(온라인 상태일 때만 표시) ③ 삭제 시 이중 확인 다이얼로그 적용 ④ 삭제 후 자동 연결 해제 ⑤ 버전 표기 전체 통일 ⑥ 【실시간 동기화】_syncGuard 중 도착한 타기기 변경 보류→완료 후 처리(기존: 데이터 버림) ⑦ _fbValueHandler try/catch 추가로 오류 시 리스너 유지 ⑧ 차단 윈도우 30초→3초 단축 ⑨ 15초 폴링 백업으로 이벤트 유실 대비 ⑩ 타기기 변경 반영 시 토스트 알림 ⑪ 【버그수정】date 필드 누락 전표 startsWith 크래시 수정</span>
+                    <span class="changelog-desc">Firebase 워크스페이스 데이터 삭제 + 실시간 동기화 개선 + 코드 전수 점검 — ① 사용하지 않는 워크스페이스 ID 삭제 기능 ② 실시간 동기화 개선(보류 스냅샷 처리·try/catch·3초 윈도우·15초 폴링) ③ date 필드 누락 전표 startsWith 크래시 수정 ④ 목차 앵커 링크 PWA 재실행 버그 수정 ⑤ toggleOldChangelog 레이블 하드코딩→동적화 ⑥ §번호 중복 정리(§14 Firebase, §16 사용설명서, §17 초기화) ⑦ wsToConnect 중복 로직 제거 ⑧ stockItems Firebase 업로드 시 _getLightStock() 적용(log 불필요 업로드 제거) ⑨ isVoid 상태 DOM 스타일 비교→data-void 속성으로 안전화 ⑩ 메모 팝업 pushState 이중 적재 방지 ⑪ settlement·stock·unpaid 조건부 렌더 헬퍼 추출(28곳 중복 제거) ⑫ 메모 _saveAndFlush() 헬퍼 추출(4곳)</span>
                 </div>
                 <!-- 이전 이력 토글 버튼 -->
                 <button id="changelogToggleBtn" onclick="toggleOldChangelog()" style="display:flex;align-items:center;justify-content:center;gap:5px;width:100%;padding:7px 12px;margin-top:2px;background:var(--surf3);border:1px solid var(--border);border-radius:var(--radius-s);color:var(--text2);font-size:11px;font-weight:700;cursor:pointer;transition:all .15s;letter-spacing:.3px;">
