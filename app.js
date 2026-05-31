@@ -760,7 +760,7 @@ function _refreshStockIfActive() {
     }
 }
 function _refreshUnpaidIfActive() {
-    _refreshUnpaidIfActive();
+    if (document.getElementById('pane-unpaid')?.classList.contains('active')) renderUnpaid();
 }
 
 // ─── 메모 즉시 동기화 헬퍼 (메모 저장/삭제 공통 패턴) ───
@@ -1132,8 +1132,6 @@ function updateNavBadges() {
             badgeEl.style.display = 'none';
         }
     }
-    // _markDirty unpaid (데이터 변경 시 미수 탭 갱신)
-    _markDirty('unpaid'); // 미수 현황 변경 시 항상 갱신
 }
 
 // ╔══════════════════════════════════════════════════════════════╗
@@ -2382,13 +2380,7 @@ function confirmQuickPayDiscount(method) {
     closeQuickPay(true);
     saveData(); renderOrders(); renderDashboard(); updateInfoCounts(); updateNavBadges();
     _refreshUnpaidIfActive();
-    _markDirty('settlement');
-    if (document.getElementById('pane-settlement')?.classList.contains('active')) {
-        _dirty['settlement'] = false;
-        if (settleUnit==='monthly')   renderSettlement();
-        if (settleUnit==='daily')     renderSettlementDaily();
-        if (settleUnit==='quarterly') renderSettlementQuarterly();
-    }
+    _refreshSettlementIfActive();
     const icon = method === 'transfer' ? '🏦' : '💵';
     const msg  = discount > 0
         ? `${icon} 할인 완납 (할인 ${fmt(discount)}원)`
@@ -2858,9 +2850,7 @@ function setSettleUnit(btn) {
         if (sb) sb.textContent = settleListVisible ? '숨기기' : '보이기';
     }
     // 렌더
-    if (settleUnit==='monthly')   renderSettlement();
-    if (settleUnit==='daily')     renderSettlementDaily();
-    if (settleUnit==='quarterly') renderSettlementQuarterly();
+    _refreshSettlementIfActive();
 }
 
 function setSettlePeriod(btn) {
@@ -2911,9 +2901,7 @@ function setSettleFilter(f, btn) {
     settleFilter = f;
     document.querySelectorAll('#settlePayFilter .chip').forEach(b=>b.classList.remove('active'));
     if (btn) btn.classList.add('active');
-    if (settleUnit==='monthly')   renderSettlement();
-    if (settleUnit==='daily')     renderSettlementDaily();
-    if (settleUnit==='quarterly') renderSettlementQuarterly();
+    _refreshSettlementIfActive();
 }
 
 // ── 공통 필터 적용 ──
@@ -3946,13 +3934,7 @@ async function confirmPartialPayDiscount() {
     closeModal('partialPayModal');
     renderOrders(); renderDashboard(); updateInfoCounts(); updateNavBadges();
     _refreshUnpaidIfActive();
-    _markDirty('settlement');
-    if (document.getElementById('pane-settlement')?.classList.contains('active')) {
-        _dirty['settlement'] = false;
-        if (settleUnit === 'monthly')   renderSettlement();
-        if (settleUnit === 'daily')     renderSettlementDaily();
-        if (settleUnit === 'quarterly') renderSettlementQuarterly();
-    }
+    _refreshSettlementIfActive();
     showClientStatement(clientName, month);
     const discount = total - amount;
     toast(`✂️ 할인 완납 처리 (할인 ${fmt(discount)}원)`, 'var(--green)');
@@ -4007,13 +3989,7 @@ async function confirmPartialPay() {
         saveData(); closeModal('partialPayModal');
         renderOrders(); renderDashboard(); updateInfoCounts(); updateNavBadges();
         _refreshUnpaidIfActive();
-        _markDirty('settlement');
-        if (document.getElementById('pane-settlement')?.classList.contains('active')) {
-            _dirty['settlement'] = false;
-            if (settleUnit==='monthly') renderSettlement();
-            if (settleUnit==='daily') renderSettlementDaily();
-            if (settleUnit==='quarterly') renderSettlementQuarterly();
-        }
+        _refreshSettlementIfActive();
         showClientStatement(clientName, month);
         toast(`💳 혼합 완납 (🏦${fmt(transferAmt)}원 + 💵${fmt(cashAmt)}원)`, 'var(--green)');
         return;
@@ -4066,11 +4042,7 @@ async function confirmPartialPay() {
     closeModal('partialPayModal');
     renderOrders(); renderDashboard(); updateInfoCounts(); updateNavBadges();
     _refreshUnpaidIfActive();
-    _markDirty('settlement'); if (document.getElementById('pane-settlement')?.classList.contains('active')) { _dirty['settlement'] = false;
-        if (settleUnit === 'monthly')   renderSettlement();
-        if (settleUnit === 'daily')     renderSettlementDaily();
-        if (settleUnit === 'quarterly') renderSettlementQuarterly();
-    }
+    _refreshSettlementIfActive();
     showClientStatement(clientName, month);
 
     const methodLbl = _methodLabel(method);
@@ -4163,13 +4135,7 @@ function confirmPayEdit() {
     showClientStatement(clientName, month);
     renderOrders(); renderDashboard(); updateInfoCounts(); updateNavBadges();
     _refreshUnpaidIfActive();
-    _markDirty('settlement');
-    if (document.getElementById('pane-settlement')?.classList.contains('active')) {
-        _dirty['settlement'] = false;
-        if (settleUnit === 'monthly')   renderSettlement();
-        if (settleUnit === 'daily')     renderSettlementDaily();
-        if (settleUnit === 'quarterly') renderSettlementQuarterly();
-    }
+    _refreshSettlementIfActive();
 }
 
 async function confirmPayEditCancel() {
