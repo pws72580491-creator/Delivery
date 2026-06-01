@@ -222,11 +222,13 @@ function matchSearch(target, q) {
     const t = target.toLowerCase(), query = q.toLowerCase();
     // 일반 문자열 포함 검색
     if (t.includes(query)) return true;
-    // 초성 혼합검색: query와 target 모두 초성 변환 후 비교
-    // 'ㄱㅊ', '김ㅊ', '김치' 모두 매칭 가능
-    const tCho = extractChosung(target);
-    const qCho = extractChosung(q);
-    if (tCho.includes(qCho)) return true;
+    // 초성 검색: 쿼리가 순수 자음(초성)으로만 이루어진 경우에만 적용
+    // 예) 'ㅂㄹ' → 초성 검색 O / '벨렘' → 일반 검색만 O (초성 혼합 방지)
+    const isChoOnly = /^[ㄱ-ㅎ]+$/.test(q);
+    if (isChoOnly) {
+        const tCho = extractChosung(target);
+        if (tCho.includes(q)) return true;
+    }
     return false;
 }
 
@@ -3797,7 +3799,7 @@ function openPartialPay(clientName, month) {
 
     document.getElementById('ppQuickBtns').innerHTML = btns.slice(0, 5).map(b =>
         '<button type="button" class="chip" style="font-size:11px;padding:5px 10px;"' +
-        ' onclick="document.getElementById(\'ppAmount\').value=' + b.val + ';previewPartialPay()">' +
+        ' onclick="_setMoneyVal(\'ppAmount\',' + b.val + ');previewPartialPay()">' +
         b.label + '</button>'
     ).join('');
 
