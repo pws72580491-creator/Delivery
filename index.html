@@ -11,7 +11,7 @@
     <meta name="apple-mobile-web-app-title" content="납품관리">
     <link rel="apple-touch-icon" href="./icon-192.png">
     <link rel="manifest" href="./manifest.json">
-    <title>납품 관리 Pro v82</title>
+    <title>납품 관리 Pro v83</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js" defer></script>
@@ -38,7 +38,7 @@
             <div class="logo-icon">📦</div>
             <div>
                 <div class="logo-text">납품 관리 Pro</div>
-                <div class="logo-sub">v82 · PWA 앱 설치 지원</div>
+                <div class="logo-sub">v83 · PWA 앱 설치 지원</div>
             </div>
         </div>
         <div class="header-btns">
@@ -260,7 +260,7 @@
             </div>
             <div class="form-group">
                 <label class="form-label">단가</label>
-                <input type="number" class="form-input" id="itemPrice" placeholder="0" onfocus="autoFillPrice(this)">
+                <input type="text" class="form-input" id="itemPrice" placeholder="0" inputmode="numeric" data-money onfocus="autoFillPrice(this)">
             </div>
             <button class="btn btn-primary" onclick="addItemToGroup()" style="align-self:flex-end;height:44px;padding:0 14px;">+</button>
         </div>
@@ -597,7 +597,7 @@
     <div class="card">
         <div class="card-title">앱 정보</div>
         <div style="font-size:13px;color:var(--text2);line-height:2;margin-bottom:12px;">
-            버전: <strong style="color:var(--accent);">v82</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
+            버전: <strong style="color:var(--accent);">v83</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
             거래처: <span id="infoClients">0</span>개 &nbsp;·&nbsp;
             납품내역: <span id="infoOrders">0</span>건
         </div>
@@ -611,15 +611,19 @@
             <div id="changelogList" style="display:flex;flex-direction:column;gap:6px;">
                 <!-- 현재 버전 -->
                 <div class="changelog-item">
-                    <span class="changelog-ver" style="color:var(--green);">v82</span>
-                    <span class="changelog-desc">Firebase 워크스페이스 데이터 삭제 + 실시간 동기화 개선 + 코드 전수 점검 2회 — ① 사용하지 않는 워크스페이스 ID 삭제 기능 ② 실시간 동기화 개선(보류 스냅샷·try/catch·3초 윈도우·15초 폴링) ③ date 필드 누락 전표 startsWith 크래시 수정 ④ 목차 앵커 PWA 재실행 버그 수정 ⑤ toggleOldChangelog 레이블 동적화 ⑥ §번호 중복 정리 ⑦ wsToConnect 중복 로직 제거 ⑧ stockItems Firebase 업로드 시 _getLightStock() 적용 ⑨ isVoid data-void 속성 안전화 ⑩ 메모 팝업 pushState 이중 적재 방지 ⑪ settlement·stock·unpaid 헬퍼 추출(총 39곳 중복 제거) ⑫ 【치명적 버그 수정】_refreshUnpaidIfActive 무한 재귀→스택 오버플로 앱 다운 수정 ⑬ confirmQuickPayDiscount 인라인 settlement 패턴 헬퍼로 교체 ⑭ updateNavBadges 내 중복 _markDirty 제거</span>
+                    <span class="changelog-ver" style="color:var(--green);">v83</span>
+                    <span class="changelog-desc">결제 즉시 반영 + 금액 입력 콤마 자동포맷 — ① 동기화된 회계 프로그램 결제 새로고침 없이 즉시 반영(_fbValueHandler 타임스탬프 차단 로직 제거·기기간 시계 오차 문제 수정·폴링 15초→5초) ② 금액 입력 필드 7곳(납품단가·수금·수금수정·할인·전표수정단가) 콤마 자동 삽입(type=number→text+inputmode=numeric, _moneyVal/_setMoneyVal/_initMoneyInput 헬퍼 추가)</span>
                 </div>
                 <!-- 이전 이력 토글 버튼 -->
                 <button id="changelogToggleBtn" onclick="toggleOldChangelog()" style="display:flex;align-items:center;justify-content:center;gap:5px;width:100%;padding:7px 12px;margin-top:2px;background:var(--surf3);border:1px solid var(--border);border-radius:var(--radius-s);color:var(--text2);font-size:11px;font-weight:700;cursor:pointer;transition:all .15s;letter-spacing:.3px;">
                     <span id="changelogToggleIcon">▼</span>
-                    <span id="changelogToggleLabel">이전 이력 보기 (v81 ~ v24_4-3-3)</span>
+                    <span id="changelogToggleLabel">이전 이력 보기 (v82 ~ v24_4-3-3)</span>
                 </button>
                 <div id="oldChangelogItems" style="display:none;flex-direction:column;gap:6px;">
+                <div class="changelog-item">
+                    <span class="changelog-ver">v82</span>
+                    <span class="changelog-desc">Firebase 워크스페이스 데이터 삭제 + 실시간 동기화 개선 + 코드 전수 점검 2회 — 사용하지 않는 워크스페이스 ID 삭제 기능, 보류 스냅샷 처리·try/catch·writtenBy 분기, date 필드 누락 크래시 수정, 목차 앵커 PWA 재실행 버그 수정, isVoid data-void 안전화, settlement·stock·unpaid 헬퍼 추출(39곳), _refreshUnpaidIfActive 무한 재귀 수정</span>
+                </div>
                 <div class="changelog-item">
                     <span class="changelog-ver">v81</span>
                     <span class="changelog-desc">동기화 불안정 수정 5건 + 코드품질 개선 8건 — ① _connectGuard 도입: .on() 리스너와 .get() 초기 처리 간 레이스 컨디션 차단 ② _syncGuard 도입: debouncedSync 업로드 중 리스너 echo 덮어쓰기 차단 ③ delta dirty set 스냅샷 복원: 업로드 실패 시 변경 누락 방지 ④ .info/connected 재연결 시 서버·로컬 최신 비교 후 방향 결정(기존: 무조건 로컬→서버) ⑤ _fbValueHandler localWriteMs 조건 30초 윈도우 적용(기존: 오래된 로컬 기록도 서버 차단) ⑥ confirm() → customConfirm() Promise 다이얼로그 교체(22곳) ⑦ isHidden 개별 제어 + 거래처 카드 숨기기/표시 버튼 추가 ⑧ 몽키패치 → _safeWrap 헬퍼 교체(5곳) ⑨ sw.js Stale-While-Revalidate 전략 적용 ⑩ manifest.json maskable 아이콘 ⑪ 가격 캐시 사전 빌드(_fullRender 시 호출) ⑫ Firebase 자동 연결 충돌 처리: 로컬 최신 시 조용히 서버 업로드(기존: 서버 데이터 덮어씌움) ⑬ disconnectWorkspace 시 _syncGuard·_connectGuard 초기화</span>
@@ -1130,7 +1134,7 @@
     <!-- 단일 입금액 (현금/이체/기타) -->
     <div class="form-group" id="ppSingleAmtGroup">
       <label class="form-label">입금액 *</label>
-      <input type="number" class="form-input" id="ppAmount" placeholder="0" min="0"
+      <input type="text" class="form-input" id="ppAmount" placeholder="0" inputmode="numeric" data-money
              oninput="previewPartialPay()"
              style="font-size:22px;font-weight:900;text-align:right;letter-spacing:1px;">
     </div>
@@ -1138,13 +1142,13 @@
     <div id="ppMixedGroup" style="display:none;">
       <div class="form-group">
         <label class="form-label">🏦 계좌이체 금액</label>
-        <input type="number" class="form-input" id="ppTransferAmt" placeholder="0" min="0"
+        <input type="text" class="form-input" id="ppTransferAmt" placeholder="0" inputmode="numeric" data-money
                oninput="previewMixedPay()"
                style="font-size:20px;font-weight:900;text-align:right;">
       </div>
       <div class="form-group">
         <label class="form-label">💵 현금 금액</label>
-        <input type="number" class="form-input" id="ppCashAmt" placeholder="0" min="0"
+        <input type="text" class="form-input" id="ppCashAmt" placeholder="0" inputmode="numeric" data-money
                oninput="previewMixedPay()"
                style="font-size:20px;font-weight:900;text-align:right;">
       </div>
@@ -1193,7 +1197,7 @@
     </div>
     <div class="form-group">
       <label class="form-label">수정할 수금액 *</label>
-      <input type="number" class="form-input" id="peAmount" placeholder="0" min="0"
+      <input type="text" class="form-input" id="peAmount" placeholder="0" inputmode="numeric" data-money
              style="font-size:22px;font-weight:900;text-align:right;letter-spacing:1px;">
       <div style="font-size:11px;color:var(--text2);margin-top:5px;">0원 입력 시 수금 취소(미수로 되돌리기)</div>
     </div>
@@ -1243,7 +1247,7 @@
         <div id="qpDiscountBody" style="display:none;margin-top:10px;">
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
                 <label style="font-size:12px;color:var(--text2);white-space:nowrap;">실수령액</label>
-                <input type="number" id="qpDiscountAmt" class="form-input"
+                <input type="text" id="qpDiscountAmt" class="form-input" inputmode="numeric" data-money
                     placeholder="실제 받은 금액" min="0"
                     style="flex:1;font-size:16px;font-weight:900;text-align:right;"
                     oninput="updateQpDiscountPreview()">
@@ -1392,7 +1396,7 @@
             </div>
             <div class="form-group" style="width:84px;flex-shrink:0;">
                 <label class="form-label">단가</label>
-                <input type="number" class="form-input" id="oeditNewPrice" placeholder="0" min="0"
+                <input type="text" class="form-input" id="oeditNewPrice" placeholder="0" inputmode="numeric" data-money
                     enterkeyhint="done"
                     onkeydown="if(event.key==='Enter'){event.preventDefault();const n=document.getElementById('oeditNewName').value.trim();if(n){oeditAddItem();}else{saveOrderEdit();}}">
             </div>

@@ -390,16 +390,20 @@ function _fbValueHandler(snap) {
         // ★ _syncGuard 중 도착한 타기기 변경 → 버리지 않고 보류, 업로드 완료 후 처리
         if (_syncGuard) { _pendingFbSnap = snap; return; }
 
-        const serverUpdatedAt = d.lastUpdated ? new Date(d.lastUpdated).getTime() : 0;
-        // 로컬 변경이 서버보다 최신이고 3초 이내인 경우만 차단 (클럭 드리프트 방어)
-        const lastLocalMs = (() => {
-            const s = localStorage.getItem('lastLocalUpdated');
-            return s ? new Date(s).getTime() : 0;
-        })();
-        const localWriteMs = Math.max(_localWriteTime, lastLocalMs);
-        const RECENT_WINDOW_MS = 3_000; // 30초 → 3초로 단축 (실시간성 향상)
-        if (localWriteMs > 0 && localWriteMs >= serverUpdatedAt &&
-            (Date.now() - localWriteMs) < RECENT_WINDOW_MS) return;
+        // ★ writtenBy가 명시된 경우(현행 앱): 다른 세션이면 무조건 수락
+        //   writtenBy 없는 구버전 데이터만 timestamp 비교로 stale 여부 판단
+        //   (이 체크를 제거하지 않으면 기기 간 시계 오차로 결제 변경이 차단됨)
+        if (!d.writtenBy) {
+            const serverUpdatedAt = d.lastUpdated ? new Date(d.lastUpdated).getTime() : 0;
+            const lastLocalMs = (() => {
+                const s = localStorage.getItem('lastLocalUpdated');
+                return s ? new Date(s).getTime() : 0;
+            })();
+            const localWriteMs = Math.max(_localWriteTime, lastLocalMs);
+            const RECENT_WINDOW_MS = 3_000;
+            if (localWriteMs > 0 && localWriteMs >= serverUpdatedAt &&
+                (Date.now() - localWriteMs) < RECENT_WINDOW_MS) return;
+        }
 
         let changed = false;
         if (d.clients) {
@@ -742,6 +746,49 @@ const debouncedSync = debounce(() => {
         });
 }, 200);
 
+// ─── 금액 입력 필드 콤마 자동 포매터 ───────────────────────────────────────
+// 금액 필드: itemPrice / ppAmount / ppTransferAmt / ppCashAmt
+//           peAmount / oeditNewPrice / qpDiscountAmt
+
+/** 금액 input 엘리먼트에 콤마 포매팅 초기화 */
+function _initMoneyInput(el) {
+    if (!el || el.dataset.moneyInited) return;
+    el.dataset.moneyInited = '1';
+
+    el.addEventListener('input', function () {
+        const raw = this.value.replace(/[^0-9]/g, '');
+        if (!raw) { this.value = ''; return; }
+        const formatted = Number(raw).toLocaleString('ko-KR');
+        // 커서를 끝으로 이동 (모바일 UX)
+        this.value = formatted;
+        try { this.setSelectionRange(formatted.length, formatted.length); } catch(e) {}
+    });
+
+    el.addEventListener('focus', function () {
+        // 포커스 시 전체 선택 → 덮어쓰기 편의
+        setTimeout(() => { try { this.select(); } catch(e) {} }, 0);
+    });
+}
+
+/** data-money 속성 가진 모든 필드에 일괄 초기화 */
+function _initAllMoneyInputs() {
+    document.querySelectorAll('[data-money]').forEach(_initMoneyInput);
+}
+
+/** 금액 input에서 순수 숫자 추출 */
+function _moneyVal(id) {
+    const el = document.getElementById(id);
+    if (!el) return 0;
+    return parseInt(el.value.replace(/[^0-9]/g, ''), 10) || 0;
+}
+
+/** 금액 input에 숫자를 콤마 포맷으로 세팅 */
+function _setMoneyVal(id, num) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.value = (num > 0) ? Number(num).toLocaleString('ko-KR') : '';
+}
+
 // ─── settlement / stock / unpaid 탭 조건부 즉시 렌더 헬퍼 ───
 // 각 함수에서 반복되던 동일 패턴을 하나로 통합
 function _refreshSettlementIfActive() {
@@ -973,6 +1020,8 @@ function openModal(id)  {
         history.pushState({ modalOpen: true }, '');
         _modalHistoryPushed = true;
     }
+    // 모달 내 금액 필드 콤마 포매터 초기화 (동적 생성 필드 대비)
+    el.querySelectorAll('[data-money]').forEach(_initMoneyInput);
 }
 
 function closeModal(id) {
@@ -1657,7 +1706,7 @@ function showClientItemSuggestions(clientId) {
 
 function fillItemFromSuggest(name, price) {
     document.getElementById('itemName').value  = name;
-    document.getElementById('itemPrice').value = price > 0 ? price : '';
+    if (price > 0) _setMoneyVal('itemPrice', price); else document.getElementById('itemPrice').value = '';
     onItemNameInput(name);
     // 수량 입력란으로 포커스 + 화면 스크롤
     const qtyEl = document.getElementById('itemQty');
@@ -1691,17 +1740,17 @@ function autoFillPrice(el) {
     // 거래처별 최근 단가 우선
     if (clientId) {
         const clientItem = getClientRecentItems(clientId).find(it => normItemName(it.name) === normItemName(name));
-        if (clientItem && clientItem.price > 0) { el.value = clientItem.price; return; }
+        if (clientItem && clientItem.price > 0) { _setMoneyVal('itemPrice', clientItem.price); return; }
     }
     const recent = getRecentPrices(name);
-    if (recent.length > 0) el.value = recent[0];
+    if (recent.length > 0) _setMoneyVal('itemPrice', recent[0]);
 }
 
 function addItemToGroup() {
     const name  = document.getElementById('itemName').value.trim();
     const qty   = parseInt(document.getElementById('itemQty').value)   || 0;
-    const priceRaw = document.getElementById('itemPrice').value;
-    const price = priceRaw === '' ? null : (parseInt(priceRaw) || 0);
+    const priceRaw = document.getElementById('itemPrice').value.replace(/[^0-9]/g,'');
+    const price = priceRaw === '' ? null : (parseInt(priceRaw, 10) || 0);
     const date  = document.getElementById('deliveryDate').value;
     if (!name)   return toast('❗ 품목명을 입력하세요');
     if (qty<=0)  return toast('❗ 수량을 1 이상 입력하세요');
@@ -2346,7 +2395,7 @@ function updateQpDiscountPreview() {
     const o = orders.find(x => x.id === orderId);
     if (!o) return;
     const remain  = o.total - (o.paidAmount || 0);
-    const input   = Number(document.getElementById('qpDiscountAmt').value) || 0;
+    const input   = _moneyVal('qpDiscountAmt');
     const preview = document.getElementById('qpDiscountPreview');
     if (input <= 0) { preview.textContent = ''; return; }
     if (input > remain) {
@@ -2366,7 +2415,7 @@ function confirmQuickPayDiscount(method) {
     const o = orders.find(x => x.id === orderId);
     if (!o) return;
     const remain = o.total - (o.paidAmount || 0);
-    const input  = Number(document.getElementById('qpDiscountAmt').value) || 0;
+    const input  = _moneyVal('qpDiscountAmt');
     if (input <= 0) return toast('❗ 실수령액을 입력하세요');
     if (input > remain) return toast('❗ 실수령액이 청구금액보다 많습니다');
     const discount = remain - input;
@@ -2661,7 +2710,7 @@ function _oeditRecalc() {
 function oeditAddItem() {
     const name  = (document.getElementById('oeditNewName').value  || '').trim();
     const qty   = parseInt(document.getElementById('oeditNewQty').value)   || 0;
-    const price = parseInt(document.getElementById('oeditNewPrice').value) || 0;
+    const price = _moneyVal('oeditNewPrice');
     if (!name)  return toast('❗ 품목명을 입력하세요');
     if (qty <= 0) return toast('❗ 수량을 1 이상 입력하세요');
     _oeditItems.push({ name, qty, price, total: qty * price });
@@ -3773,7 +3822,7 @@ function openPartialPay(clientName, month) {
 function previewPartialPay() {
     const clientName = document.getElementById('ppClientName').value;
     const month      = document.getElementById('ppMonth').value;
-    const amount     = Number(document.getElementById('ppAmount').value) || 0;
+    const amount     = _moneyVal('ppAmount') || 0;
     const preview    = document.getElementById('ppPreview');
     if (amount <= 0) { preview.style.display = 'none'; return; }
 
@@ -3865,8 +3914,8 @@ function _methodBadgeHtml(method) {
 function previewMixedPay() {
     const clientName = document.getElementById('ppClientName').value;
     const month      = document.getElementById('ppMonth').value;
-    const transfer   = Number(document.getElementById('ppTransferAmt').value) || 0;
-    const cash       = Number(document.getElementById('ppCashAmt').value) || 0;
+    const transfer   = _moneyVal('ppTransferAmt');
+    const cash       = _moneyVal('ppCashAmt');
     const total      = transfer + cash;
     const preview    = document.getElementById('ppMixedPreview');
     if (!preview) return;
@@ -3894,7 +3943,7 @@ function togglePpDiscount() {
 async function confirmPartialPayDiscount() {
     const clientName = document.getElementById('ppClientName').value;
     const month      = document.getElementById('ppMonth').value;
-    const amount     = Number(document.getElementById('ppAmount').value);
+    const amount     = _moneyVal('ppAmount');
     const note       = document.getElementById('ppNote').value.trim();
     const method     = _getPayMethod('pp');
 
@@ -3948,8 +3997,8 @@ async function confirmPartialPay() {
 
     // ── 혼합 결제 분기 ──
     if (method === 'mixed') {
-        const transferAmt = Number(document.getElementById('ppTransferAmt').value) || 0;
-        const cashAmt     = Number(document.getElementById('ppCashAmt').value) || 0;
+        const transferAmt = _moneyVal('ppTransferAmt');
+        const cashAmt     = _moneyVal('ppCashAmt');
         const total       = transferAmt + cashAmt;
         if (total <= 0) return toast('❗ 이체/현금 금액을 입력하세요');
         if (transferAmt <= 0 && cashAmt <= 0) return toast('❗ 이체 또는 현금 금액을 입력하세요');
@@ -3996,7 +4045,7 @@ async function confirmPartialPay() {
     }
 
     // ── 기존 단일 방법 처리 ──
-    const amount = Number(document.getElementById('ppAmount').value);
+    const amount = _moneyVal('ppAmount');
 
     if (!amount || amount <= 0) return toast('❗ 입금액을 입력하세요');
 
@@ -4067,7 +4116,7 @@ function openPayEdit(orderId, clientName, month) {
     const itemNames = (o.items||[]).map(i=>`${i.name}(${i.qty})`).join(', ');
     document.getElementById('peOrderInfo').textContent  = `${o.date} · ${itemNames}`;
     document.getElementById('peOrderTotal').textContent = fmt(o.total) + '원';
-    document.getElementById('peAmount').value = o.paidAmount || 0;
+    _setMoneyVal('peAmount', o.paidAmount || 0);
     document.getElementById('peNote').value   = o.paidNote || '';
 
     // 빠른 버튼: 0원(취소), 절반, 전액
@@ -4084,7 +4133,7 @@ function openPayEdit(orderId, clientName, month) {
 
     document.getElementById('peQuickBtns').innerHTML = btns.slice(0, 5).map(b =>
         `<button type="button" class="chip" style="font-size:11px;padding:5px 10px;"
-         onclick="document.getElementById('peAmount').value=${b.val};">${b.label}</button>`
+         onclick="_setMoneyVal('peAmount',${b.val});">${b.label}</button>`
     ).join('');
 
     // statementModal 위에 표시
@@ -4097,7 +4146,7 @@ function confirmPayEdit() {
     const orderId    = document.getElementById('peOrderId').value;
     const clientName = document.getElementById('peClientName').value;
     const month      = document.getElementById('peMonth').value;
-    const amount     = Number(document.getElementById('peAmount').value);
+    const amount     = _moneyVal('peAmount');
     const note       = document.getElementById('peNote').value.trim();
     const method     = _getPayMethod('pe');
 
@@ -4140,7 +4189,7 @@ function confirmPayEdit() {
 
 async function confirmPayEditCancel() {
     if (!await customConfirm('이 전표의 수금을 취소하고 미수로 되돌릴까요?')) return;
-    document.getElementById('peAmount').value = 0;
+    document.getElementById('peAmount').value = '';
     confirmPayEdit();
 }
 
@@ -6070,7 +6119,7 @@ function exportSettlementExcel() {
 }
 
 function exportJSON() {
-    const data = { clients, orders, prices, stockItems, exportDate:new Date().toISOString(), version:'82' };
+    const data = { clients, orders, prices, stockItems, exportDate:new Date().toISOString(), version:'83' };
     const blob = new Blob([JSON.stringify(data,null,2)], { type:'application/json' });
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement('a');
@@ -6407,14 +6456,14 @@ function _doConnect(id, auto=false) {
             _connectGuard    = false; // ★ Problem 1: 초기 처리 완료, 리스너 차단 해제
             _initialLoadDone = true;
 
-            // ★ 실시간 폴링 백업: 15초마다 서버 확인 (이벤트 유실 대비)
+            // ★ 실시간 폴링 백업: 5초마다 서버 확인 (이벤트 유실 대비)
             if (_rtPollTimer) clearInterval(_rtPollTimer);
             _rtPollTimer = setInterval(() => {
                 if (!workspaceRef || !isConnected || _syncGuard) return;
                 workspaceRef.get().then(snap => {
                     if (snap.val()) _fbValueHandler(snap);
                 }).catch(() => {});
-            }, 15000);
+            }, 5000);
 
             if (!auto) closeModal('firebaseModal');
 
@@ -7031,6 +7080,7 @@ window.addEventListener('DOMContentLoaded', () => {
     initHistPeriod();
     // 탭 & 스와이프
     initTabs();
+    _initAllMoneyInputs(); // 금액 입력 필드 콤마 포매터 초기화
     initSwipeGestures();
     initPullToRefresh();
     initKeyHandlers();
