@@ -4346,24 +4346,28 @@ function _renderWeekBarChart() {
     if (totalEl) totalEl.textContent = fmt(weekTotal) + '원';
     el.innerHTML = data.map(d => {
         const pct = Math.round((d.sales / maxVal) * 100);
-        const barH = Math.max(pct * 0.62, d.sales > 0 ? 4 : 0); // max 62px
+        const barH = Math.max(pct * 0.9, d.sales > 0 ? 4 : 0); // max 90px
         const isToday = d.isToday;
         const barColor = isToday
             ? 'linear-gradient(180deg,#f87171,#ef4444)'
             : 'linear-gradient(180deg,rgba(248,113,113,.75),rgba(239,68,68,.5))';
-        const labelColor = isToday ? '#fca5a5' : 'rgba(248,113,113,.8)';
+        const labelColor = isToday ? '#fca5a5' : 'rgba(248,113,113,.85)';
         const amtLabel = d.sales >= 1000000
             ? (d.sales/1000000).toFixed(1)+'M'
             : d.sales >= 1000
             ? Math.round(d.sales/1000)+'K'
             : d.sales > 0 ? String(d.sales) : '';
-        return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;min-width:0;">
-            <div style="font-size:9px;font-weight:700;color:${labelColor};height:13px;line-height:13px;overflow:hidden;white-space:nowrap;">${amtLabel}</div>
-            <div style="width:100%;flex:1;display:flex;align-items:flex-end;">
-                <div style="width:100%;height:${barH}px;background:${barColor};border-radius:4px 4px 2px 2px;transition:height .4s cubic-bezier(.4,0,.2,1);min-height:${d.sales>0?'3px':'0'};box-shadow:${isToday?'0 0 8px rgba(239,68,68,.5)':'none'};"></div>
+        // 금액 레이블: 막대가 충분히 높으면 내부에, 낮으면 막대 위에
+        const labelInside = barH >= 22 && amtLabel;
+        return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;min-width:0;position:relative;">
+            ${!labelInside && amtLabel ? `<div style="font-size:9px;font-weight:700;color:${labelColor};height:12px;line-height:12px;text-align:center;width:100%;overflow:visible;white-space:nowrap;">${amtLabel}</div>` : `<div style="height:12px;"></div>`}
+            <div style="width:100%;flex:1;display:flex;align-items:flex-end;position:relative;">
+                <div style="width:100%;height:${barH}px;background:${barColor};border-radius:4px 4px 2px 2px;transition:height .4s cubic-bezier(.4,0,.2,1);min-height:${d.sales>0?'3px':'0'};box-shadow:${isToday?'0 0 8px rgba(239,68,68,.5)':'none'};display:flex;align-items:flex-start;justify-content:center;">
+                    ${labelInside ? `<span style="font-size:8px;font-weight:700;color:rgba(255,255,255,.9);margin-top:3px;line-height:1;writing-mode:vertical-rl;transform:rotate(180deg);">${amtLabel}</span>` : ''}
+                </div>
             </div>
-            <div style="font-size:9px;font-weight:${isToday?'900':'600'};color:${isToday?'#fca5a5':'rgba(248,113,113,.6)'};line-height:1;">${d.day}</div>
-            <div style="font-size:8px;color:rgba(248,113,113,.45);line-height:1;">${d.label}</div>
+            <div style="font-size:10px;font-weight:${isToday?'900':'700'};color:${isToday?'#fca5a5':'rgba(248,113,113,.75)'};line-height:1.2;margin-top:1px;">${d.day}</div>
+            <div style="font-size:9px;color:rgba(248,113,113,.55);line-height:1;">${d.label}</div>
         </div>`;
     }).join('');
 }
