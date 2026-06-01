@@ -11,7 +11,7 @@
     <meta name="apple-mobile-web-app-title" content="납품관리">
     <link rel="apple-touch-icon" href="./icon-192.png">
     <link rel="manifest" href="./manifest.json">
-    <title>납품 관리 Pro v83</title>
+    <title>납품 관리 Pro v84</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js" defer></script>
@@ -38,7 +38,7 @@
             <div class="logo-icon">📦</div>
             <div>
                 <div class="logo-text">납품 관리 Pro</div>
-                <div class="logo-sub">v83 · PWA 앱 설치 지원</div>
+                <div class="logo-sub">v84 · PWA 앱 설치 지원</div>
             </div>
         </div>
         <div class="header-btns">
@@ -597,7 +597,7 @@
     <div class="card">
         <div class="card-title">앱 정보</div>
         <div style="font-size:13px;color:var(--text2);line-height:2;margin-bottom:12px;">
-            버전: <strong style="color:var(--accent);">v83</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
+            버전: <strong style="color:var(--accent);">v84</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
             거래처: <span id="infoClients">0</span>개 &nbsp;·&nbsp;
             납품내역: <span id="infoOrders">0</span>건
         </div>
@@ -611,7 +611,11 @@
             <div id="changelogList" style="display:flex;flex-direction:column;gap:6px;">
                 <!-- 현재 버전 -->
                 <div class="changelog-item">
-                    <span class="changelog-ver" style="color:var(--green);">v83</span>
+                    <span class="changelog-ver" style="color:var(--green);">v84</span>
+                    <span class="changelog-desc">검색 정확도 개선 + 입금 빠른 금액 버튼 콤마 수정 — ① 초성 검색을 순수 자음(ㄱ-ㅎ) 입력 시에만 적용(한글 키워드 검색 시 초성 변환 오매칭 방지, 예: "벨렘" 검색 시 "브런치"·"벨리퀸" 미노출) ② 입금처리 모달 빠른 금액 버튼(전체·절반 등) 클릭 시 금액에 콤마 자동 적용</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v83</span>
                     <span class="changelog-desc">결제 즉시 반영 + 금액 입력 콤마 자동포맷 — ① 동기화된 회계 프로그램 결제 새로고침 없이 즉시 반영(_fbValueHandler 타임스탬프 차단 로직 제거·기기간 시계 오차 문제 수정·폴링 15초→5초) ② 금액 입력 필드 7곳(납품단가·수금·수금수정·할인·전표수정단가) 콤마 자동 삽입(type=number→text+inputmode=numeric, _moneyVal/_setMoneyVal/_initMoneyInput 헬퍼 추가)</span>
                 </div>
                 <!-- 이전 이력 토글 버튼 -->
