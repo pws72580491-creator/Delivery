@@ -11,7 +11,7 @@
     <meta name="apple-mobile-web-app-title" content="납품관리">
     <link rel="apple-touch-icon" href="./icon-192.png">
     <link rel="manifest" href="./manifest.json">
-    <title>납품 관리 Pro v87</title>
+    <title>납품 관리 Pro v88</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js" defer></script>
@@ -38,7 +38,7 @@
             <div class="logo-icon">📦</div>
             <div>
                 <div class="logo-text">납품 관리 Pro</div>
-                <div class="logo-sub">v87 · PWA 앱 설치 지원</div>
+                <div class="logo-sub">v88 · PWA 앱 설치 지원</div>
             </div>
         </div>
         <div class="header-btns">
@@ -597,7 +597,7 @@
     <div class="card">
         <div class="card-title">앱 정보</div>
         <div style="font-size:13px;color:var(--text2);line-height:2;margin-bottom:12px;">
-            버전: <strong style="color:var(--accent);">v87</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
+            버전: <strong style="color:var(--accent);">v88</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
             거래처: <span id="infoClients">0</span>개 &nbsp;·&nbsp;
             납품내역: <span id="infoOrders">0</span>건
         </div>
@@ -611,7 +611,11 @@
             <div id="changelogList" style="display:flex;flex-direction:column;gap:6px;">
                 <!-- 현재 버전 -->
                 <div class="changelog-item">
-                    <span class="changelog-ver" style="color:var(--green);">v87</span>
+                    <span class="changelog-ver" style="color:var(--green);">v88</span>
+                    <span class="changelog-desc">납품 내역 수정 모달 단가 콤마 적용 — 기존 품목 단가 input을 type=number→text+inputmode=numeric으로 변경, 기존값 콤마 포맷 표시 및 입력 중 실시간 콤마 적용</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v87</span>
                     <span class="changelog-desc">금액 콤마 포맷 근본 수정 — _initMoneyInput 내부 applyFormat에서 this 바인딩 오류 수정(this → el 클로저 참조), 모든 data-money 필드 타이핑 시 콤마 정상 적용</span>
                 </div>
                 <div class="changelog-item">

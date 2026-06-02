@@ -2697,9 +2697,10 @@ function renderOeditItems() {
                         onkeydown="if(event.key==='Enter'){event.preventDefault();this.closest('.oedit-item-row').querySelectorAll('.oedit-item-input')[2].focus();}">
                 </div>
                 <div class="oedit-price-wrap">
-                    <input class="oedit-item-input" type="number" value="${it.price||0}" min="0"
+                    <input class="oedit-item-input" type="text" inputmode="numeric" value="${(it.price||0)>0?Number(it.price).toLocaleString('ko-KR'):0}" min="0"
+                        data-oedit-price="${i}"
                         enterkeyhint="${isLast ? 'next' : 'next'}"
-                        oninput="_oeditItems[${i}].price=parseInt(this.value)||0;_oeditItems[${i}].total=_oeditItems[${i}].qty*_oeditItems[${i}].price;_oeditRecalc()"
+                        oninput="(function(el,idx){const v=parseInt(el.value.replace(/[^0-9]/g,''))||0;_oeditItems[idx].price=v;_oeditItems[idx].total=_oeditItems[idx].qty*v;_oeditRecalc();const f=v>0?v.toLocaleString('ko-KR'):el.value;if(el.value!==f){const s=el.selectionStart;el.value=f;try{el.setSelectionRange(f.length,f.length);}catch(e){}};})(this,${i})"
                         onkeydown="${onPriceEnter}">
                 </div>
                 <button class="oedit-del-btn" onclick="_oeditItems.splice(${i},1);renderOeditItems()">✕</button>
