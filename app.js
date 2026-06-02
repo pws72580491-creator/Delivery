@@ -757,18 +757,24 @@ function _initMoneyInput(el) {
     if (!el || el.dataset.moneyInited) return;
     el.dataset.moneyInited = '1';
 
-    el.addEventListener('input', function () {
-        const raw = this.value.replace(/[^0-9]/g, '');
-        if (!raw) { this.value = ''; return; }
+    // el을 클로저로 직접 참조 (this 바인딩 문제 방지)
+    function applyFormat() {
+        const raw = el.value.replace(/[^0-9]/g, '');
+        if (!raw) { el.value = ''; return; }
         const formatted = Number(raw).toLocaleString('ko-KR');
-        // 커서를 끝으로 이동 (모바일 UX)
-        this.value = formatted;
-        try { this.setSelectionRange(formatted.length, formatted.length); } catch(e) {}
-    });
+        if (el.value !== formatted) {
+            el.value = formatted;
+            try { el.setSelectionRange(formatted.length, formatted.length); } catch(e) {}
+        }
+    }
+
+    // input: 일반 입력 / keyup: 안드로이드 IME 누락 보완 / change: 포커스 아웃 시 최종 보정
+    el.addEventListener('input',  applyFormat);
+    el.addEventListener('keyup',  applyFormat);
+    el.addEventListener('change', applyFormat);
 
     el.addEventListener('focus', function () {
-        // 포커스 시 전체 선택 → 덮어쓰기 편의
-        setTimeout(() => { try { this.select(); } catch(e) {} }, 0);
+        setTimeout(() => { try { el.select(); } catch(e) {} }, 0);
     });
 }
 
