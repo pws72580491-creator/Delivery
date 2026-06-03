@@ -402,7 +402,7 @@ function _fbValueHandler(snap) {
                 return s ? new Date(s).getTime() : 0;
             })();
             const localWriteMs = Math.max(_localWriteTime, lastLocalMs);
-            const RECENT_WINDOW_MS = 3_000;
+            const RECENT_WINDOW_MS = 8_000;
             if (localWriteMs > 0 && localWriteMs >= serverUpdatedAt &&
                 (Date.now() - localWriteMs) < RECENT_WINDOW_MS) return;
         }
@@ -746,7 +746,7 @@ const debouncedSync = debounce(() => {
             // ★ 업로드 실패해도 보류됐던 타기기 변경 처리
             if (_pendingFbSnap) { const s = _pendingFbSnap; _pendingFbSnap = null; _fbValueHandler(s); }
         });
-}, 200);
+}, 800);
 
 // ─── 금액 입력 필드 콤마 자동 포매터 ───────────────────────────────────────
 // 금액 필드: itemPrice / ppAmount / ppTransferAmt / ppCashAmt
@@ -6396,11 +6396,24 @@ function _doConnect(id, auto=false) {
                 const localIsNewer = localHasData && localLatestOrder > serverTime;
 
                 if (localIsNewer) {
+                    // 공통 업로드 payload 빌더 (배열 대신 map + minify로 payload 최소화)
+                    const _buildUploadPayload = () => {
+                        const ordersMap = {};
+                        orders.forEach(o => { ordersMap[o.id] = _minifyOrder(o); });
+                        return {
+                            clients:    clients.map(_minifyClient),
+                            orders:     ordersMap,
+                            prices,
+                            stockItems: _getLightStock(),
+                            lastUpdated: new Date().toISOString(),
+                            writtenBy:  SESSION_ID
+                        };
+                    };
                     if (auto) {
                         // 자동 연결에서 로컬이 더 최신 → 조용히 로컬 데이터를 서버에 업로드
                         // (오프라인 중 작업한 데이터 유실 방지)
                         const ch=dataHash(clients),oh=dataHash(orders),ph=dataHash(prices),sh=dataHash(stockItems);
-                        workspaceRef.update({ clients, orders: orders.map(o=>{if(!o._noItems)return o;const c={...o};delete c._noItems;return c;}), prices, stockItems, lastUpdated:new Date().toISOString(), writtenBy:SESSION_ID })
+                        workspaceRef.update(_buildUploadPayload())
                             .then(()=>{ lastHash.clients=ch;lastHash.orders=oh;lastHash.prices=ph;lastHash.stock=sh; setSyncStatus('online'); toast('🟢 자동 연결 완료 (로컬→서버 업로드)', 'var(--green)'); })
                             .catch(e=>{ console.error('업로드 실패:',e); setSyncStatus('error'); });
                         _connectGuard    = false; // ★ 업로드 트리거 후 리스너 해제
@@ -6416,7 +6429,7 @@ function _doConnect(id, auto=false) {
                         );
                         if (useLocal) {
                             const ch=dataHash(clients),oh=dataHash(orders),ph=dataHash(prices),sh=dataHash(stockItems);
-                            workspaceRef.update({ clients, orders: orders.map(o=>{if(!o._noItems)return o;const c={...o};delete c._noItems;return c;}), prices, stockItems, lastUpdated:new Date().toISOString(), writtenBy:SESSION_ID })
+                            workspaceRef.update(_buildUploadPayload())
                                 .then(()=>{ lastHash.clients=ch;lastHash.orders=oh;lastHash.prices=ph;lastHash.stock=sh; setSyncStatus('online'); toast('☁️ 로컬 데이터를 서버에 업로드했습니다','var(--green)'); })
                                 .catch(e=>{ console.error('업로드 실패:',e); setSyncStatus('error'); });
                             _connectGuard    = false;
@@ -6470,14 +6483,22 @@ function _doConnect(id, auto=false) {
             _connectGuard    = false; // ★ Problem 1: 초기 처리 완료, 리스너 차단 해제
             _initialLoadDone = true;
 
-            // ★ 실시간 폴링 백업: 5초마다 서버 확인 (이벤트 유실 대비)
+            // ★ 실시간 폴링 백업: 30초마다 서버 확인 (이벤트 유실 대비)
+            // — 실시간 리스너(.on)와 중복 방지: hash 비교 후 실제 변경분만 처리
             if (_rtPollTimer) clearInterval(_rtPollTimer);
             _rtPollTimer = setInterval(() => {
                 if (!workspaceRef || !isConnected || _syncGuard) return;
                 workspaceRef.get().then(snap => {
-                    if (snap.val()) _fbValueHandler(snap);
+                    const d = snap.val();
+                    if (!d) return;
+                    // 서버 데이터가 로컬과 동일하면 핸들러 호출 생략 (불필요한 렌더링 방지)
+                    const serverOrdersHash  = dataHash(toArray(d.orders).map(_normOrderFromFb));
+                    const serverClientsHash = dataHash(toArray(d.clients).map(_normClientFromFb));
+                    if (serverOrdersHash === lastHash.orders &&
+                        serverClientsHash === lastHash.clients) return;
+                    _fbValueHandler(snap);
                 }).catch(() => {});
-            }, 5000);
+            }, 30000);
 
             if (!auto) closeModal('firebaseModal');
 
