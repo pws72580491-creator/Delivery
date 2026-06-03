@@ -7121,8 +7121,48 @@ window.addEventListener('DOMContentLoaded', () => {
     initPullToRefresh();
     initKeyHandlers();
     // 검색 입력창 더블탭 전체선택 (모바일)
+    // 검색 input별 결과 목록 ID 매핑
+    const searchScrollMap = {
+        'clientSearch':   'clientList',
+        'deliveryClient': 'clientDropdown',
+        'histSearch':     'orderList',
+        'settleSearch':   'settlementTable',
+    };
     ['deliveryClient','clientSearch','histSearch','settleSearch'].forEach(id => {
         _initDoubleTapSelect(document.getElementById(id));
+        // 모바일: Enter(이동) 키 입력 시 키보드 닫기 + 결과 목록으로 스크롤
+        const el = document.getElementById(id);
+        if (el) {
+            el.addEventListener('keydown', e => {
+                if (e.key === 'Enter' || e.keyCode === 13) {
+                    e.preventDefault();
+                    el.blur(); // 키보드 닫기
+                    // 키보드가 닫히고 나서 스크롤 (300ms 대기)
+                    setTimeout(() => {
+                        const targetId = searchScrollMap[id];
+                        const target = targetId ? document.getElementById(targetId) : null;
+                        // 거래처 목록이 숨겨져 있으면 자동 펼치기
+                        if (id === 'clientSearch' && !clientListVisible) {
+                            clientListVisible = true;
+                            if (target) target.style.display = 'block';
+                            const tb = document.getElementById('clientToggleBtn');
+                            if (tb) tb.textContent = '숨기기';
+                            renderClients();
+                        }
+                        // 정산 목록이 숨겨져 있으면 자동 펼치기
+                        if (id === 'settleSearch' && !settleListVisible) {
+                            settleListVisible = true;
+                            if (target) target.style.display = 'block';
+                            const sb = document.getElementById('settleToggleBtn');
+                            if (sb) sb.textContent = '숨기기';
+                        }
+                        if (target) {
+                            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        }
+                    }, 300);
+                }
+            });
+        }
     });
     // 거래처 목록 초기 display 상태 동기화 (clientListVisible 기본값 false에 맞춤)
     const clInit = document.getElementById('clientList');

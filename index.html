@@ -121,7 +121,7 @@
         </div>
     </div>
     <div style="display:flex;gap:8px;margin-bottom:8px;">
-        <input type="text" class="form-input" id="clientSearch" placeholder="🔍 거래처 검색… (초성 가능)" oninput="renderClients()" ondblclick="this.select()">
+        <input type="text" class="form-input" id="clientSearch" placeholder="🔍 거래처 검색… (초성 가능)" oninput="renderClients()" ondblclick="this.select()" enterkeyhint="search" inputmode="search">
         <button class="btn btn-ghost btn-sm" onclick="toggleClientList()" id="clientToggleBtn" style="white-space:nowrap;">숨기기</button>
         <button class="btn btn-ghost btn-sm" onclick="toggleShowHidden()" id="showHiddenBtn" style="white-space:nowrap;font-size:11px;" title="isHidden=true인 거래처 표시">숨김포함</button>
     </div>
@@ -231,6 +231,7 @@
         <div class="form-group" style="position:relative;">
             <label class="form-label">거래처 *</label>
             <input type="text" class="form-input" id="deliveryClient" placeholder="거래처 검색… (초성 가능)" autocomplete="off"
+                           enterkeyhint="search" inputmode="search"
                 oninput="searchDeliveryClient(this.value)" onfocus="searchDeliveryClient(this.value)" ondblclick="this.select()">
             <input type="hidden" id="selectedClientId">
             <div class="dropdown" id="clientDropdown"></div>
@@ -353,7 +354,7 @@
             </div>
         </div>
         <div class="form-group" style="margin-bottom:0;margin-top:10px;">
-            <input type="text" class="form-input" id="histSearch" placeholder="🔍 거래처·품목명 검색… (초성 가능: ㄱ,ㄴ,ㅅ…)" oninput="renderOrders()" autocomplete="off" ondblclick="this.select()">
+            <input type="text" class="form-input" id="histSearch" placeholder="🔍 거래처·품목명 검색… (초성 가능: ㄱ,ㄴ,ㅅ…)" oninput="renderOrders()" autocomplete="off" ondblclick="this.select()" enterkeyhint="search" inputmode="search">
         </div>
     </div>
     <div id="orderList"></div>
@@ -427,7 +428,7 @@
     <!-- 월별 거래처 테이블 (기존) -->
     <div id="settle-section-monthly">
         <div style="display:flex;gap:8px;margin-bottom:10px;align-items:center;">
-            <input type="text" class="form-input" id="settleSearch" placeholder="🔍 거래처 검색… (초성 가능: ㄱ,ㄴ,ㅅ…)" autocomplete="off" oninput="onSettleSearch(this.value)" ondblclick="this.select()">
+            <input type="text" class="form-input" id="settleSearch" placeholder="🔍 거래처 검색… (초성 가능: ㄱ,ㄴ,ㅅ…)" autocomplete="off" oninput="onSettleSearch(this.value)" ondblclick="this.select()" enterkeyhint="search" inputmode="search">
             <button class="btn btn-ghost btn-sm" onclick="toggleSettleList()" id="settleToggleBtn" style="white-space:nowrap;">보이기</button>
         </div>
         <div id="settlementTable" style="display:none;"></div>
