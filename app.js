@@ -3274,7 +3274,7 @@ function showClientStatement(clientName, month) {
     const beforeTodayTotal  = beforeTodayOrders.reduce((s,o)=>s+_effectiveTotal(o),0);
     const client = clients.find(c=>c.name===clientName);
     const phone  = client?.phone||'';
-    const smsText = `[${clientName}님 거래명세표]\n기간: ${month}\n전월이월: ${fmt(carryAmt)}원\n당월매출: ${fmt(monthTotal)}원\n수금액: ${fmt(monthPaid)}원\n청구금액: ${fmt(grandUnpaid)}원`;
+    const smsText = `[${clientName}님 거래명세표]\n기간: ${month}\n전월이월: ${fmt(carryAmt)}원\n당월매출: ${fmt(monthTotal)}원\n수금액: ${fmt(monthPaid)}원\n청구금액: ${fmt(grandUnpaid)}원\n\n입금계좌: 농협 916-02-055664 (이애경)`;
     // 카카오톡 / 공유용 — 품목 상세 포함
     const orderLines = filt.map(o => {
         const itemStr = (o.items||[]).length ? (o.items||[]).map(i=>`${i.name} ${i.qty}개`).join(', ') : '(품목 정보 없음)';
@@ -3288,6 +3288,7 @@ function showClientStatement(clientName, month) {
         `💰 당월 매출: ${fmt(monthTotal)}원`,
         `💳 수금액: ${fmt(monthPaid)}원`,
         `🔴 청구 금액: ${fmt(grandUnpaid)}원`,
+        `\n🏦 입금계좌: 농협 916-02-055664 (이애경)`,
         orderLines ? `\n📦 납품 내역\n${orderLines}` : '',
     ].filter(Boolean).join('\n');
     const carryRows = carryOrders.map(o=>{
