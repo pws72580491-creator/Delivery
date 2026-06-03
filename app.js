@@ -2361,7 +2361,7 @@ async function togglePaid(id) {
         o.isPaid = false; o.paidAmount = 0;
         delete o.paidAt; delete o.paidNote; delete o.paidMethod; delete o.discount; delete o.paidMethodDetail;
         _markDirtyOrder(id); // delta sync 마킹
-        saveData(); renderOrders(); renderDashboard(); updateInfoCounts(); updateNavBadges();
+        _saveAndFlush(); renderOrders(); renderDashboard(); updateInfoCounts(); updateNavBadges();
         _refreshUnpaidIfActive();
         _refreshSettlementIfActive();
         toast('🔴 미수로 변경');
@@ -2435,7 +2435,7 @@ function confirmQuickPayDiscount(method) {
     if (discount > 0) o.discount = (o.discount || 0) + discount;
     _markDirtyOrder(orderId); // delta sync 마킹
     closeQuickPay(true);
-    saveData(); renderOrders(); renderDashboard(); updateInfoCounts(); updateNavBadges();
+    _saveAndFlush(); renderOrders(); renderDashboard(); updateInfoCounts(); updateNavBadges();
     _refreshUnpaidIfActive();
     _refreshSettlementIfActive();
     const icon = method === 'transfer' ? '🏦' : '💵';
@@ -2479,7 +2479,7 @@ function confirmQuickPay(method) {
     o.paidMethod = method;
     _markDirtyOrder(orderId); // delta sync 마킹
     closeQuickPay(true);
-    saveData(); renderOrders(); renderDashboard(); updateInfoCounts(); updateNavBadges();
+    _saveAndFlush(); renderOrders(); renderDashboard(); updateInfoCounts(); updateNavBadges();
     _refreshUnpaidIfActive();
     _refreshSettlementIfActive();
     const icon = method === 'transfer' ? '🏦' : '💵';
@@ -3274,7 +3274,8 @@ function showClientStatement(clientName, month) {
     const beforeTodayTotal  = beforeTodayOrders.reduce((s,o)=>s+_effectiveTotal(o),0);
     const client = clients.find(c=>c.name===clientName);
     const phone  = client?.phone||'';
-    const smsText = `[${clientName}님 거래명세표]\n기간: ${month}\n전월이월: ${fmt(carryAmt)}원\n당월매출: ${fmt(monthTotal)}원\n수금액: ${fmt(monthPaid)}원\n청구금액: ${fmt(grandUnpaid)}원\n\n입금계좌: 농협 916-02-055664 (이애경)`;
+    const _monthLabel = (() => { const p = month.split('-'); return p.length >= 2 ? `${parseInt(p[1])}월` : month; })();
+    const smsText = `[${clientName}님 ${_monthLabel} 거래명세표]\n기간: ${month}\n전월이월: ${fmt(carryAmt)}원\n당월매출: ${fmt(monthTotal)}원\n수금액: ${fmt(monthPaid)}원\n청구금액: ${fmt(grandUnpaid)}원\n\n입금계좌: 농협 916-02-055664 (이애경)`;
     // 카카오톡 / 공유용 — 품목 상세 포함
     const orderLines = filt.map(o => {
         const itemStr = (o.items||[]).length ? (o.items||[]).map(i=>`${i.name} ${i.qty}개`).join(', ') : '(품목 정보 없음)';
@@ -3282,7 +3283,7 @@ function showClientStatement(clientName, month) {
         return `  ${o.date}  ${itemStr}  ${fmt(o.total)}원 ${stateStr}`;
     }).join('\n');
     _statShareText = [
-        `📋 [${clientName}님 거래명세표]`,
+        `📋 [${clientName}님 ${_monthLabel} 거래명세표]`,
         `📅 기간: ${month}`,
         carryAmt > 0 ? `⏩ 전월 이월: ${fmt(carryAmt)}원` : '',
         `💰 당월 매출: ${fmt(monthTotal)}원`,
@@ -3989,7 +3990,7 @@ async function confirmPartialPayDiscount() {
         if (note) o.paidNote = note; else delete o.paidNote;
     }
 
-    saveData();
+    _saveAndFlush();
     closeModal('partialPayModal');
     renderOrders(); renderDashboard(); updateInfoCounts(); updateNavBadges();
     _refreshUnpaidIfActive();
@@ -4045,7 +4046,7 @@ async function confirmPartialPay() {
                 partCnt++;
             }
         }
-        saveData(); closeModal('partialPayModal');
+        _saveAndFlush(); closeModal('partialPayModal');
         renderOrders(); renderDashboard(); updateInfoCounts(); updateNavBadges();
         _refreshUnpaidIfActive();
         _refreshSettlementIfActive();
@@ -4097,7 +4098,7 @@ async function confirmPartialPay() {
         }
     }
 
-    saveData();
+    _saveAndFlush();
     closeModal('partialPayModal');
     renderOrders(); renderDashboard(); updateInfoCounts(); updateNavBadges();
     _refreshUnpaidIfActive();
@@ -4189,7 +4190,7 @@ function confirmPayEdit() {
         toast(_methodLabel(method) + ' ' + fmt(amount) + '원으로 수정됨', 'var(--green)');
     }
 
-    saveData();
+    _saveAndFlush();
     closeModal('payEditModal');
     showClientStatement(clientName, month);
     renderOrders(); renderDashboard(); updateInfoCounts(); updateNavBadges();
@@ -4237,7 +4238,7 @@ function _doBulkPay(selectedMethod) {
     closeBulkPayPopup();
     const now = new Date().toISOString();
     unpaidList.forEach(o => { o.isPaid = true; o.paidAmount = o.total; o.paidAt = now; o.paidMethod = selectedMethod; });
-    saveData();
+    _saveAndFlush();
     showClientStatement(clientName, month);
     renderOrders(); renderDashboard(); updateInfoCounts(); updateNavBadges();
     _refreshUnpaidIfActive();
