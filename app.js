@@ -3186,6 +3186,13 @@ function renderSettleTable() {
         <p style="font-size:11px;color:var(--text2);margin-bottom:6px;">💡 거래처 클릭 시 상세 명세서 · ${entries.length}개 거래처</p>
         <div class="settle-table-wrap">
         <table class="settle-table">
+            <colgroup>
+                <col style="width:110px;min-width:100px;max-width:130px;">
+                <col style="width:52px;">
+                <col style="width:100px;">
+                <col style="width:100px;">
+                <col style="width:100px;">
+            </colgroup>
             <thead><tr>
                 <th>거래처</th>
                 <th class="text-center">건수</th>
@@ -3200,7 +3207,7 @@ function renderSettleTable() {
                         <td class="text-center">${d.count}</td>
                         <td class="text-right">${fmt(d.total)}원</td>
                         <td class="text-right">${fmt(d.paid)}원</td>
-                        <td class="text-right" style="color:var(--red);">${fmt(d.total-d.paid)}원</td>
+                        <td class="text-right" style="color:var(--red);font-weight:${d.total-d.paid>0?'700':'400'};">${fmt(d.total-d.paid)}원</td>
                     </tr>`).join('')}
             </tbody>
         </table>
