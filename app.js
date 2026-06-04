@@ -389,6 +389,23 @@ function _fbValueHandler(snap) {
         if (_connectGuard)     return;  // 초기 연결 중 레이스 컨디션 차단
         if (d.writtenBy === SESSION_ID) return; // 자기 자신이 올린 echo 차단
 
+        // ★ CRM 외부에서 결제 패치한 경우: 타임스탬프 비교 우회 + orders만 즉시 갱신
+        if (d.writtenBy === 'CRM_EXTERNAL') {
+            if (d.orders) {
+                const inc = toArray(d.orders).map(_normOrderFromFb);
+                const h = dataHash(inc);
+                if (h !== lastHash.orders) {
+                    orders = inc;
+                    lastHash.orders = h;
+                    saveToLocal();
+                    _fullRender();
+                    setSyncStatus('online');
+                    toast('💳 CRM에서 결제 처리됨 — 화면이 업데이트됐습니다', 'var(--green)', 3000);
+                }
+            }
+            return;
+        }
+
         // ★ _syncGuard 중 도착한 타기기 변경 → 버리지 않고 보류, 업로드 완료 후 처리
         if (_syncGuard) { _pendingFbSnap = snap; return; }
 
@@ -7601,7 +7618,28 @@ function toggleClientTooltip(e, card) {
     }, { passive: false });
 })();
 
-// ─── 앱 종료/백그라운드 시 즉시 강제 동기화 ───
+// ─── 정산 테이블 헤더 고정 스크롤 감지 ───
+// 첫 번째 데이터 행이 화면 상단에 닿으면 thead sticky 활성화
+// 위로 스크롤해서 테이블 위 영역이 보이면 sticky 해제 → 검색창 접근 가능
+(function initSettleTablePin() {
+    const mainContent = document.getElementById('mainContent');
+    if (!mainContent) return;
+    mainContent.addEventListener('scroll', () => {
+        const st = document.getElementById('settlementTable');
+        if (!st || st.style.display === 'none') return;
+        const wrap = st.querySelector('.settle-table-wrap');
+        const tbody = st.querySelector('tbody');
+        const firstRow = tbody ? tbody.querySelector('tr') : null;
+        if (!wrap || !firstRow) { st.classList.remove('thead-pinned'); return; }
+        // 첫 번째 데이터 행의 상단이 화면 상단(0)보다 위로 올라가면 헤더 고정
+        const firstRowTop = firstRow.getBoundingClientRect().top;
+        if (firstRowTop <= 0) {
+            st.classList.add('thead-pinned');
+        } else {
+            st.classList.remove('thead-pinned');
+        }
+    }, { passive: true });
+})();
 // 자주 껐다 켜는 환경에서 debounce 대기 중 종료로 인한 데이터 유실 방지
 function _flushSync() {
     if (!workspaceRef || !isConnected) return;
