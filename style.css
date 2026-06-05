@@ -723,13 +723,14 @@ body.light .stat-card.orange .stat-value { color:#a07010; }
 .table-wrap { overflow-x:auto; border-radius:var(--radius-s); border:1.5px solid var(--border); margin-top:10px; }
 .settle-table { width:100%; border-collapse:collapse; min-width:360px; font-size:13px; }
 
-/* 거래처 정산 테이블 — 가로 스크롤 + 세로는 .content 전체 스크롤 */
+/* 거래처 정산 테이블 — 가로+세로 스크롤 */
 #settlementTable .settle-table-wrap {
     overflow-x:auto;
-    overflow-y:visible;
+    overflow-y:auto;
+    max-height:60vh;
     -webkit-overflow-scrolling:touch;
     touch-action:pan-x pan-y;
-    overscroll-behavior-x:contain;
+    overscroll-behavior:contain;
     border:1.5px solid var(--border);
     border-radius:var(--radius-s);
 }
@@ -739,18 +740,15 @@ body.light .stat-card.orange .stat-value { color:#a07010; }
     border-collapse:separate;
     border-spacing:0;
 }
-/* 헤더 상단 고정 — .thead-pinned 클래스가 있을 때만 sticky (JS가 토글) */
+/* 헤더 행 상단 고정 */
 #settlementTable .settle-table thead th {
-    background:var(--surf3);
-    box-shadow:0 2px 4px -1px rgba(0,0,0,.12);
-    transition:box-shadow .15s;
-}
-#settlementTable.thead-pinned .settle-table thead th {
     position:sticky;
     top:0;
     z-index:4;
+    background:var(--surf3);
+    box-shadow:0 2px 4px -1px rgba(0,0,0,.12);
 }
-/* 거래처 열 좌측 고정 (항상) */
+/* 거래처 열 좌측 고정 */
 #settlementTable .settle-table th:first-child,
 #settlementTable .settle-table td:first-child {
     position:sticky;
@@ -764,14 +762,10 @@ body.light .stat-card.orange .stat-value { color:#a07010; }
     text-overflow:ellipsis;
     box-shadow:2px 0 6px -2px rgba(0,0,0,.15);
 }
-/* 거래처 헤더 — 상단+좌측 동시 고정일 때 z-index 최상위 */
-#settlementTable.thead-pinned .settle-table th:first-child {
+/* 거래처 헤더 — 상단+좌측 동시 고정 */
+#settlementTable .settle-table th:first-child {
     background:var(--surf3);
     z-index:5;
-}
-#settlementTable:not(.thead-pinned) .settle-table th:first-child {
-    background:var(--surf3);
-    z-index:2;
 }
 .settle-table th { background:var(--surf3); padding:10px 10px; text-align:left; border-bottom:2px solid var(--border); color:var(--text2); font-size:11px; font-weight:800; letter-spacing:.6px; }
 .settle-table td { padding:10px 10px; border-bottom:1px solid var(--border); }

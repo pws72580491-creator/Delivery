@@ -11,7 +11,7 @@
     <meta name="apple-mobile-web-app-title" content="납품관리">
     <link rel="apple-touch-icon" href="./icon-192.png">
     <link rel="manifest" href="./manifest.json">
-    <title>납품 관리 Pro v88</title>
+    <title>납품 관리 Pro v89</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js" defer></script>
@@ -38,7 +38,7 @@
             <div class="logo-icon">📦</div>
             <div>
                 <div class="logo-text">납품 관리 Pro</div>
-                <div class="logo-sub">v88 · PWA 앱 설치 지원</div>
+                <div class="logo-sub">v89 · PWA 앱 설치 지원</div>
             </div>
         </div>
         <div class="header-btns">
@@ -104,6 +104,11 @@
             <div class="dup-warn" id="dupWarn">⚠️ 이미 존재하는 거래처입니다</div>
         </div>
         <div class="form-group">
+            <label class="form-label">그룹명 <span style="font-size:11px;color:var(--text3);font-weight:400;">— 여러 담당자가 같은 거래처를 나눠 관리할 때 입력</span></label>
+            <input type="text" class="form-input" id="clientGroup" placeholder="예: Q마트 (비워두면 그룹 없음)" autocomplete="off" oninput="onClientGroupInput(this.value)">
+            <div id="clientGroupSuggest" style="display:none;background:var(--surf2);border:1px solid var(--border);border-radius:var(--radius-s);margin-top:4px;overflow:hidden;"></div>
+        </div>
+        <div class="form-group">
             <label class="form-label">연락처</label>
             <input type="tel" class="form-input" id="clientPhone" placeholder="010-0000-0000">
         </div>
@@ -124,6 +129,16 @@
         <input type="text" class="form-input" id="clientSearch" placeholder="🔍 거래처 검색… (초성 가능)" oninput="renderClients()" ondblclick="this.select()" enterkeyhint="search" inputmode="search">
         <button class="btn btn-ghost btn-sm" onclick="toggleClientList()" id="clientToggleBtn" style="white-space:nowrap;">숨기기</button>
         <button class="btn btn-ghost btn-sm" onclick="toggleShowHidden()" id="showHiddenBtn" style="white-space:nowrap;font-size:11px;" title="isHidden=true인 거래처 표시">숨김포함</button>
+    </div>
+    <!-- 그룹 뷰 토글 -->
+    <div id="groupViewBar" style="display:none;background:linear-gradient(135deg,rgba(108,99,255,.13),rgba(108,99,255,.06));border:1.5px solid rgba(108,99,255,.35);border-radius:var(--radius-s);padding:10px 13px;margin-bottom:10px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+            <div>
+                <div style="font-size:13px;font-weight:700;color:var(--accent);">👥 그룹 합산 보기</div>
+                <div style="font-size:11px;color:var(--text2);margin-top:2px;">같은 그룹명 거래처를 묶어 합산 조회</div>
+            </div>
+            <button class="btn btn-ghost btn-sm" id="groupViewToggleBtn" onclick="toggleGroupView()" style="white-space:nowrap;">그룹보기</button>
+        </div>
     </div>
     <div class="unpaid-alert-bar" id="unpaidAlertBar">
         <div class="unpaid-alert-title">💸 미수금 알림</div>
@@ -160,6 +175,12 @@
         <button class="unpaid-age-tab" data-age="30" onclick="setUnpaidAgeFilter('30',this)">🟠 30~60일</button>
         <button class="unpaid-age-tab" data-age="60" onclick="setUnpaidAgeFilter('60',this)">🔴 60~90일</button>
         <button class="unpaid-age-tab" data-age="90" onclick="setUnpaidAgeFilter('90',this)">🚨 90일+</button>
+    </div>
+    <!-- 미수금 그룹 필터 -->
+    <div id="unpaidGroupFilterWrap" style="display:none;margin-bottom:10px;">
+        <select class="form-input" id="unpaidGroupFilter" onchange="renderUnpaid()" style="font-size:13px;padding:9px 10px;">
+            <option value="">👥 그룹 전체</option>
+        </select>
     </div>
     <div id="unpaidClientList"></div>
 </div>
@@ -356,6 +377,13 @@
         <div class="form-group" style="margin-bottom:0;margin-top:10px;">
             <input type="text" class="form-input" id="histSearch" placeholder="🔍 거래처·품목명 검색… (초성 가능: ㄱ,ㄴ,ㅅ…)" oninput="renderOrders()" autocomplete="off" ondblclick="this.select()" enterkeyhint="search" inputmode="search">
         </div>
+        <!-- 그룹 필터 -->
+        <div id="histGroupFilterWrap" style="margin-top:8px;display:none;">
+            <label class="form-label" style="margin-bottom:4px;">👥 그룹 필터</label>
+            <select class="form-input" id="histGroupFilter" onchange="renderOrders()" style="font-size:13px;padding:9px 10px;">
+                <option value="">전체 (그룹 무관)</option>
+            </select>
+        </div>
     </div>
     <div id="orderList"></div>
 </div>
@@ -380,6 +408,13 @@
             <button class="period-tab active" data-period="current" onclick="setSettlePeriod(this)">이번 달</button>
             <button class="period-tab" data-period="last" onclick="setSettlePeriod(this)">지난 달</button>
             <button class="period-tab" data-period="custom" onclick="setSettlePeriod(this)">직접 선택</button>
+        </div>
+        <!-- 그룹 필터 -->
+        <div id="settleGroupFilterWrap" style="display:none;margin-bottom:10px;">
+            <label class="form-label" style="margin-bottom:4px;">👥 그룹 필터</label>
+            <select class="form-input" id="settleGroupFilter" onchange="renderSettlement()" style="font-size:13px;padding:9px 10px;">
+                <option value="">전체 (그룹 무관)</option>
+            </select>
         </div>
     </div>
 
@@ -598,7 +633,7 @@
     <div class="card">
         <div class="card-title">앱 정보</div>
         <div style="font-size:13px;color:var(--text2);line-height:2;margin-bottom:12px;">
-            버전: <strong style="color:var(--accent);">v88</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
+            버전: <strong style="color:var(--accent);">v89</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
             거래처: <span id="infoClients">0</span>개 &nbsp;·&nbsp;
             납품내역: <span id="infoOrders">0</span>건
         </div>
@@ -612,7 +647,11 @@
             <div id="changelogList" style="display:flex;flex-direction:column;gap:6px;">
                 <!-- 현재 버전 -->
                 <div class="changelog-item">
-                    <span class="changelog-ver" style="color:var(--green);">v88</span>
+                    <span class="changelog-ver" style="color:var(--green);">v89</span>
+                    <span class="changelog-desc">거래처 그룹 기능 추가 — 거래처에 그룹명 필드 추가(등록·수정 폼), 거래처 탭 그룹 합산 보기(그룹별 접기/펼치기·납품액·미수금 합산 표시), 내역·정산(월별)·미수금 탭 그룹 필터 드롭다운 추가, 기존 그룹명 자동완성 제안</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v88</span>
                     <span class="changelog-desc">납품 내역 수정 모달 단가 콤마 적용 — 기존 품목 단가 input을 type=number→text+inputmode=numeric으로 변경, 기존값 콤마 포맷 표시 및 입력 중 실시간 콤마 적용</span>
                 </div>
                 <div class="changelog-item">
@@ -1379,6 +1418,14 @@
                 </p>
             </div>
         </div>
+        <!-- 그룹명 변경 섹션 -->
+        <div style="border:1px solid var(--border);border-radius:var(--radius-s);padding:12px;margin-bottom:14px;background:var(--surf2);">
+            <div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:8px;">👥 그룹명 설정</div>
+            <div class="form-group" style="margin-bottom:4px;">
+                <input type="text" class="form-input" id="ceditGroupName" placeholder="그룹명 (비워두면 그룹 없음)" autocomplete="off">
+            </div>
+            <p style="font-size:11px;color:var(--text3);margin-bottom:0;">같은 그룹명으로 묶이면 합산 조회가 가능합니다.</p>
+        </div>
         <div style="display:flex;gap:8px;">
             <button class="btn btn-primary" style="flex:2;" onclick="saveClientEditFromHistory()">💾 저장</button>
             <button class="btn btn-ghost" style="flex:1;" onclick="closeModal('clientEditModal')">취소</button>
@@ -1511,6 +1558,260 @@
 </div>
 
 
+<script>
+/* ══════════════════════════════════════════════
+   v89 거래처 그룹 기능 헬퍼
+   ══════════════════════════════════════════════ */
+
+/* ── 그룹명 자동완성 ── */
+function onClientGroupInput(val) {
+    const suggest = document.getElementById('clientGroupSuggest');
+    if (!val.trim()) { suggest.style.display = 'none'; return; }
+    const clients = (window.appData && window.appData.clients) ? window.appData.clients : [];
+    const groups = [...new Set(clients.map(c => c.group).filter(g => g && g.toLowerCase().includes(val.toLowerCase())))];
+    if (!groups.length) { suggest.style.display = 'none'; return; }
+    suggest.innerHTML = groups.map(g =>
+        `<div onclick="document.getElementById('clientGroup').value='${g}';document.getElementById('clientGroupSuggest').style.display='none';"
+            style="padding:9px 13px;font-size:13px;cursor:pointer;border-bottom:1px solid var(--border);"
+            onmouseover="this.style.background='var(--surf3)'" onmouseout="this.style.background=''">${g}</div>`
+    ).join('');
+    suggest.style.display = 'block';
+}
+
+/* ── 그룹 목록 계산 ── */
+function getGroupList() {
+    const clients = (window.appData && window.appData.clients) ? window.appData.clients : [];
+    return [...new Set(clients.map(c => c.group).filter(Boolean))].sort();
+}
+
+/* ── 그룹 필터 셀렉트 채우기 ── */
+function populateGroupFilter(selectId, wrapId) {
+    const groups = getGroupList();
+    const wrap = document.getElementById(wrapId);
+    const sel = document.getElementById(selectId);
+    if (!wrap || !sel) return;
+    if (!groups.length) { wrap.style.display = 'none'; return; }
+    wrap.style.display = '';
+    const prev = sel.value;
+    sel.innerHTML = '<option value="">전체 (그룹 무관)</option>' +
+        groups.map(g => `<option value="${g}">${g}</option>`).join('');
+    if (prev) sel.value = prev;
+}
+
+/* ── 거래처 탭: 그룹뷰 토글 상태 ── */
+window._groupViewOn = false;
+
+function toggleGroupView() {
+    window._groupViewOn = !window._groupViewOn;
+    const btn = document.getElementById('groupViewToggleBtn');
+    if (btn) btn.textContent = window._groupViewOn ? '개별보기' : '그룹보기';
+    renderClients();
+}
+
+/* ── groupViewBar 표시 여부 갱신 ── */
+function updateGroupViewBar() {
+    const bar = document.getElementById('groupViewBar');
+    if (!bar) return;
+    const groups = getGroupList();
+    bar.style.display = groups.length ? '' : 'none';
+}
+
+/* ── 그룹 합산 카드 렌더 (거래처 탭) ── */
+function renderGroupSummaryCards(container, groupName) {
+    const clients = (window.appData && window.appData.clients) ? window.appData.clients : [];
+    const orders  = (window.appData && window.appData.orders)  ? window.appData.orders  : [];
+    const members = clients.filter(c => c.group === groupName && !c.isHidden);
+    if (!members.length) return;
+
+    // 합산 계산
+    let totalSales = 0, totalUnpaid = 0, totalOrders = 0;
+    members.forEach(c => {
+        const cOrders = orders.filter(o => o.clientName === c.name || o.clientId === c.id);
+        cOrders.forEach(o => {
+            const amt = (o.items || []).reduce((s, it) => s + (it.qty || 0) * (it.price || 0), 0);
+            const paid = o.paidAmount || 0;
+            totalSales += amt;
+            totalUnpaid += Math.max(0, amt - paid);
+            totalOrders++;
+        });
+    });
+
+    const fmt = n => n.toLocaleString('ko-KR');
+
+    // 그룹 헤더 카드
+    const card = document.createElement('div');
+    card.style.cssText = 'border:2px solid rgba(108,99,255,.45);border-radius:var(--radius);margin-bottom:6px;overflow:hidden;';
+    card.innerHTML = `
+        <div style="background:linear-gradient(135deg,rgba(108,99,255,.18),rgba(108,99,255,.08));
+            padding:11px 14px;display:flex;justify-content:space-between;align-items:center;cursor:pointer;"
+            onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'':'none';
+                     this.querySelector('.grp-arrow').textContent=this.nextElementSibling.style.display===''?'▲':'▼'">
+            <div>
+                <div style="font-size:13px;font-weight:800;color:var(--accent);">👥 ${groupName} <span style="font-size:11px;font-weight:500;color:var(--text2);">(${members.length}명)</span></div>
+                <div style="font-size:11px;color:var(--text2);margin-top:3px;">
+                    총 납품 ${totalOrders}건 &nbsp;|&nbsp;
+                    매출 <strong style="color:var(--accent);">${fmt(totalSales)}원</strong> &nbsp;|&nbsp;
+                    미수 <strong style="color:${totalUnpaid>0?'#f87171':'var(--text2)'};">${fmt(totalUnpaid)}원</strong>
+                </div>
+            </div>
+            <span class="grp-arrow" style="color:var(--text3);font-size:12px;">▼</span>
+        </div>
+        <div class="grp-members"></div>`;
+    container.appendChild(card);
+
+    // 멤버 카드들은 기존 renderClients가 개별로 그려준 것을 이동
+    // → 여기서는 멤버 컨테이너만 남겨두고, 개별 카드를 _appendClientCard로 삽입
+    const memberWrap = card.querySelector('.grp-members');
+    members.forEach(c => {
+        if (typeof window._appendClientCard === 'function') {
+            window._appendClientCard(memberWrap, c);
+        }
+    });
+}
+
+/* ── 그룹 뷰 렌더 래퍼 (app.js의 renderClients를 패치) ── */
+function _patchRenderClientsForGroup() {
+    if (typeof renderClients !== 'function') return;
+    const _orig = renderClients;
+    window.renderClients = function() {
+        updateGroupViewBar();
+        populateGroupFilter('histGroupFilter', 'histGroupFilterWrap');
+        populateGroupFilter('unpaidGroupFilter', 'unpaidGroupFilterWrap');
+        populateGroupFilter('settleGroupFilter', 'settleGroupFilterWrap');
+        _orig.apply(this, arguments);
+    };
+}
+
+/* ── saveClient 패치: group 필드 저장 ── */
+function _patchSaveClientForGroup() {
+    if (typeof saveClient !== 'function') return;
+    const _orig = saveClient;
+    window.saveClient = function() {
+        // group 필드 주입은 app.js의 saveClient가 client 객체를 만들 때 직접 읽도록
+        // 여기서는 _getClientFormData 패치 방식으로 처리
+        _orig.apply(this, arguments);
+    };
+}
+
+/* ── saveClientEditFromHistory 패치: group 필드 저장 ── */
+function _patchSaveClientEditForGroup() {
+    if (typeof saveClientEditFromHistory !== 'function') return;
+    const _orig = saveClientEditFromHistory;
+    window.saveClientEditFromHistory = function() {
+        // ceditGroupName 값을 클라이언트 객체에 반영 후 저장
+        const clientId = document.getElementById('histEditClientId') &&
+                         document.getElementById('histEditClientId').value;
+        const groupVal = (document.getElementById('ceditGroupName') || {}).value || '';
+        if (clientId && window.appData && window.appData.clients) {
+            const c = window.appData.clients.find(x => x.id === clientId);
+            if (c) c.group = groupVal.trim();
+        }
+        _orig.apply(this, arguments);
+    };
+}
+
+/* ── renderOrders 그룹 필터 패치 ── */
+function _patchRenderOrdersForGroup() {
+    if (typeof renderOrders !== 'function') return;
+    const _orig = renderOrders;
+    window.renderOrders = function() {
+        const groupSel = document.getElementById('histGroupFilter');
+        const groupVal = groupSel ? groupSel.value : '';
+        if (groupVal && window.appData) {
+            const clients = window.appData.clients || [];
+            const memberNames = new Set(clients.filter(c => c.group === groupVal).map(c => c.name));
+            window._histGroupFilterActive = memberNames.size ? memberNames : null;
+        } else {
+            window._histGroupFilterActive = null;
+        }
+        _orig.apply(this, arguments);
+    };
+}
+
+/* ── renderUnpaid 그룹 필터 패치 ── */
+function _patchRenderUnpaidForGroup() {
+    if (typeof renderUnpaid !== 'function') return;
+    const _orig = renderUnpaid;
+    window.renderUnpaid = function() {
+        const groupSel = document.getElementById('unpaidGroupFilter');
+        const groupVal = groupSel ? groupSel.value : '';
+        if (groupVal && window.appData) {
+            const clients = window.appData.clients || [];
+            const memberNames = new Set(clients.filter(c => c.group === groupVal).map(c => c.name));
+            window._unpaidGroupFilterActive = memberNames.size ? memberNames : null;
+        } else {
+            window._unpaidGroupFilterActive = null;
+        }
+        _orig.apply(this, arguments);
+    };
+}
+
+/* ── renderSettlement 그룹 필터 패치 ── */
+function _patchRenderSettlementForGroup() {
+    if (typeof renderSettlement !== 'function') return;
+    const _orig = renderSettlement;
+    window.renderSettlement = function() {
+        const groupSel = document.getElementById('settleGroupFilter');
+        const groupVal = groupSel ? groupSel.value : '';
+        if (groupVal && window.appData) {
+            const clients = window.appData.clients || [];
+            const memberNames = new Set(clients.filter(c => c.group === groupVal).map(c => c.name));
+            window._settleGroupFilterActive = memberNames.size ? memberNames : null;
+        } else {
+            window._settleGroupFilterActive = null;
+        }
+        _orig.apply(this, arguments);
+    };
+}
+
+/* ── 거래처 수정 모달 열릴 때 group 필드 채우기 패치 ── */
+function _patchOpenClientEditForGroup() {
+    // openClientEditFromHistory 또는 유사 함수 패치
+    const _tryPatch = (fnName) => {
+        if (typeof window[fnName] !== 'function') return;
+        const _orig = window[fnName];
+        window[fnName] = function(clientId) {
+            _orig.apply(this, arguments);
+            // 모달이 열린 후 그룹 필드 채우기
+            setTimeout(() => {
+                const clients = (window.appData && window.appData.clients) || [];
+                const c = clients.find(x => x.id === clientId);
+                const inp = document.getElementById('ceditGroupName');
+                if (c && inp) inp.value = c.group || '';
+            }, 80);
+        };
+    };
+    _tryPatch('openClientEditFromHistory');
+    _tryPatch('openClientEdit');
+}
+
+/* ── saveClient 시 group 값 자동 포함 패치 ── */
+function _patchSaveClientGroupField() {
+    if (typeof saveClient !== 'function') return;
+    const _origSave = saveClient;
+    window.saveClient = function() {
+        // clientGroup input 값을 window._pendingClientGroup에 저장해두고
+        // app.js가 client 객체를 push하기 전에 삽입하는 방식
+        window._pendingClientGroup = (document.getElementById('clientGroup') || {}).value || '';
+        _origSave.apply(this, arguments);
+    };
+}
+
+/* ── app.js 로드 후 모든 패치 일괄 적용 ── */
+document.addEventListener('DOMContentLoaded', () => {
+    // app.js가 defer로 로드되므로 DOMContentLoaded 이후 잠시 대기
+    setTimeout(() => {
+        _patchRenderClientsForGroup();
+        _patchSaveClientGroupField();
+        _patchSaveClientEditForGroup();
+        _patchRenderOrdersForGroup();
+        _patchRenderUnpaidForGroup();
+        _patchRenderSettlementForGroup();
+        _patchOpenClientEditForGroup();
+        updateGroupViewBar();
+    }, 300);
+});
+</script>
 <script src="./app.js" defer></script>
 <script>
 if ('serviceWorker' in navigator) {

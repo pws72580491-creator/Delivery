@@ -389,23 +389,6 @@ function _fbValueHandler(snap) {
         if (_connectGuard)     return;  // 초기 연결 중 레이스 컨디션 차단
         if (d.writtenBy === SESSION_ID) return; // 자기 자신이 올린 echo 차단
 
-        // ★ CRM 외부에서 결제 패치한 경우: 타임스탬프 비교 우회 + orders만 즉시 갱신
-        if (d.writtenBy === 'CRM_EXTERNAL') {
-            if (d.orders) {
-                const inc = toArray(d.orders).map(_normOrderFromFb);
-                const h = dataHash(inc);
-                if (h !== lastHash.orders) {
-                    orders = inc;
-                    lastHash.orders = h;
-                    saveToLocal();
-                    _fullRender();
-                    setSyncStatus('online');
-                    toast('💳 CRM에서 결제 처리됨 — 화면이 업데이트됐습니다', 'var(--green)', 3000);
-                }
-            }
-            return;
-        }
-
         // ★ _syncGuard 중 도착한 타기기 변경 → 버리지 않고 보류, 업로드 완료 후 처리
         if (_syncGuard) { _pendingFbSnap = snap; return; }
 
