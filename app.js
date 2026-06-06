@@ -47,6 +47,7 @@ clients = clients.map(c => {
     if (!c.note) c.note = '';
     // isHidden: 저장된 값 보존 (false면 목록에 표시, true면 숨겨짐)
     if (c.isHidden === undefined) c.isHidden = false;
+    if (!c.group) c.group = ''; // ★ v89 group 필드 보존
     return c;
 });
 
@@ -363,6 +364,7 @@ function _normClientFromFb(c) {
     if (!c.note && c.memo) c.note = c.memo;
     if (!c.note) c.note = '';
     if (c.isHidden === undefined) c.isHidden = false;
+    if (!c.group) c.group = ''; // ★ v89 group 필드 보존
     return c;
 }
 function _normOrderFromFb(o) {
@@ -377,6 +379,8 @@ function _normOrderFromFb(o) {
     if (!o.isVoid) o.isVoid = false;
     // date: undefined이면 startsWith() 호출 시 TypeError 방지
     if (!o.date) o.date = '';
+    // ★ CRM 우선권: crmControlled 플래그 유지
+    if (o.crmControlled) o.crmControlled = true;
     return o;
 }
 
@@ -388,6 +392,23 @@ function _fbValueHandler(snap) {
         if (!_initialLoadDone) return;  // 초기 .get() 처리 전 차단
         if (_connectGuard)     return;  // 초기 연결 중 레이스 컨디션 차단
         if (d.writtenBy === SESSION_ID) return; // 자기 자신이 올린 echo 차단
+
+        // ★ CRM 외부에서 결제 패치한 경우: 타임스탬프 비교 우회 + orders만 즉시 갱신
+        if (d.writtenBy === 'CRM_EXTERNAL') {
+            if (d.orders) {
+                const inc = toArray(d.orders).map(_normOrderFromFb);
+                const h = dataHash(inc);
+                if (h !== lastHash.orders) {
+                    orders = inc;
+                    lastHash.orders = h;
+                    saveToLocal();
+                    _fullRender();
+                    setSyncStatus('online');
+                    toast('💳 CRM에서 결제 처리됨 — 화면이 업데이트됐습니다', 'var(--green)', 3000);
+                }
+            }
+            return;
+        }
 
         // ★ _syncGuard 중 도착한 타기기 변경 → 버리지 않고 보류, 업로드 완료 후 처리
         if (_syncGuard) { _pendingFbSnap = snap; return; }
@@ -555,6 +576,27 @@ function _minifyOrder(o) {
     return r;
 }
 
+/**
+ * ★ CRM 우선권: 서버(Firebase)의 결제 필드를 로컬 order 객체에 병합
+ * CRM이 기록한 isPaid/paidAmount/paidAt/paidMethod/paidMethodDetail/crmControlled는
+ * 납품 앱이 절대 덮어쓰지 않는다.
+ * 단, 납품 앱 자체에서 결제 처리한 경우(crmControlled 없음)는 로컬 값 유지.
+ */
+function _mergeCrmPaymentFields(localMinified, serverOrder) {
+    if (!serverOrder) return;
+    // crmControlled 플래그가 있거나, CRM이 isPaid=true로 만든 경우 보존
+    const crmOwned = serverOrder.crmControlled === true ||
+                     (serverOrder.isPaid && !localMinified.isPaid);
+    if (crmOwned || serverOrder.crmControlled) {
+        if (serverOrder.isPaid        != null) localMinified.isPaid        = serverOrder.isPaid;
+        if (serverOrder.paidAmount    != null) localMinified.paidAmount    = serverOrder.paidAmount;
+        if (serverOrder.paidAt)                localMinified.paidAt        = serverOrder.paidAt;
+        if (serverOrder.paidMethod)            localMinified.paidMethod    = serverOrder.paidMethod;
+        if (serverOrder.paidMethodDetail)      localMinified.paidMethodDetail = serverOrder.paidMethodDetail;
+        localMinified.crmControlled = true; // 플래그 전파
+    }
+}
+
 function _minifyClient(c) {
     // isHidden: false(기본)는 생략, true일 때만 저장 (용량 절약)
     // memo → note 이관 완료 → 제거
@@ -567,6 +609,7 @@ function _minifyClient(c) {
     if (c.phone)     r.phone     = c.phone;
     if (c.address)   r.address   = c.address;
     if (c.note)      r.note      = c.note;
+    if (c.group)     r.group     = c.group; // ★ v89 그룹 필드 저장
     if (c.isHidden)  r.isHidden  = true;   // true일 때만 저장 (false는 기본값이므로 생략)
     const ua = _compactTs(c.updatedAt);
     if (ua)          r.updatedAt = ua;
@@ -629,6 +672,7 @@ function normalizeBackupData(data) {
         if (!c.note && c.memo) c.note = c.memo;       // memo → note 이관
         if (!c.note) c.note = '';
         if (c.isHidden === undefined) c.isHidden = false;
+        if (!c.group) c.group = '';                    // ★ v89 group 필드 보존
         return c;
     });
 
@@ -682,7 +726,7 @@ function normalizeBackupData(data) {
     return { clients: clients_out, orders: orders_out, stockItems: stock_out };
 }
 
-const debouncedSync = debounce(() => {
+const debouncedSync = debounce(async () => {
     if (!workspaceRef || !isConnected) return;  // 오프라인이거나 미연결 시 즉시 중단
     const ch = dataHash(clients);
     const oh = dataHash(orders);
@@ -694,13 +738,30 @@ const debouncedSync = debounce(() => {
     if (oh !== lastHash.orders)  {
         const _nd = _dirtyOrders.size + _deletedOrders.size;
         if (_nd > 0 && _nd < 20) {
-            // delta: 변경된 항목만 개별 경로 업로드 (전체 배열 대신 orders/{id} 경로)
-            for (const id of _dirtyOrders)   { const o = orders.find(x=>x.id===id); if (o) updates[`orders/${id}`] = _minifyOrder(o); }
-            for (const id of _deletedOrders) { updates[`orders/${id}`] = null; } // null = RTDB 삭제
+            // delta: 변경된 항목만 개별 경로 업로드
+            // ★ CRM 우선권: 서버의 결제 필드를 읽어 merge 후 업로드
+            const serverSnap = await workspaceRef.child('orders').once('value').catch(() => null);
+            const serverOrders = serverSnap ? serverSnap.val() : {};
+            for (const id of _dirtyOrders) {
+                const o = orders.find(x => x.id === id);
+                if (!o) continue;
+                const m = _minifyOrder(o);
+                const sv = serverOrders ? serverOrders[id] : null;
+                if (sv) _mergeCrmPaymentFields(m, sv); // CRM 결제 필드 보존
+                updates[`orders/${id}`] = m;
+            }
+            for (const id of _deletedOrders) { updates[`orders/${id}`] = null; }
         } else {
-            // full: bulk 작업·첫 동기화 시 전체 map 업로드 (배열→맵 마이그레이션 포함)
+            // full: bulk 작업·첫 동기화 시 전체 map 업로드
+            // ★ CRM 우선권: 서버 결제 필드를 먼저 읽어 merge
+            const serverSnap2 = await workspaceRef.child('orders').once('value').catch(() => null);
+            const serverOrders2 = serverSnap2 ? serverSnap2.val() : {};
             const ordersMap = {};
-            orders.forEach(o => { ordersMap[o.id] = _minifyOrder(o); });
+            orders.forEach(o => {
+                const m = _minifyOrder(o);
+                if (serverOrders2 && serverOrders2[o.id]) _mergeCrmPaymentFields(m, serverOrders2[o.id]);
+                ordersMap[o.id] = m;
+            });
             updates.orders = ordersMap;
         }
         changed = true;
@@ -1214,7 +1275,7 @@ function saveClient() {
         const c = clients.find(c => c.id === editingClientId);
         if (c) {
             const oldName = c.name;
-            c.name=name; c.phone=phone; c.address=address; c.note=note; c.updatedAt=new Date().toISOString();
+            c.name=name; c.phone=phone; c.address=address; c.note=note; c.group=(document.getElementById('clientGroup')?.value||'').trim(); c.updatedAt=new Date().toISOString();
             // 거래처명이 변경된 경우 관련 전표 일괄 반영
             if (oldName !== name) {
                 let orderCount = 0;
@@ -1240,7 +1301,8 @@ function saveClient() {
             }
         }
     } else {
-        clients.push({ id:_uid(), name, phone, address, note, isHidden:false, createdAt:new Date().toISOString(), updatedAt:new Date().toISOString() });
+        const group = (document.getElementById('clientGroup')?.value || '').trim();
+        clients.push({ id:_uid(), name, phone, address, note, group, isHidden:false, createdAt:new Date().toISOString(), updatedAt:new Date().toISOString() });
         // ★ 로컬 변경 시각 갱신 → Firebase 리스너가 구 서버 데이터로 덮어쓰는 경쟁 방지
         _localWriteTime = Date.now();
         toast('✅ 거래처 등록 완료', 'var(--green)');
@@ -1256,6 +1318,8 @@ function cancelClientEdit() {
     document.getElementById('clientPhone').value = '';
     document.getElementById('clientAddress').value = '';
     document.getElementById('clientNote').value = '';
+    if (document.getElementById('clientGroup')) document.getElementById('clientGroup').value = '';
+    if (document.getElementById('clientGroupSuggest')) document.getElementById('clientGroupSuggest').style.display = 'none';
     document.getElementById('dupWarn').style.display = 'none';
     document.getElementById('clientFormTitle').textContent = '거래처 등록';
     document.getElementById('clientCancelBtn').style.display = 'none';
@@ -1269,6 +1333,7 @@ function editClient(id) {
     document.getElementById('clientPhone').value   = c.phone || '';
     document.getElementById('clientAddress').value = c.address || '';
     document.getElementById('clientNote').value    = c.note || '';
+    if (document.getElementById('clientGroup')) document.getElementById('clientGroup').value = c.group || '';
     document.getElementById('clientFormTitle').textContent = '거래처 수정';
     document.getElementById('clientCancelBtn').style.display = 'block';
     document.getElementById('clientName').focus();
@@ -1318,6 +1383,26 @@ function hideClient(id) {
 
 let clientSortMode = 'name'; // 'name' | 'recent' | 'unpaid' | 'total'
 
+// ★ v89 그룹뷰 토글 (localStorage에 상태 저장 + 목록 자동 펼침)
+function toggleGroupView(btn) {
+    window._groupViewOn = !window._groupViewOn;
+    localStorage.setItem('groupViewOn', window._groupViewOn ? '1' : '0');
+    if (btn) {
+        btn.textContent  = window._groupViewOn ? '👥 그룹 해제' : '👥 그룹보기';
+        btn.style.color       = window._groupViewOn ? 'var(--accent)' : '';
+        btn.style.borderColor = window._groupViewOn ? 'var(--accent)' : '';
+    }
+    // 그룹뷰 ON 시 목록 자동 펼침
+    if (window._groupViewOn && !clientListVisible) {
+        clientListVisible = true;
+        const cl = document.getElementById('clientList');
+        const tb = document.getElementById('clientToggleBtn');
+        if (cl) cl.style.display = 'block';
+        if (tb) tb.textContent = '숨기기';
+    }
+    renderClients();
+}
+
 function setClientSort(mode, btn) {
     clientSortMode = mode;
     document.querySelectorAll('.sort-btn').forEach(b => b.classList.remove('active'));
@@ -1326,6 +1411,9 @@ function setClientSort(mode, btn) {
 }
 
 function renderClients() {
+    // window.appData 노출 (index.html 그룹 헬퍼에서 참조)
+    window.appData = { clients, orders, prices };
+
     const searchEl = document.getElementById('clientSearch');
     const q = searchEl ? searchEl.value : '';
     const statsMap = _buildClientStatsCache();
@@ -1343,17 +1431,75 @@ function renderClients() {
     if (!el) return;
 
     if (!clientListVisible) {
-        el.innerHTML = filtered.length === 0
-            ? '<div class="empty"><div class="empty-icon">🏪</div><div class="empty-text">등록된 거래처가 없습니다</div></div>'
-            : filtered.map(c => _clientCardHTML(c, statsMap, q)).join('');
-        return;
+        // ★ 그룹뷰 ON이면 목록을 강제 펼침
+        if (window._groupViewOn) {
+            clientListVisible = true;
+            el.style.display = 'block';
+            const tb = document.getElementById('clientToggleBtn');
+            if (tb) tb.textContent = '숨기기';
+        } else {
+            el.innerHTML = filtered.length === 0
+                ? '<div class="empty"><div class="empty-icon">🏪</div><div class="empty-text">등록된 거래처가 없습니다</div></div>'
+                : filtered.map(c => _clientCardHTML(c, statsMap, q)).join('');
+            return;
+        }
     }
 
     if (!filtered.length) {
         el.innerHTML = '<div class="empty"><div class="empty-icon">🏪</div><div class="empty-text">등록된 거래처가 없습니다</div></div>';
         return;
     }
+
+    // ★ 그룹뷰 모드
+    if (window._groupViewOn) {
+        const groups = [...new Set(filtered.map(c => c.group).filter(Boolean))].sort();
+        const noGroup = filtered.filter(c => !c.group);
+        el.innerHTML = '';
+        // 그룹별 카드
+        groups.forEach(g => {
+            const members = filtered.filter(c => c.group === g);
+            let totalSales = 0, totalUnpaid = 0, totalOrders = 0;
+            members.forEach(c => {
+                const st = statsMap[c.id] || statsMap[c.name] || { total:0, unpaid:0, count:0 };
+                totalSales  += st.total  || 0;
+                totalUnpaid += st.unpaid || 0;
+                totalOrders += st.count  || 0;
+            });
+            const fmt2 = n => n.toLocaleString('ko-KR');
+            const wrap = document.createElement('div');
+            wrap.style.cssText = 'border:2px solid rgba(108,99,255,.45);border-radius:var(--radius);margin-bottom:8px;overflow:hidden;';
+            wrap.innerHTML = `
+                <div style="background:linear-gradient(135deg,rgba(108,99,255,.18),rgba(108,99,255,.08));
+                    padding:11px 14px;display:flex;justify-content:space-between;align-items:center;cursor:pointer;"
+                    onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'':'none';
+                             this.querySelector('.grp-arrow').textContent=this.nextElementSibling.style.display===''?'▲':'▼'">
+                    <div>
+                        <div style="font-size:13px;font-weight:800;color:var(--accent);">👥 ${g} <span style="font-size:11px;font-weight:500;color:var(--text2);">(${members.length}명)</span></div>
+                        <div style="font-size:11px;color:var(--text2);margin-top:3px;">
+                            납품 ${totalOrders}건 &nbsp;|&nbsp;
+                            매출 <strong style="color:var(--accent);">${fmt2(totalSales)}원</strong> &nbsp;|&nbsp;
+                            미수 <strong style="color:${totalUnpaid>0?'#f87171':'var(--text2)'};">${fmt2(totalUnpaid)}원</strong>
+                        </div>
+                    </div>
+                    <span class="grp-arrow" style="color:var(--text3);font-size:12px;">▼</span>
+                </div>
+                <div class="grp-members">${members.map(c => _clientCardHTML(c, statsMap, q)).join('')}</div>`;
+            el.appendChild(wrap);
+        });
+        // 그룹 없는 거래처
+        if (noGroup.length) {
+            const noWrap = document.createElement('div');
+            noWrap.innerHTML = noGroup.map(c => _clientCardHTML(c, statsMap, q)).join('');
+            el.appendChild(noWrap);
+        }
+        // ★ 그룹뷰에서도 버튼 갱신
+        if (typeof updateGroupViewBar === 'function') updateGroupViewBar();
+        return;
+    }
+
     el.innerHTML = filtered.map(c => _clientCardHTML(c, statsMap, q)).join('');
+    // ★ v89 그룹보기 버튼 표시 여부 갱신
+    if (typeof updateGroupViewBar === 'function') updateGroupViewBar();
 }
 
 function _clientCardHTML(c, statsMap, q) {
@@ -2177,7 +2323,8 @@ function renderOrders() {
         const mSearch = matchSearch(o.clientName||'',q) || (o.items||[]).some(i=>matchSearch(i.name,q));
         const mDate   = (!start||o.date>=start) && (!end||o.date<=end);
         const mPay    = histPayFilter==='all'?true:histPayFilter==='unpaid'?!o.isPaid:o.isPaid;
-        return mSearch && mDate && mPay;
+        const mGroup  = window._histGroupFilterActive ? window._histGroupFilterActive.has(o.clientName) : true;
+        return mSearch && mDate && mPay && mGroup;
     });
 
     const _et       = o => o.isPaid && o.discount > 0 ? o.total - o.discount : o.total;
@@ -2609,6 +2756,7 @@ function saveClientEditFromHistory() {
     c.phone     = phone;
     c.address   = address;
     c.note      = note;
+    c.group     = (document.getElementById('ceditGroupName')?.value || '').trim();
     c.updatedAt = new Date().toISOString();
 
     saveData();
@@ -2988,6 +3136,10 @@ function renderSettlement() {
     const month = document.getElementById('settlementMonth').value;
     if (!month) return;
     let filtered = applyPayFilter(orders.filter(o=>o.date?.startsWith(month)));
+    // ★ 그룹 필터
+    if (window._settleGroupFilterActive) {
+        filtered = filtered.filter(o => window._settleGroupFilterActive.has(o.clientName));
+    }
     const _et = o => o.isPaid && o.discount > 0 ? o.total - o.discount : o.total;
     const totalSales   = filtered.reduce((s,o)=>s+_et(o),0);
     const paidAmount   = filtered.reduce((s,o)=>s+_actualPaid(o),0);
@@ -4422,7 +4574,8 @@ function renderUnpaid() {
         if (m && cl.phone) m.phone = cl.phone;
     });
 
-    const all = Object.values(clientMap).filter(x => x.amt > 0);
+    const all = Object.values(clientMap).filter(x => x.amt > 0 &&
+        (window._unpaidGroupFilterActive ? window._unpaidGroupFilterActive.has(x.name) : true));
 
     // 요약 통계
     const totalAmt = all.reduce((s, x) => s + x.amt, 0);
@@ -5919,8 +6072,12 @@ async function restoreBackup(key) {
 
         // Firebase 즉시 업로드 (debounce 없이)
         const ch=dataHash(clients), oh=dataHash(orders), ph=dataHash(prices), sh=dataHash(stockItems);
+        const restoreOrdersMap = {};
+        orders.forEach(o => { restoreOrdersMap[o.id] = _minifyOrder(o); });
         await workspaceRef.update({
-            clients, orders, prices, stockItems,
+            clients: clients.map(_minifyClient),
+            orders: restoreOrdersMap, prices,
+            stockItems: _getLightStock(),
             lastUpdated: new Date().toISOString(),
             writtenBy: SESSION_ID
         });
@@ -6141,7 +6298,7 @@ function exportSettlementExcel() {
 }
 
 function exportJSON() {
-    const data = { clients, orders, prices, stockItems, exportDate:new Date().toISOString(), version:'83' };
+    const data = { clients, orders, prices, stockItems, exportDate:new Date().toISOString(), version:'89' };
     const blob = new Blob([JSON.stringify(data,null,2)], { type:'application/json' });
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement('a');
@@ -6470,8 +6627,12 @@ function _doConnect(id, auto=false) {
             } else if (localHasData) {
                 // ── 서버 비어있음 → 로컬 데이터 업로드 ──
                 const ch = dataHash(clients), oh = dataHash(orders), ph = dataHash(prices), sh = dataHash(stockItems);
+                const initOrdersMap = {};
+                orders.forEach(o => { initOrdersMap[o.id] = _minifyOrder(o); });
                 workspaceRef.update({
-                    clients, orders, prices, stockItems,
+                    clients: clients.map(_minifyClient),
+                    orders: initOrdersMap, prices,
+                    stockItems: _getLightStock(),
                     lastUpdated: new Date().toISOString(),
                     writtenBy: SESSION_ID
                 }).then(() => {
@@ -6737,7 +6898,7 @@ async function openManual() {
     raw = raw.replace('<!-- CHANGELOG_AUTO -->', _extractChangelog());
 
     // 현재 버전 주입
-    const curVer = document.querySelector('.changelog-ver[style*="green"]')?.textContent || 'v82';
+    const curVer = document.querySelector('.changelog-ver[style*="green"]')?.textContent || 'v89';
     raw = raw.replace('납품 관리 Pro — 사용설명서', `납품 관리 Pro — 사용설명서  \n<span style="font-size:12px;color:var(--text3);">현재 버전: ${curVer}</span>`);
 
     const html = _md2html(raw);
@@ -7114,6 +7275,10 @@ function initKeyHandlers() {
 window.addEventListener('DOMContentLoaded', () => {
     // 테마
     applyTheme();
+    // ★ v89: 그룹 헬퍼(index.html)가 참조하는 window.appData 즉시 초기화
+    window.appData = { clients, orders, prices };
+    // ★ v89: 그룹뷰 상태 localStorage에서 복원
+    window._groupViewOn = localStorage.getItem('groupViewOn') === '1';
     // 날짜 기본값
     const today = todayKST();
     document.getElementById('deliveryDate').value = today;
@@ -7236,7 +7401,7 @@ window.addEventListener('DOMContentLoaded', () => {
                     const ordersMap = {}; orders.forEach(o => { ordersMap[o.id] = _minifyOrder(o); });
                     workspaceRef.update({
                         clients: clients.map(_minifyClient),
-                        orders: ordersMap, prices, stockItems,
+                        orders: ordersMap, prices, stockItems: _getLightStock(),
                         lastUpdated: new Date().toISOString(), writtenBy: SESSION_ID
                     }).then(() => {
                         lastHash.clients=ch; lastHash.orders=oh; lastHash.prices=ph; lastHash.stock=sh;
