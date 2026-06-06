@@ -47,7 +47,6 @@ clients = clients.map(c => {
     if (!c.note) c.note = '';
     // isHidden: 저장된 값 보존 (false면 목록에 표시, true면 숨겨짐)
     if (c.isHidden === undefined) c.isHidden = false;
-    if (!c.group) c.group = ''; // ★ v89 group 필드 보존
     return c;
 });
 
@@ -364,7 +363,6 @@ function _normClientFromFb(c) {
     if (!c.note && c.memo) c.note = c.memo;
     if (!c.note) c.note = '';
     if (c.isHidden === undefined) c.isHidden = false;
-    if (!c.group) c.group = ''; // ★ v89 group 필드 보존
     return c;
 }
 function _normOrderFromFb(o) {
@@ -571,6 +569,7 @@ function _minifyOrder(o) {
     if (o.paidNote)    r.paidNote   = o.paidNote;
     if (o.discount)    r.discount   = o.discount;  // 할인 완납 금액
     if (o.isVoid)      r.isVoid     = true;         // 타인거래
+    if (o.crmControlled) r.crmControlled = true; // CRM 결제 우선권 플래그
     const ua = _compactTs(o.updatedAt);
     if (ua)            r.updatedAt  = ua;
     return r;
@@ -609,7 +608,7 @@ function _minifyClient(c) {
     if (c.phone)     r.phone     = c.phone;
     if (c.address)   r.address   = c.address;
     if (c.note)      r.note      = c.note;
-    if (c.group)     r.group     = c.group; // ★ v89 그룹 필드 저장
+    if (c.group)     r.group     = c.group; // 거래처 그룹명
     if (c.isHidden)  r.isHidden  = true;   // true일 때만 저장 (false는 기본값이므로 생략)
     const ua = _compactTs(c.updatedAt);
     if (ua)          r.updatedAt = ua;
@@ -672,7 +671,6 @@ function normalizeBackupData(data) {
         if (!c.note && c.memo) c.note = c.memo;       // memo → note 이관
         if (!c.note) c.note = '';
         if (c.isHidden === undefined) c.isHidden = false;
-        if (!c.group) c.group = '';                    // ★ v89 group 필드 보존
         return c;
     });
 
@@ -1383,26 +1381,6 @@ function hideClient(id) {
 
 let clientSortMode = 'name'; // 'name' | 'recent' | 'unpaid' | 'total'
 
-// ★ v89 그룹뷰 토글 (localStorage에 상태 저장 + 목록 자동 펼침)
-function toggleGroupView(btn) {
-    window._groupViewOn = !window._groupViewOn;
-    localStorage.setItem('groupViewOn', window._groupViewOn ? '1' : '0');
-    if (btn) {
-        btn.textContent  = window._groupViewOn ? '👥 그룹 해제' : '👥 그룹보기';
-        btn.style.color       = window._groupViewOn ? 'var(--accent)' : '';
-        btn.style.borderColor = window._groupViewOn ? 'var(--accent)' : '';
-    }
-    // 그룹뷰 ON 시 목록 자동 펼침
-    if (window._groupViewOn && !clientListVisible) {
-        clientListVisible = true;
-        const cl = document.getElementById('clientList');
-        const tb = document.getElementById('clientToggleBtn');
-        if (cl) cl.style.display = 'block';
-        if (tb) tb.textContent = '숨기기';
-    }
-    renderClients();
-}
-
 function setClientSort(mode, btn) {
     clientSortMode = mode;
     document.querySelectorAll('.sort-btn').forEach(b => b.classList.remove('active'));
@@ -1430,27 +1408,12 @@ function renderClients() {
     const el = document.getElementById('clientList');
     if (!el) return;
 
-    if (!clientListVisible) {
-        // ★ 그룹뷰 ON이면 목록을 강제 펼침
-        if (window._groupViewOn) {
-            clientListVisible = true;
-            el.style.display = 'block';
-            const tb = document.getElementById('clientToggleBtn');
-            if (tb) tb.textContent = '숨기기';
-        } else {
-            el.innerHTML = filtered.length === 0
-                ? '<div class="empty"><div class="empty-icon">🏪</div><div class="empty-text">등록된 거래처가 없습니다</div></div>'
-                : filtered.map(c => _clientCardHTML(c, statsMap, q)).join('');
-            return;
-        }
-    }
-
     if (!filtered.length) {
         el.innerHTML = '<div class="empty"><div class="empty-icon">🏪</div><div class="empty-text">등록된 거래처가 없습니다</div></div>';
         return;
     }
 
-    // ★ 그룹뷰 모드
+    // ★ 그룹뷰 모드 — clientListVisible 상태와 무관하게 최우선 처리
     if (window._groupViewOn) {
         const groups = [...new Set(filtered.map(c => c.group).filter(Boolean))].sort();
         const noGroup = filtered.filter(c => !c.group);
@@ -1492,14 +1455,10 @@ function renderClients() {
             noWrap.innerHTML = noGroup.map(c => _clientCardHTML(c, statsMap, q)).join('');
             el.appendChild(noWrap);
         }
-        // ★ 그룹뷰에서도 버튼 갱신
-        if (typeof updateGroupViewBar === 'function') updateGroupViewBar();
         return;
     }
 
     el.innerHTML = filtered.map(c => _clientCardHTML(c, statsMap, q)).join('');
-    // ★ v89 그룹보기 버튼 표시 여부 갱신
-    if (typeof updateGroupViewBar === 'function') updateGroupViewBar();
 }
 
 function _clientCardHTML(c, statsMap, q) {
@@ -2580,6 +2539,7 @@ function confirmQuickPayDiscount(method) {
     o.paidAt     = new Date().toISOString();
     o.paidMethod = method;
     if (discount > 0) o.discount = (o.discount || 0) + discount;
+    delete o.crmControlled; // 납품앱 직접 결제 → CRM 우선권 해제
     _markDirtyOrder(orderId); // delta sync 마킹
     closeQuickPay(true);
     _saveAndFlush(); renderOrders(); renderDashboard(); updateInfoCounts(); updateNavBadges();
@@ -2624,6 +2584,7 @@ function confirmQuickPay(method) {
     o.paidAmount = o.total;
     o.paidAt     = new Date().toISOString();
     o.paidMethod = method;
+    delete o.crmControlled; // 납품앱 직접 결제 → CRM 우선권 해제
     _markDirtyOrder(orderId); // delta sync 마킹
     closeQuickPay(true);
     _saveAndFlush(); renderOrders(); renderDashboard(); updateInfoCounts(); updateNavBadges();
@@ -4147,6 +4108,7 @@ async function confirmPartialPayDiscount() {
         o.paidMethod = method;
         if (discountAmt > 0) o.discount = (o.discount || 0) + discountAmt;
         if (note) o.paidNote = note; else delete o.paidNote;
+        delete o.crmControlled; // 납품앱 직접 결제 → CRM 우선권 해제
     }
 
     _saveAndFlush();
@@ -4253,6 +4215,7 @@ async function confirmPartialPay() {
             o.paidAt     = now;
             o.paidMethod = (o.paidMethod && o.paidMethod !== method) ? 'mixed' : method;
             if (note) o.paidNote = note; else delete o.paidNote;
+            delete o.crmControlled; // 납품앱 직접 결제 → CRM 우선권 해제
             partCnt++;
         }
     }
@@ -4330,6 +4293,7 @@ function confirmPayEdit() {
         o.paidAmount = 0;
         o.isPaid     = false;
         delete o.paidAt; delete o.paidNote; delete o.paidMethod; delete o.paidMethodDetail;
+        delete o.crmControlled; // 수금 취소 → CRM 우선권 초기화
         toast('🔴 수금 취소 — 미수로 변경됨');
     } else if (amount >= o.total) {
         // 완납
@@ -4338,6 +4302,7 @@ function confirmPayEdit() {
         o.paidAt     = new Date().toISOString();
         o.paidMethod = method;
         if (note) o.paidNote = note; else delete o.paidNote;
+        delete o.crmControlled; // 납품앱 직접 결제 → CRM 우선권 해제
         toast('💚 완납으로 수정됨 · ' + _methodLabel(method), 'var(--green)');
     } else {
         // 부분 수금 수정
@@ -6072,12 +6037,8 @@ async function restoreBackup(key) {
 
         // Firebase 즉시 업로드 (debounce 없이)
         const ch=dataHash(clients), oh=dataHash(orders), ph=dataHash(prices), sh=dataHash(stockItems);
-        const restoreOrdersMap = {};
-        orders.forEach(o => { restoreOrdersMap[o.id] = _minifyOrder(o); });
         await workspaceRef.update({
-            clients: clients.map(_minifyClient),
-            orders: restoreOrdersMap, prices,
-            stockItems: _getLightStock(),
+            clients, orders, prices, stockItems,
             lastUpdated: new Date().toISOString(),
             writtenBy: SESSION_ID
         });
@@ -6298,7 +6259,7 @@ function exportSettlementExcel() {
 }
 
 function exportJSON() {
-    const data = { clients, orders, prices, stockItems, exportDate:new Date().toISOString(), version:'89' };
+    const data = { clients, orders, prices, stockItems, exportDate:new Date().toISOString(), version:'90' };
     const blob = new Blob([JSON.stringify(data,null,2)], { type:'application/json' });
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement('a');
@@ -6627,12 +6588,8 @@ function _doConnect(id, auto=false) {
             } else if (localHasData) {
                 // ── 서버 비어있음 → 로컬 데이터 업로드 ──
                 const ch = dataHash(clients), oh = dataHash(orders), ph = dataHash(prices), sh = dataHash(stockItems);
-                const initOrdersMap = {};
-                orders.forEach(o => { initOrdersMap[o.id] = _minifyOrder(o); });
                 workspaceRef.update({
-                    clients: clients.map(_minifyClient),
-                    orders: initOrdersMap, prices,
-                    stockItems: _getLightStock(),
+                    clients, orders, prices, stockItems,
                     lastUpdated: new Date().toISOString(),
                     writtenBy: SESSION_ID
                 }).then(() => {
@@ -6898,7 +6855,7 @@ async function openManual() {
     raw = raw.replace('<!-- CHANGELOG_AUTO -->', _extractChangelog());
 
     // 현재 버전 주입
-    const curVer = document.querySelector('.changelog-ver[style*="green"]')?.textContent || 'v89';
+    const curVer = document.querySelector('.changelog-ver[style*="green"]')?.textContent || 'v90';
     raw = raw.replace('납품 관리 Pro — 사용설명서', `납품 관리 Pro — 사용설명서  \n<span style="font-size:12px;color:var(--text3);">현재 버전: ${curVer}</span>`);
 
     const html = _md2html(raw);
@@ -7275,10 +7232,6 @@ function initKeyHandlers() {
 window.addEventListener('DOMContentLoaded', () => {
     // 테마
     applyTheme();
-    // ★ v89: 그룹 헬퍼(index.html)가 참조하는 window.appData 즉시 초기화
-    window.appData = { clients, orders, prices };
-    // ★ v89: 그룹뷰 상태 localStorage에서 복원
-    window._groupViewOn = localStorage.getItem('groupViewOn') === '1';
     // 날짜 기본값
     const today = todayKST();
     document.getElementById('deliveryDate').value = today;
@@ -7401,7 +7354,7 @@ window.addEventListener('DOMContentLoaded', () => {
                     const ordersMap = {}; orders.forEach(o => { ordersMap[o.id] = _minifyOrder(o); });
                     workspaceRef.update({
                         clients: clients.map(_minifyClient),
-                        orders: ordersMap, prices, stockItems: _getLightStock(),
+                        orders: ordersMap, prices, stockItems,
                         lastUpdated: new Date().toISOString(), writtenBy: SESSION_ID
                     }).then(() => {
                         lastHash.clients=ch; lastHash.orders=oh; lastHash.prices=ph; lastHash.stock=sh;
