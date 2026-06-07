@@ -6946,12 +6946,15 @@ async function openManual() {
     // <!-- CHANGELOG_AUTO --> 자리에 앱 내 변경이력 주입
     raw = raw.replace('<!-- CHANGELOG_AUTO -->', _extractChangelog());
 
-    // 현재 버전 주입
-    const curVer = document.querySelector('.changelog-ver[style*="green"]')?.textContent || 'v92';
-    raw = raw.replace('납품 관리 Pro — 사용설명서', `납품 관리 Pro — 사용설명서  \n<span style="font-size:12px;color:var(--text3);">현재 버전: ${curVer}</span>`);
-
     const html = _md2html(raw);
-    content.innerHTML = `<div class="manual-body">${html}</div>`;
+
+    // 현재 버전 표시 — md2html 변환 후 h1 태그 뒤에 직접 삽입 (이스케이프 문제 방지)
+    const curVer = document.querySelector('.changelog-ver[style*="green"]')?.textContent || 'v92';
+    const htmlWithVer = html.replace(
+        /<h1>([^<]*납품 관리 Pro[^<]*)<\/h1>/,
+        `<h1>$1</h1><div style="font-size:12px;color:var(--text3);margin-top:-10px;margin-bottom:6px;">현재 버전: ${curVer}</div>`
+    );
+    content.innerHTML = `<div class="manual-body">${htmlWithVer}</div>`;
 
     // ★ PWA 재실행 방지: 앵커 클릭 가로채기 → scrollIntoView로 교체
     content.addEventListener('click', e => {
