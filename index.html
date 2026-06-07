@@ -11,7 +11,7 @@
     <meta name="apple-mobile-web-app-title" content="납품관리">
     <link rel="apple-touch-icon" href="./icon-192.png">
     <link rel="manifest" href="./manifest.json">
-    <title>납품 관리 Pro v90</title>
+    <title>납품 관리 Pro v92</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js" defer></script>
@@ -38,7 +38,7 @@
             <div class="logo-icon">📦</div>
             <div>
                 <div class="logo-text">납품 관리 Pro</div>
-                <div class="logo-sub">v90 · PWA 앱 설치 지원</div>
+                <div class="logo-sub">v92 · PWA 앱 설치 지원</div>
             </div>
         </div>
         <div class="header-btns">
@@ -633,7 +633,7 @@
     <div class="card">
         <div class="card-title">앱 정보</div>
         <div style="font-size:13px;color:var(--text2);line-height:2;margin-bottom:12px;">
-            버전: <strong style="color:var(--accent);">v90</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
+            버전: <strong style="color:var(--accent);">v92</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
             거래처: <span id="infoClients">0</span>개 &nbsp;·&nbsp;
             납품내역: <span id="infoOrders">0</span>건
         </div>
@@ -647,7 +647,15 @@
             <div id="changelogList" style="display:flex;flex-direction:column;gap:6px;">
                 <!-- 현재 버전 -->
                 <div class="changelog-item">
-                    <span class="changelog-ver" style="color:var(--green);">v90</span>
+                    <span class="changelog-ver" style="color:var(--green);">v92</span>
+                    <span class="changelog-desc">공유 워크스페이스 기능 — Firebase 동기화 설정에서 담당자 워크스페이스 ID 등록 시, 거래명세표에서 동일 거래처명 내역을 합산 조회. 공유 내역은 📦 배지 표시 및 읽기 전용 처리.</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v91</span>
+                    <span class="changelog-desc">코드 품질 전면 개선 — ① 재고 이력 이틀 유지 주석·로직 명확화 ② initClientSwipe 스와이프 플래그 리셋 버그 수정 ③ _mergeCrmPaymentFields crmControlled 단독 조건으로 단순화(타기기 결제 충돌 방지) ④ groupViewOn·histGroupFilterActive window 전역 오염 제거(app.js 모듈 변수화) ⑤ totalAmount 신규 저장 제거(읽기 호환 유지) ⑥ showClientStatement에서 _buildStatShareText 분리 ⑦ §4 섹션 헤더 포맷 통일 ⑧ recalcStockFromOrders 주석 명확화</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v90</span>
                     <span class="changelog-desc">버그 수정 4종 — ① _minifyClient group 필드 누락 수정(그룹명 휘발 방지) ② renderClients 그룹뷰 분기 순서 수정 ③ _minifyOrder crmControlled 필드 누락 수정(CRM 결제 플래그 Firebase 동기화 보장) ④ 납품앱 직접 결제 시 crmControlled 해제(결제함수 6곳) — CRM↔납품앱 결제 우선권 충돌 방지</span>
                 </div>
                 <div class="changelog-item">
@@ -1033,6 +1041,21 @@
             <button class="btn btn-ghost btn-full" style="border:1px solid #ef444450;color:#ef4444;font-size:13px;" onclick="deleteCurrentWorkspaceData()">
                 🗑️ 현재 워크스페이스 Firebase 데이터 삭제
             </button>
+        </div>
+
+        <!-- 구분선 -->
+        <div style="margin:16px 0 12px;border-top:1px solid var(--border);"></div>
+
+        <!-- 공유 워크스페이스 -->
+        <div style="font-size:12px;color:var(--text2);margin-bottom:6px;font-weight:600;">🔗 거래처 내역 공유</div>
+        <p style="font-size:12px;color:var(--text2);margin-bottom:10px;line-height:1.6;">
+            같은 거래처명을 사용하는 담당자의 워크스페이스 ID를 등록하면,<br>
+            거래명세표에서 <span style="color:var(--accent);font-weight:600;">합산 내역</span>을 함께 볼 수 있습니다.
+        </p>
+        <div id="sharedWsList" style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px;"></div>
+        <div style="display:flex;gap:6px;">
+            <input type="text" class="form-input" id="sharedWsInput" placeholder="공유할 워크스페이스 ID 입력" style="flex:1;font-size:13px;">
+            <button class="btn btn-ghost btn-sm" style="white-space:nowrap;flex-shrink:0;" onclick="addSharedWs()">➕ 추가</button>
         </div>
 
         <!-- 구분선 -->
@@ -1603,12 +1626,12 @@ function populateGroupFilter(selectId, wrapId) {
 }
 
 /* ── 거래처 탭: 그룹뷰 토글 상태 ── */
-window._groupViewOn = false;
+// groupViewOn 변수는 app.js에서 선언됨
 
 function toggleGroupView() {
-    window._groupViewOn = !window._groupViewOn;
+    groupViewOn = !groupViewOn;
     const btn = document.getElementById('groupViewToggleBtn');
-    if (btn) btn.textContent = window._groupViewOn ? '개별보기' : '그룹보기';
+    if (btn) btn.textContent = groupViewOn ? '개별보기' : '그룹보기';
     renderClients();
 }
 
@@ -1724,9 +1747,9 @@ function _patchRenderOrdersForGroup() {
         if (groupVal && window.appData) {
             const clients = window.appData.clients || [];
             const memberNames = new Set(clients.filter(c => c.group === groupVal).map(c => c.name));
-            window._histGroupFilterActive = memberNames.size ? memberNames : null;
+            histGroupFilterActive = memberNames.size ? memberNames : null;
         } else {
-            window._histGroupFilterActive = null;
+            histGroupFilterActive = null;
         }
         _orig.apply(this, arguments);
     };

@@ -43,7 +43,7 @@ clients = clients.map(c => {
     if (typeof c === 'string') return { id: _uid(), name: c, phone:'', address:'', note:'', createdAt: new Date().toISOString() };
     if (!c.id) c.id = _uid();
     c.id = String(c.id);                          // int id → string 타입 통일
-    if (!c.note && c.memo) c.note = c.memo;       // memo → note 이관
+    if (!c.note && c.memo) c.note = c.memo;       // 구버전 백업 호환 (memo → note)
     if (!c.note) c.note = '';
     // isHidden: 저장된 값 보존 (false면 목록에 표시, true면 숨겨짐)
     if (c.isHidden === undefined) c.isHidden = false;
@@ -67,7 +67,7 @@ orders = orders.map(o => {
         }
     }
     o.total = Number(o.total ?? o.totalAmount ?? 0);
-    if (!o.note && o.memo) o.note = o.memo;       // memo → note 이관
+    if (!o.note && o.memo) o.note = o.memo;       // 구버전 백업 호환 (memo → note)
     if (!o.note) o.note = '';
     if (!o.isVoid) o.isVoid = false;              // isVoid 복원 (없으면 false)
     return o;
@@ -113,11 +113,11 @@ function todayKST() {
     return new Date(d.getTime() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
 }
 
-// 재고 이력을 최근 30일 항목만 남기고 이전 이력 삭제
-// (과거 날짜 재고 역산 정확도를 위해 30일치 유지)
+// 재고 이력을 어제·오늘(이틀)만 보관하고 그 이전 이력 삭제
+// — 재고 이월 계산은 어제 기준이므로 이틀이면 충분
 function _trimLogByDate(log) {
     if (!Array.isArray(log)) return [];
-    const yesterday = kstAddDays(todayKST(), -1);  // 어제·오늘만 유지
+    const yesterday = kstAddDays(todayKST(), -1);  // 어제 ~ 오늘만 유지
     return log.filter(l => {
         const d = l.date || (l.at ? l.at.slice(0, 10) : null);
         return d && d >= yesterday;
@@ -328,6 +328,8 @@ let settleListVisible = false;  // 기본값 숨기기
 let settleUnit = 'monthly'; // 'monthly' | 'daily' | 'quarterly'
 let clientListVisible = false;  // 기본값 숨기기 (복구/동기화 후 즉시 반영)
 let showHiddenClients = false; // 숨긴 거래처 포함 표시 여부
+let groupViewOn = false;       // 거래처 그룹뷰 ON/OFF
+let histGroupFilterActive = null; // 내역 탭 그룹 필터 (Set 또는 null)
 
 
 // Firebase
@@ -360,7 +362,7 @@ let _connectGuard = false;
 function _normClientFromFb(c) {
     if (!c.id) c.id = _uid();
     c.id = String(c.id);
-    if (!c.note && c.memo) c.note = c.memo;
+    if (!c.note && c.memo) c.note = c.memo; // 구버전 백업 호환
     if (!c.note) c.note = '';
     if (c.isHidden === undefined) c.isHidden = false;
     return c;
@@ -371,7 +373,7 @@ function _normOrderFromFb(o) {
     o.total = Number(o.total ?? o.totalAmount ?? 0);
     if (!o.clientName && o.client) o.clientName = o.client;
     if (!Array.isArray(o.items)) o.items = [];
-    if (!o.note && o.memo) o.note = o.memo;
+    if (!o.note && o.memo) o.note = o.memo; // 구버전 백업 호환
     if (!o.note) o.note = '';
     // isVoid: Firebase에서 undefined로 오면 명시적으로 false 처리
     if (!o.isVoid) o.isVoid = false;
@@ -583,17 +585,16 @@ function _minifyOrder(o) {
  */
 function _mergeCrmPaymentFields(localMinified, serverOrder) {
     if (!serverOrder) return;
-    // crmControlled 플래그가 있거나, CRM이 isPaid=true로 만든 경우 보존
-    const crmOwned = serverOrder.crmControlled === true ||
-                     (serverOrder.isPaid && !localMinified.isPaid);
-    if (crmOwned || serverOrder.crmControlled) {
-        if (serverOrder.isPaid        != null) localMinified.isPaid        = serverOrder.isPaid;
-        if (serverOrder.paidAmount    != null) localMinified.paidAmount    = serverOrder.paidAmount;
-        if (serverOrder.paidAt)                localMinified.paidAt        = serverOrder.paidAt;
-        if (serverOrder.paidMethod)            localMinified.paidMethod    = serverOrder.paidMethod;
-        if (serverOrder.paidMethodDetail)      localMinified.paidMethodDetail = serverOrder.paidMethodDetail;
-        localMinified.crmControlled = true; // 플래그 전파
-    }
+    // crmControlled 플래그가 있을 때만 CRM 결제 필드 보존
+    // — 이전 조건(serverOrder.isPaid && !localMinified.isPaid)은 납품앱 기기간
+    //   결제 충돌 시 잘못 적용될 수 있어 제거
+    if (serverOrder.crmControlled !== true) return;
+    if (serverOrder.isPaid        != null) localMinified.isPaid        = serverOrder.isPaid;
+    if (serverOrder.paidAmount    != null) localMinified.paidAmount    = serverOrder.paidAmount;
+    if (serverOrder.paidAt)                localMinified.paidAt        = serverOrder.paidAt;
+    if (serverOrder.paidMethod)            localMinified.paidMethod    = serverOrder.paidMethod;
+    if (serverOrder.paidMethodDetail)      localMinified.paidMethodDetail = serverOrder.paidMethodDetail;
+    localMinified.crmControlled = true; // 플래그 전파
 }
 
 function _minifyClient(c) {
@@ -650,7 +651,7 @@ function _getLightOrders() {
         });
 }
 
-// Firebase 연결 중 로컬 저장용 경량 재고 (어제·오늘 이력만 유지)
+// Firebase 연결 중 로컬 저장용 경량 재고 (어제·오늘 이틀치 이력만 유지)
 
 function _getLightStock() {
     return stockItems.map(si => ({
@@ -668,7 +669,7 @@ function normalizeBackupData(data) {
     const clients_out = imp_clients.map(c => {
         if (!c.id) c.id = _uid();
         c.id = String(c.id);                          // int id → string 타입 통일
-        if (!c.note && c.memo) c.note = c.memo;       // memo → note 이관
+        if (!c.note && c.memo) c.note = c.memo;       // 구버전 백업 호환 (memo → note)
         if (!c.note) c.note = '';
         if (c.isHidden === undefined) c.isHidden = false;
         return c;
@@ -682,7 +683,7 @@ function normalizeBackupData(data) {
         const itemsSum = (o.items||[]).reduce((s,i) => s + Number(i.total ?? (i.qty*i.price) ?? 0), 0);
         o.total = Number(o.total ?? o.totalAmount ?? 0);
         if (o.total === 0 && itemsSum > 0) o.total = itemsSum;
-        o.totalAmount = o.total;
+        // totalAmount는 읽기 호환만 유지 — 신규 저장 시 생성 안 함
         if (!Array.isArray(o.items)) o.items = [];  // items 누락 방어
         // it.total 복원 (v41 이후 백업은 total 필드 없음 → qty×price로 복원)
         o.items = o.items.map(it => ({
@@ -691,7 +692,7 @@ function normalizeBackupData(data) {
             total: it.total ?? (Number(it.qty)||0) * (Number(it.price)||0)
         }));
         if (!o.clientName && o.client) o.clientName = o.client;
-        if (!o.note && o.memo) o.note = o.memo;       // memo → note 이관
+        if (!o.note && o.memo) o.note = o.memo;       // 구버전 백업 호환 (memo → note)
         if (!o.note) o.note = '';
         if (!o.isVoid) o.isVoid = false;              // isVoid 복원 (없으면 false)
         return o;
@@ -899,8 +900,9 @@ function saveData() {
 // ║  § 5  UI 코어 — toast · 테마 · 탭 · 모달 · 바텀네비                     ║
 // ╚══════════════════════════════════════════════════════════════╝
 
-// ════════════════════════════════════════════════════════════════
-// § 4  부분 렌더링 엔진
+// ╔══════════════════════════════════════════════════════════════╗
+// ║  § 4  부분 렌더링 엔진                                              ║
+// ╚══════════════════════════════════════════════════════════════╝
 // ════════════════════════════════════════════════════════════════
 // 탭별 더티 플래그: true = 데이터 변경됨 → 탭 진입 시 렌더링 실행
 // 불필요한 DOM 재계산·페인트 제거
@@ -1082,7 +1084,7 @@ function openModal(id)  {
     // 모달 시트 스크롤 항상 맨 위로 초기화
     const sheet = el.querySelector('.modal-sheet');
     if (sheet) sheet.scrollTop = 0;
-    if (id === 'firebaseModal') applyWsLockUI();
+    if (id === 'firebaseModal') { applyWsLockUI(); renderSharedWsList(); }
     if (!_modalHistoryPushed) {
         history.pushState({ modalOpen: true }, '');
         _modalHistoryPushed = true;
@@ -1414,7 +1416,7 @@ function renderClients() {
     }
 
     // ★ 그룹뷰 모드 — clientListVisible 상태와 무관하게 최우선 처리
-    if (window._groupViewOn) {
+    if (groupViewOn) {
         const groups = [...new Set(filtered.map(c => c.group).filter(Boolean))].sort();
         const noGroup = filtered.filter(c => !c.group);
         el.innerHTML = '';
@@ -1673,6 +1675,8 @@ function findStockByName(name) {
 
 // ─── 납품 등록 ───
 
+// ── 재고 재계산 (수동 실행 전용 — 재고 탭 🔄 버튼에서 호출)
+// 오늘 납품 전표 기준으로 출고 누락된 품목을 보완. 자동 차감 ON 시에만 동작.
 function recalcStockFromOrders(silent = false) {
     if (!stockAutoDeduct) return 0;
     let fixedCount = 0;
@@ -2081,7 +2085,7 @@ async function submitOrder() {
         const order = {
             id: _uid(), clientId, clientName:client.name,
             date:group.date, items:[...group.items],
-            total, totalAmount:total, note:'', isPaid:false,
+            total, note:'', isPaid:false,
             createdAt:new Date().toISOString()
         };
         if (isVoid) order.isVoid = true;
@@ -2282,7 +2286,7 @@ function renderOrders() {
         const mSearch = matchSearch(o.clientName||'',q) || (o.items||[]).some(i=>matchSearch(i.name,q));
         const mDate   = (!start||o.date>=start) && (!end||o.date<=end);
         const mPay    = histPayFilter==='all'?true:histPayFilter==='unpaid'?!o.isPaid:o.isPaid;
-        const mGroup  = window._histGroupFilterActive ? window._histGroupFilterActive.has(o.clientName) : true;
+        const mGroup  = histGroupFilterActive ? histGroupFilterActive.has(o.clientName) : true;
         return mSearch && mDate && mPay && mGroup;
     });
 
@@ -2904,7 +2908,6 @@ function saveOrderEdit() {
     o.date  = date;
     o.items = items;
     o.total = total;
-    o.totalAmount = total;
     o.note  = note;
     o.updatedAt = new Date().toISOString();
     _markDirtyOrder(o.id); // delta sync 마킹
@@ -3376,33 +3379,15 @@ async function shareStatement() {
     }
 }
 
-function showClientStatement(clientName, month) {
-    const monthStart = month+'-01';
-    const filt = orders.filter(o=>o.clientName===clientName&&o.date?.startsWith(month)).sort((a,b)=>(a.date||'').localeCompare(b.date||''));
-    // 할인 완납된 전표는 실청구액(total - discount)으로 집계
-    const _effectiveTotal = o => o.isPaid && o.discount > 0 ? o.total - o.discount : o.total;
-    const monthTotal  = filt.reduce((s,o)=>s+_effectiveTotal(o),0);
-    // 수금액 = 완납전표 합산 + 부분입금 누적액
-    const monthPaid   = filt.reduce((s,o)=>s+_actualPaid(o),0);
-    const monthUnpaid = monthTotal - monthPaid;
-    const carryOrders = orders.filter(o=>o.clientName===clientName&&o.date<monthStart&&!o.isPaid).sort((a,b)=>(a.date||"").localeCompare(b.date||""));
-    const carryAmt    = carryOrders.reduce((s,o)=>s+o.total-(o.paidAmount||0),0);
-    const grandUnpaid = carryAmt + monthUnpaid;
-    // ── 오늘 이전까지(어제까지) 해당 거래처 전체 납품 합계 ──
-    const todayStr = todayKST();
-    const beforeTodayOrders = orders.filter(o=>o.clientName===clientName && o.date < todayStr && o.date?.startsWith(month));
-    const beforeTodayTotal  = beforeTodayOrders.reduce((s,o)=>s+_effectiveTotal(o),0);
-    const client = clients.find(c=>c.name===clientName);
-    const phone  = client?.phone||'';
+// ── 공유 텍스트 빌더 (showClientStatement에서 분리) ──
+function _buildStatShareText(clientName, month, { filt, carryAmt, monthTotal, monthPaid, grandUnpaid }) {
     const _monthLabel = (() => { const p = month.split('-'); return p.length >= 2 ? `${parseInt(p[1])}월` : month; })();
-    const smsText = `[${clientName}님 ${_monthLabel} 거래명세표]\n기간: ${month}\n전월이월: ${fmt(carryAmt)}원\n당월매출: ${fmt(monthTotal)}원\n수금액: ${fmt(monthPaid)}원\n청구금액: ${fmt(grandUnpaid)}원\n\n입금계좌: 농협 916-02-055664 (이애경)`;
-    // 카카오톡 / 공유용 — 품목 상세 포함
     const orderLines = filt.map(o => {
         const itemStr = (o.items||[]).length ? (o.items||[]).map(i=>`${i.name} ${i.qty}개`).join(', ') : '(품목 정보 없음)';
         const stateStr = o.isPaid ? '✅완납' : (o.paidAmount ? `💳부분(${fmt(o.paidAmount)}원)` : '🔴미수');
         return `  ${o.date}  ${itemStr}  ${fmt(o.total)}원 ${stateStr}`;
     }).join('\n');
-    _statShareText = [
+    return [
         `📋 [${clientName}님 ${_monthLabel} 거래명세표]`,
         `📅 기간: ${month}`,
         carryAmt > 0 ? `⏩ 전월 이월: ${fmt(carryAmt)}원` : '',
@@ -3412,6 +3397,54 @@ function showClientStatement(clientName, month) {
         `\n🏦 입금계좌: 농협 916-02-055664 (이애경)`,
         orderLines ? `\n📦 납품 내역\n${orderLines}` : '',
     ].filter(Boolean).join('\n');
+}
+
+async function showClientStatement(clientName, month) {
+    const monthStart = month+'-01';
+
+    // ── 공유 워크스페이스에서 동일 거래처명 내역 fetch ──
+    const sharedWsIds = _getSharedWs();
+    let sharedOrders = [];
+    if (sharedWsIds.length && typeof firebase !== 'undefined' && firebase.apps.length) {
+        const napumDb = firebase.database();
+        await Promise.all(sharedWsIds.map(async wsId => {
+            try {
+                const snap = await napumDb.ref(`workspaces/${wsId}/orders`)
+                    .orderByChild('clientName').equalTo(clientName).get();
+                if (!snap.exists()) return;
+                Object.values(snap.val() || {}).forEach(o => {
+                    sharedOrders.push({ ...o, _sharedWsId: wsId });
+                });
+            } catch(e) { /* 접근 불가 워크스페이스 무시 */ }
+        }));
+    }
+    const hasShared = sharedOrders.length > 0;
+    // 내 전표 + 공유 전표 합산
+    const allOrders = [
+        ...orders.map(o => ({ ...o, _sharedWsId: null })),
+        ...sharedOrders,
+    ];
+
+    const filt = allOrders.filter(o=>o.clientName===clientName&&o.date?.startsWith(month)).sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+    // 할인 완납된 전표는 실청구액(total - discount)으로 집계
+    const _effectiveTotal = o => o.isPaid && o.discount > 0 ? o.total - o.discount : o.total;
+    const monthTotal  = filt.reduce((s,o)=>s+_effectiveTotal(o),0);
+    // 수금액 = 완납전표 합산 + 부분입금 누적액
+    const monthPaid   = filt.reduce((s,o)=>s+_actualPaid(o),0);
+    const monthUnpaid = monthTotal - monthPaid;
+    const carryOrders = allOrders.filter(o=>o.clientName===clientName&&o.date<monthStart&&!o.isPaid).sort((a,b)=>(a.date||"").localeCompare(b.date||""));
+    const carryAmt    = carryOrders.reduce((s,o)=>s+o.total-(o.paidAmount||0),0);
+    const grandUnpaid = carryAmt + monthUnpaid;
+    // ── 오늘 이전까지(어제까지) 해당 거래처 합계 ──
+    const todayStr = todayKST();
+    const beforeTodayOrders = allOrders.filter(o=>o.clientName===clientName && o.date < todayStr && o.date?.startsWith(month));
+    const beforeTodayTotal  = beforeTodayOrders.reduce((s,o)=>s+_effectiveTotal(o),0);
+    const client = clients.find(c=>c.name===clientName);
+    const phone  = client?.phone||'';
+    const _monthLabel = (() => { const p = month.split('-'); return p.length >= 2 ? `${parseInt(p[1])}월` : month; })();
+    const smsText = `[${clientName}님 ${_monthLabel} 거래명세표]\n기간: ${month}\n전월이월: ${fmt(carryAmt)}원\n당월매출: ${fmt(monthTotal)}원\n수금액: ${fmt(monthPaid)}원\n청구금액: ${fmt(grandUnpaid)}원\n\n입금계좌: 농협 916-02-055664 (이애경)`;
+    // 공유 텍스트 빌더로 분리
+    _statShareText = _buildStatShareText(clientName, month, { filt, carryAmt, monthTotal, monthPaid, grandUnpaid });
     const carryRows = carryOrders.map(o=>{
         const carryPartial = !o.isPaid && (o.paidAmount||0)>0;
         const carryRemain  = carryPartial ? o.total-(o.paidAmount||0) : 0;
@@ -3440,6 +3473,8 @@ function showClientStatement(clientName, month) {
     const monthRows = filt.map(o=>{
         const partial = !o.isPaid && (o.paidAmount||0)>0;
         const remain  = partial ? o.total-(o.paidAmount||0) : 0;
+        const sharedBadge = o._sharedWsId
+            ? `<br><span style="font-size:9px;background:#e0e7ff;color:#4f46e5;border-radius:4px;padding:1px 5px;font-weight:700;">📦${escapeHtml(o._sharedWsId)}</span>` : '';
         const voidBadge = o.isVoid ? `<br><span style="font-size:9px;background:rgba(245,166,35,.15);color:var(--orange);border-radius:4px;padding:1px 4px;font-weight:700;">👤타인</span>` : '';
         const statBadge = o.isPaid
             ? (o.discount>0
@@ -3463,14 +3498,18 @@ function showClientStatement(clientName, month) {
                 </div>
             </td>
         </tr>` : '';
-        const rowClick = o.isPaid
+        // 공유 내역은 읽기 전용 (수정/결제 불가)
+        const rowClick = o._sharedWsId ? null :
+            o.isPaid
             ? `showOrderDetail('${o.id||''}')`
             : `openQuickPayFromStatement('${o.id||''}','${escapeAttr(clientName)}','${escapeAttr(month)}')`;
-        const rowTitle = o.isPaid ? '탭하여 상세 보기' : '탭하여 결제 처리';
-        const rowAccent = !o.isPaid ? 'background:rgba(239,68,68,0.04);' : '';
-        return `<tr style="cursor:pointer;${rowAccent}" onclick="${rowClick}" title="${rowTitle}">
+        const rowTitle  = o._sharedWsId ? '공유 내역 (읽기 전용)' : o.isPaid ? '탭하여 상세 보기' : '탭하여 결제 처리';
+        const rowAccent = o._sharedWsId ? 'background:rgba(99,102,241,0.05);' : !o.isPaid ? 'background:rgba(239,68,68,0.04);' : '';
+        const rowOnclick = rowClick ? `onclick="${rowClick}"` : '';
+        const rowCursor  = rowClick ? 'cursor:pointer;' : 'cursor:default;';
+        return `<tr style="${rowCursor}${rowAccent}" ${rowOnclick} title="${rowTitle}">
             <td>${o.date}</td>
-            <td style="font-size:11px;">${_fmtItems(o)}</td>
+            <td style="font-size:11px;">${_fmtItems(o)}${sharedBadge}</td>
             <td class="text-right">${fmt(o.total)}원</td>
             <td class="text-center">${statBadge}</td>
         </tr>${partialDetailRow}`;
@@ -3480,6 +3519,10 @@ function showClientStatement(clientName, month) {
             <div style="font-size:19px;font-weight:900;">${clientName}</div>
             <div style="font-size:19px;font-weight:900;white-space:nowrap;">${month} 거래명세표</div>
         </div>
+        ${hasShared ? `<div style="background:#eef2ff;border:1px solid #c7d2fe;border-radius:8px;padding:8px 12px;margin-bottom:12px;font-size:12px;color:#4f46e5;display:flex;align-items:center;gap:6px;">
+            🔗 <strong>공유 합산 내역</strong>&nbsp;— 공유 워크스페이스 ${sharedWsIds.length}개 포함
+            <span style="margin-left:auto;font-size:10px;color:#6366f1;">📦 배지 = 공유 내역 (읽기 전용)</span>
+        </div>` : ''}
         <div style="background:var(--surf2);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:14px;">
             ${carryAmt>0?`<div style="display:flex;justify-content:space-between;margin-bottom:7px;"><span style="color:var(--orange);">⏩ 전월 이월</span><strong style="color:var(--orange);">${fmt(carryAmt)}원</strong></div>`:''}
             <div style="display:flex;justify-content:space-between;margin-bottom:7px;"><span style="color:var(--text2);">이번 달 합계 (어제까지)</span><strong style="color:var(--text);">${fmt(beforeTodayTotal)}원</strong></div>
@@ -6259,7 +6302,7 @@ function exportSettlementExcel() {
 }
 
 function exportJSON() {
-    const data = { clients, orders, prices, stockItems, exportDate:new Date().toISOString(), version:'90' };
+    const data = { clients, orders, prices, stockItems, exportDate:new Date().toISOString(), version:'92' };
     const blob = new Blob([JSON.stringify(data,null,2)], { type:'application/json' });
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement('a');
@@ -6316,10 +6359,10 @@ function loadSample() {
     prices = { 두부:1500, 콩나물:800, 계란:250, 감자:2000 };
     const ym = todayKST().slice(0,7);
     orders = [
-        { id:'o1', clientId:'s1', clientName:'강남마트', date:`${ym}-01`, items:[{name:'두부',qty:10,price:1500,total:15000},{name:'콩나물',qty:5,price:800,total:4000}], total:19000, totalAmount:19000, isPaid:true,  note:'', createdAt:new Date().toISOString() },
-        { id:'o2', clientId:'s2', clientName:'서초상회', date:`${ym}-03`, items:[{name:'계란',qty:30,price:250,total:7500}], total:7500, totalAmount:7500, isPaid:false, note:'', createdAt:new Date().toISOString() },
-        { id:'o3', clientId:'s3', clientName:'역삼식당', date:`${ym}-07`, items:[{name:'감자',qty:20,price:2000,total:40000},{name:'두부',qty:5,price:1500,total:7500}], total:47500, totalAmount:47500, isPaid:true,  note:'급행', createdAt:new Date().toISOString() },
-        { id:'o4', clientId:'s1', clientName:'강남마트', date:`${ym}-10`, items:[{name:'콩나물',qty:15,price:800,total:12000}], total:12000, totalAmount:12000, isPaid:false, note:'', createdAt:new Date().toISOString() },
+        { id:'o1', clientId:'s1', clientName:'강남마트', date:`${ym}-01`, items:[{name:'두부',qty:10,price:1500,total:15000},{name:'콩나물',qty:5,price:800,total:4000}], total:19000, isPaid:true,  note:'', createdAt:new Date().toISOString() },
+        { id:'o2', clientId:'s2', clientName:'서초상회', date:`${ym}-03`, items:[{name:'계란',qty:30,price:250,total:7500}], total:7500, isPaid:false, note:'', createdAt:new Date().toISOString() },
+        { id:'o3', clientId:'s3', clientName:'역삼식당', date:`${ym}-07`, items:[{name:'감자',qty:20,price:2000,total:40000},{name:'두부',qty:5,price:1500,total:7500}], total:47500, isPaid:true,  note:'급행', createdAt:new Date().toISOString() },
+        { id:'o4', clientId:'s1', clientName:'강남마트', date:`${ym}-10`, items:[{name:'콩나물',qty:15,price:800,total:12000}], total:12000, isPaid:false, note:'', createdAt:new Date().toISOString() },
     ];
     lastHash = {clients:'',orders:'',prices:'',stock:''};
     saveData(); _fullRender();
@@ -6390,6 +6433,55 @@ function toggleWsLock() {
         toast('🔓 ID 고정이 해제되었습니다');
     }
     applyWsLockUI();
+}
+
+// ─── 공유 워크스페이스 관리 ───────────────────────────────────────────────────
+// 같은 거래처명을 다른 담당자와 공유 — 거래명세표에서 합산 조회
+
+function _getSharedWs() {
+    try { return JSON.parse(localStorage.getItem('sharedWorkspaces') || '[]'); } catch { return []; }
+}
+function _saveSharedWs(arr) {
+    localStorage.setItem('sharedWorkspaces', JSON.stringify(arr));
+}
+
+function renderSharedWsList() {
+    const el = document.getElementById('sharedWsList');
+    if (!el) return;
+    const list = _getSharedWs();
+    if (!list.length) {
+        el.innerHTML = '<div style="font-size:12px;color:var(--text3);padding:4px 0;">등록된 공유 워크스페이스가 없습니다.</div>';
+        return;
+    }
+    el.innerHTML = list.map((id, i) => `
+        <div style="display:flex;align-items:center;gap:8px;background:var(--surf2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;">
+            <span style="font-size:13px;flex:1;color:var(--text1);">📦 ${escapeHtml(id)}</span>
+            <button onclick="removeSharedWs(${i})" style="background:none;border:none;cursor:pointer;color:var(--text3);font-size:16px;padding:0 4px;" title="삭제">✕</button>
+        </div>`).join('');
+}
+
+function addSharedWs() {
+    const input = document.getElementById('sharedWsInput');
+    const id = (input.value || '').trim().toLowerCase();
+    if (!id) return toast('❗ 워크스페이스 ID를 입력하세요');
+    const myId = (localStorage.getItem('workspaceId') || '').toLowerCase();
+    if (id === myId) return toast('❗ 내 워크스페이스 ID는 추가할 수 없습니다');
+    const list = _getSharedWs();
+    if (list.includes(id)) return toast('❗ 이미 등록된 ID입니다');
+    if (list.length >= 10) return toast('❗ 최대 10개까지 등록 가능합니다');
+    list.push(id);
+    _saveSharedWs(list);
+    input.value = '';
+    renderSharedWsList();
+    toast(`✅ "${id}" 공유 등록 완료`, 'var(--green)');
+}
+
+function removeSharedWs(idx) {
+    const list = _getSharedWs();
+    const removed = list.splice(idx, 1)[0];
+    _saveSharedWs(list);
+    renderSharedWsList();
+    toast(`🗑️ "${removed}" 공유 해제`);
 }
 
 // ─── Firebase ───
@@ -6855,7 +6947,7 @@ async function openManual() {
     raw = raw.replace('<!-- CHANGELOG_AUTO -->', _extractChangelog());
 
     // 현재 버전 주입
-    const curVer = document.querySelector('.changelog-ver[style*="green"]')?.textContent || 'v90';
+    const curVer = document.querySelector('.changelog-ver[style*="green"]')?.textContent || 'v92';
     raw = raw.replace('납품 관리 Pro — 사용설명서', `납품 관리 Pro — 사용설명서  \n<span style="font-size:12px;color:var(--text3);">현재 버전: ${curVer}</span>`);
 
     const html = _md2html(raw);
@@ -6962,7 +7054,7 @@ renderSettlementQuarterly = _safeWrap(renderSettlementQuarterly, function() {
 updateInfoCounts = _safeWrap(updateInfoCounts, function() { updateNavBadges(); });
 
 // ─── renderClients 후킹 (스와이프 초기화) ───
-renderClients = _safeWrap(renderClients, function() { initClientSwipe(); });
+renderClients = _safeWrap(renderClients, function() { _clientSwipeInited = false; initClientSwipe(); });
 
 
 // ─── 달걀 품목 초기 등록 ───
