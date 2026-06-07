@@ -11,7 +11,7 @@
     <meta name="apple-mobile-web-app-title" content="납품관리">
     <link rel="apple-touch-icon" href="./icon-192.png">
     <link rel="manifest" href="./manifest.json">
-    <title>납품 관리 Pro v93</title>
+    <title>납품 관리 Pro v95</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js" defer></script>
@@ -38,7 +38,7 @@
             <div class="logo-icon">📦</div>
             <div>
                 <div class="logo-text">납품 관리 Pro</div>
-                <div class="logo-sub">v93 · PWA 앱 설치 지원</div>
+                <div class="logo-sub">v95 · PWA 앱 설치 지원</div>
             </div>
         </div>
         <div class="header-btns">
@@ -104,9 +104,7 @@
             <div class="dup-warn" id="dupWarn">⚠️ 이미 존재하는 거래처입니다</div>
         </div>
         <div class="form-group">
-            <label class="form-label">그룹명 <span style="font-size:11px;color:var(--text3);font-weight:400;">— 여러 담당자가 같은 거래처를 나눠 관리할 때 입력</span></label>
-            <input type="text" class="form-input" id="clientGroup" placeholder="예: Q마트 (비워두면 그룹 없음)" autocomplete="off" oninput="onClientGroupInput(this.value)">
-            <div id="clientGroupSuggest" style="display:none;background:var(--surf2);border:1px solid var(--border);border-radius:var(--radius-s);margin-top:4px;overflow:hidden;"></div>
+
         </div>
         <div class="form-group">
             <label class="form-label">연락처</label>
@@ -135,9 +133,7 @@
         <div style="display:flex;justify-content:space-between;align-items:center;">
             <div>
                 <div style="font-size:13px;font-weight:700;color:var(--accent);">👥 그룹 합산 보기</div>
-                <div style="font-size:11px;color:var(--text2);margin-top:2px;">같은 그룹명 거래처를 묶어 합산 조회</div>
             </div>
-            <button class="btn btn-ghost btn-sm" id="groupViewToggleBtn" onclick="toggleGroupView()" style="white-space:nowrap;">그룹보기</button>
         </div>
     </div>
     <div class="unpaid-alert-bar" id="unpaidAlertBar">
@@ -176,77 +172,10 @@
         <button class="unpaid-age-tab" data-age="60" onclick="setUnpaidAgeFilter('60',this)">🔴 60~90일</button>
         <button class="unpaid-age-tab" data-age="90" onclick="setUnpaidAgeFilter('90',this)">🚨 90일+</button>
     </div>
-    <!-- 미수금 그룹 필터 -->
-    <div id="unpaidGroupFilterWrap" style="display:none;margin-bottom:10px;">
-        <select class="form-input" id="unpaidGroupFilter" onchange="renderUnpaid()" style="font-size:13px;padding:9px 10px;">
-            <option value="">👥 그룹 전체</option>
-        </select>
-    </div>
     <div id="unpaidClientList"></div>
 </div>
 
 <!-- ─── 납품 등록 ─── -->
-
-<!-- ─── 재고 관리 ─── -->
-<div class="pane" id="pane-stock">
-  <!-- 과거 날짜 재고 조회 -->
-  <div class="stock-date-bar">
-    <label>📅</label>
-    <button class="stock-date-today-btn" onclick="stockDateNav(-1)" style="padding:7px 10px;">◀</button>
-    <input type="date" class="stock-date-input" id="stockViewDate" onchange="onStockDateChange(this.value)">
-    <button class="stock-date-today-btn" onclick="stockDateNav(1)" style="padding:7px 10px;">▶</button>
-    <button class="stock-date-today-btn" onclick="resetStockToToday()">오늘</button>
-    <button class="stock-date-today-btn" onclick="recalcStockFromOrders()" title="출고 누락 재계산" style="color:var(--accent);">🔄</button>
-  </div>
-  <div class="stock-history-banner" id="stockHistoryBanner">
-    <div class="stock-history-banner-title">🕐 과거 재고 조회 중</div>
-    <div class="stock-history-banner-sub" id="stockHistoryBannerSub"></div>
-  </div>
-  <div class="stock-summary">
-    <div class="stock-sum-card s-all">
-      <div class="stock-sum-label">전체 품목</div>
-      <div class="stock-sum-val" id="sCountAll">0</div>
-    </div>
-    <div class="stock-sum-card s-low">
-      <div class="stock-sum-label">부족 주의</div>
-      <div class="stock-sum-val" id="sCountLow">0</div>
-    </div>
-    <div class="stock-sum-card s-danger">
-      <div class="stock-sum-label">재고 없음</div>
-      <div class="stock-sum-val" id="sCountDanger">0</div>
-    </div>
-  </div>
-  <div class="auto-deduct-bar">
-    <div>
-      <div style="font-size:13px;font-weight:700;">납품 시 자동 재고 차감</div>
-      <div style="font-size:11px;color:var(--text2);margin-top:2px;">납품 확정 시 품목 재고 자동 차감</div>
-    </div>
-    <button class="btn btn-ghost btn-sm" id="autoDeductBtn" onclick="toggleAutoDeduct()" style="min-width:52px;">OFF</button>
-  </div>
-  <!-- 달걀 품목 빠른 등록 배너 -->
-  <div id="eggInitBanner" style="display:none;margin-bottom:12px;background:linear-gradient(135deg,#fef3c7,#fffbeb);border:1.5px solid #fcd34d;border-radius:var(--radius);padding:13px 14px;">
-    <div style="font-size:13px;font-weight:800;color:#92400e;margin-bottom:6px;">🥚 달걀 품목을 한 번에 등록할까요?</div>
-    <div style="font-size:11px;color:#78350f;margin-bottom:10px;">왕란 · 특란 · 대란 · 중란을 자동으로 등록합니다</div>
-    <div style="display:flex;gap:8px;">
-      <button class="btn btn-sm" style="flex:1;background:#f59e0b;color:#fff;border:none;" onclick="initEggItems()">✅ 달걀 4종 등록</button>
-      <button class="btn btn-ghost btn-sm" onclick="document.getElementById('eggInitBanner').style.display='none'">나중에</button>
-    </div>
-  </div>
-  <div style="display:flex;gap:8px;margin-bottom:10px;">
-    <input type="text" class="form-input" id="stockSearch" placeholder="🔍 품목 검색…" oninput="renderStock()" autocomplete="off" style="flex:1;">
-    <button class="btn btn-ghost btn-sm" onclick="refreshStockCarryover()" style="white-space:nowrap;flex-shrink:0;" title="전일 마감 재고 이월 및 변동 반영">🔄</button>
-    <button class="btn btn-primary btn-sm" onclick="openStockEdit(null)" style="white-space:nowrap;flex-shrink:0;">+ 등록</button>
-  </div>
-  <div class="sort-btn-group" style="margin-bottom:12px;">
-    <button class="sort-btn active" onclick="setStockSort('name',this)">가나다순</button>
-    <button class="sort-btn" onclick="setStockSort('qty-asc',this)">재고↑</button>
-    <button class="sort-btn" onclick="setStockSort('qty-desc',this)">재고↓</button>
-    <button class="sort-btn" onclick="setStockSort('danger',this)">부족순</button>
-  </div>
-  <div id="stockList"></div>
-</div>
-
-<!-- ─── 거래처 ─── -->
 <div class="pane" id="pane-delivery">
     <div class="card">
         <div class="form-group" style="position:relative;">
@@ -377,15 +306,67 @@
         <div class="form-group" style="margin-bottom:0;margin-top:10px;">
             <input type="text" class="form-input" id="histSearch" placeholder="🔍 거래처·품목명 검색… (초성 가능: ㄱ,ㄴ,ㅅ…)" oninput="renderOrders()" autocomplete="off" ondblclick="this.select()" enterkeyhint="search" inputmode="search">
         </div>
-        <!-- 그룹 필터 -->
-        <div id="histGroupFilterWrap" style="margin-top:8px;display:none;">
-            <label class="form-label" style="margin-bottom:4px;">👥 그룹 필터</label>
-            <select class="form-input" id="histGroupFilter" onchange="renderOrders()" style="font-size:13px;padding:9px 10px;">
-                <option value="">전체 (그룹 무관)</option>
-            </select>
-        </div>
     </div>
     <div id="orderList"></div>
+</div>
+
+<!-- ─── 재고 관리 ─── -->
+<div class="pane" id="pane-stock">
+  <!-- 과거 날짜 재고 조회 -->
+  <div class="stock-date-bar">
+    <label>📅</label>
+    <button class="stock-date-today-btn" onclick="stockDateNav(-1)" style="padding:7px 10px;">◀</button>
+    <input type="date" class="stock-date-input" id="stockViewDate" onchange="onStockDateChange(this.value)">
+    <button class="stock-date-today-btn" onclick="stockDateNav(1)" style="padding:7px 10px;">▶</button>
+    <button class="stock-date-today-btn" onclick="resetStockToToday()">오늘</button>
+    <button class="stock-date-today-btn" onclick="recalcStockFromOrders()" title="출고 누락 재계산" style="color:var(--accent);">🔄</button>
+  </div>
+  <div class="stock-history-banner" id="stockHistoryBanner">
+    <div class="stock-history-banner-title">🕐 과거 재고 조회 중</div>
+    <div class="stock-history-banner-sub" id="stockHistoryBannerSub"></div>
+  </div>
+  <div class="stock-summary">
+    <div class="stock-sum-card s-all">
+      <div class="stock-sum-label">전체 품목</div>
+      <div class="stock-sum-val" id="sCountAll">0</div>
+    </div>
+    <div class="stock-sum-card s-low">
+      <div class="stock-sum-label">부족 주의</div>
+      <div class="stock-sum-val" id="sCountLow">0</div>
+    </div>
+    <div class="stock-sum-card s-danger">
+      <div class="stock-sum-label">재고 없음</div>
+      <div class="stock-sum-val" id="sCountDanger">0</div>
+    </div>
+  </div>
+  <div class="auto-deduct-bar">
+    <div>
+      <div style="font-size:13px;font-weight:700;">납품 시 자동 재고 차감</div>
+      <div style="font-size:11px;color:var(--text2);margin-top:2px;">납품 확정 시 품목 재고 자동 차감</div>
+    </div>
+    <button class="btn btn-ghost btn-sm" id="autoDeductBtn" onclick="toggleAutoDeduct()" style="min-width:52px;">OFF</button>
+  </div>
+  <!-- 달걀 품목 빠른 등록 배너 -->
+  <div id="eggInitBanner" style="display:none;margin-bottom:12px;background:linear-gradient(135deg,#fef3c7,#fffbeb);border:1.5px solid #fcd34d;border-radius:var(--radius);padding:13px 14px;">
+    <div style="font-size:13px;font-weight:800;color:#92400e;margin-bottom:6px;">🥚 달걀 품목을 한 번에 등록할까요?</div>
+    <div style="font-size:11px;color:#78350f;margin-bottom:10px;">왕란 · 특란 · 대란 · 중란을 자동으로 등록합니다</div>
+    <div style="display:flex;gap:8px;">
+      <button class="btn btn-sm" style="flex:1;background:#f59e0b;color:#fff;border:none;" onclick="initEggItems()">✅ 달걀 4종 등록</button>
+      <button class="btn btn-ghost btn-sm" onclick="document.getElementById('eggInitBanner').style.display='none'">나중에</button>
+    </div>
+  </div>
+  <div style="display:flex;gap:8px;margin-bottom:10px;">
+    <input type="text" class="form-input" id="stockSearch" placeholder="🔍 품목 검색…" oninput="renderStock()" autocomplete="off" style="flex:1;">
+    <button class="btn btn-ghost btn-sm" onclick="refreshStockCarryover()" style="white-space:nowrap;flex-shrink:0;" title="전일 마감 재고 이월 및 변동 반영">🔄</button>
+    <button class="btn btn-primary btn-sm" onclick="openStockEdit(null)" style="white-space:nowrap;flex-shrink:0;">+ 등록</button>
+  </div>
+  <div class="sort-btn-group" style="margin-bottom:12px;">
+    <button class="sort-btn active" onclick="setStockSort('name',this)">가나다순</button>
+    <button class="sort-btn" onclick="setStockSort('qty-asc',this)">재고↑</button>
+    <button class="sort-btn" onclick="setStockSort('qty-desc',this)">재고↓</button>
+    <button class="sort-btn" onclick="setStockSort('danger',this)">부족순</button>
+  </div>
+  <div id="stockList"></div>
 </div>
 
 <!-- ─── 정산 ─── -->
@@ -408,13 +389,6 @@
             <button class="period-tab active" data-period="current" onclick="setSettlePeriod(this)">이번 달</button>
             <button class="period-tab" data-period="last" onclick="setSettlePeriod(this)">지난 달</button>
             <button class="period-tab" data-period="custom" onclick="setSettlePeriod(this)">직접 선택</button>
-        </div>
-        <!-- 그룹 필터 -->
-        <div id="settleGroupFilterWrap" style="display:none;margin-bottom:10px;">
-            <label class="form-label" style="margin-bottom:4px;">👥 그룹 필터</label>
-            <select class="form-input" id="settleGroupFilter" onchange="renderSettlement()" style="font-size:13px;padding:9px 10px;">
-                <option value="">전체 (그룹 무관)</option>
-            </select>
         </div>
     </div>
 
@@ -633,7 +607,7 @@
     <div class="card">
         <div class="card-title">앱 정보</div>
         <div style="font-size:13px;color:var(--text2);line-height:2;margin-bottom:12px;">
-            버전: <strong style="color:var(--accent);">v93</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
+            버전: <strong style="color:var(--accent);">v95</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
             거래처: <span id="infoClients">0</span>개 &nbsp;·&nbsp;
             납품내역: <span id="infoOrders">0</span>건
         </div>
@@ -647,7 +621,15 @@
             <div id="changelogList" style="display:flex;flex-direction:column;gap:6px;">
                 <!-- 현재 버전 -->
                 <div class="changelog-item">
-                    <span class="changelog-ver" style="color:var(--green);">v93</span>
+                    <span class="changelog-ver" style="color:var(--green);">v95</span>
+                    <span class="changelog-desc">CRM 결제 양방향 동기 — 거래장에서 결제 처리(완납·부분·할인·혼합·수금취소·수금수정) 시 CRM transactions에 즉시 역방향 패치. dlControlled 플래그로 CRM↔거래장 결제 우선권 자동 관리. CRM_FIREBASE_CFG 설정으로 활성화.</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v94</span>
+                    <span class="changelog-desc">거래처 그룹 기능 제거 — 공유 워크스페이스로 대체. 거래처 등록·수정 폼 그룹명 입력 제거, 거래처 탭 그룹보기 버튼 제거, 내역·정산·미수금 탭 그룹 필터 드롭다운 제거. CRM 영향 없음.</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v93</span>
                     <span class="changelog-desc">공유 거래처 선택 기능 — 내가 공개할 거래처를 직접 체크박스로 선택. 선택된 거래처만 상대방 명세표에 표시. Firebase에 sharedClients 저장으로 접근 제어. 상대방 공개 허용 거래처 목록 실시간 확인.</span>
                 </div>
                 <div class="changelog-item">
@@ -1449,22 +1431,7 @@
                 </p>
             </div>
         </div>
-        <!-- 그룹명 변경 섹션 -->
-        <div style="border:1px solid var(--border);border-radius:var(--radius-s);padding:12px;margin-bottom:14px;background:var(--surf2);">
-            <div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:8px;">👥 그룹명 설정</div>
-            <div class="form-group" style="margin-bottom:4px;">
-                <input type="text" class="form-input" id="ceditGroupName" placeholder="그룹명 (비워두면 그룹 없음)" autocomplete="off">
-            </div>
-            <p style="font-size:11px;color:var(--text3);margin-bottom:0;">같은 그룹명으로 묶이면 합산 조회가 가능합니다.</p>
-        </div>
-        <div style="display:flex;gap:8px;">
-            <button class="btn btn-primary" style="flex:2;" onclick="saveClientEditFromHistory()">💾 저장</button>
-            <button class="btn btn-ghost" style="flex:1;" onclick="closeModal('clientEditModal')">취소</button>
-        </div>
-    </div>
-</div>
-
-<!-- 전표 수정 모달 -->
+        <!-- 전표 수정 모달 -->
 <div class="modal-overlay" id="orderEditModal">
     <div class="modal-sheet">
         <div class="modal-handle"></div>
@@ -1594,51 +1561,13 @@
    v89 거래처 그룹 기능 헬퍼
    ══════════════════════════════════════════════ */
 
-/* ── 그룹명 자동완성 ── */
-function onClientGroupInput(val) {
-    const suggest = document.getElementById('clientGroupSuggest');
-    if (!val.trim()) { suggest.style.display = 'none'; return; }
-    const clients = (window.appData && window.appData.clients) ? window.appData.clients : [];
-    const groups = [...new Set(clients.map(c => c.group).filter(g => g && g.toLowerCase().includes(val.toLowerCase())))];
-    if (!groups.length) { suggest.style.display = 'none'; return; }
-    suggest.innerHTML = groups.map(g =>
-        `<div onclick="document.getElementById('clientGroup').value='${g}';document.getElementById('clientGroupSuggest').style.display='none';"
-            style="padding:9px 13px;font-size:13px;cursor:pointer;border-bottom:1px solid var(--border);"
-            onmouseover="this.style.background='var(--surf3)'" onmouseout="this.style.background=''">${g}</div>`
-    ).join('');
-    suggest.style.display = 'block';
-}
-
 /* ── 그룹 목록 계산 ── */
 function getGroupList() {
     const clients = (window.appData && window.appData.clients) ? window.appData.clients : [];
     return [...new Set(clients.map(c => c.group).filter(Boolean))].sort();
 }
 
-/* ── 그룹 필터 셀렉트 채우기 ── */
-function populateGroupFilter(selectId, wrapId) {
-    const groups = getGroupList();
-    const wrap = document.getElementById(wrapId);
-    const sel = document.getElementById(selectId);
-    if (!wrap || !sel) return;
-    if (!groups.length) { wrap.style.display = 'none'; return; }
-    wrap.style.display = '';
-    const prev = sel.value;
-    sel.innerHTML = '<option value="">전체 (그룹 무관)</option>' +
-        groups.map(g => `<option value="${g}">${g}</option>`).join('');
-    if (prev) sel.value = prev;
-}
-
 /* ── 거래처 탭: 그룹뷰 토글 상태 ── */
-// groupViewOn 변수는 app.js에서 선언됨
-
-function toggleGroupView() {
-    groupViewOn = !groupViewOn;
-    const btn = document.getElementById('groupViewToggleBtn');
-    if (btn) btn.textContent = groupViewOn ? '개별보기' : '그룹보기';
-    renderClients();
-}
-
 /* ── groupViewBar 표시 여부 갱신 ── */
 function updateGroupViewBar() {
     const bar = document.getElementById('groupViewBar');
@@ -1648,70 +1577,10 @@ function updateGroupViewBar() {
 }
 
 /* ── 그룹 합산 카드 렌더 (거래처 탭) ── */
-function renderGroupSummaryCards(container, groupName) {
-    const clients = (window.appData && window.appData.clients) ? window.appData.clients : [];
-    const orders  = (window.appData && window.appData.orders)  ? window.appData.orders  : [];
-    const members = clients.filter(c => c.group === groupName && !c.isHidden);
-    if (!members.length) return;
 
-    // 합산 계산
-    let totalSales = 0, totalUnpaid = 0, totalOrders = 0;
-    members.forEach(c => {
-        const cOrders = orders.filter(o => o.clientName === c.name || o.clientId === c.id);
-        cOrders.forEach(o => {
-            const amt = (o.items || []).reduce((s, it) => s + (it.qty || 0) * (it.price || 0), 0);
-            const paid = o.paidAmount || 0;
-            totalSales += amt;
-            totalUnpaid += Math.max(0, amt - paid);
-            totalOrders++;
-        });
-    });
-
-    const fmt = n => n.toLocaleString('ko-KR');
-
-    // 그룹 헤더 카드
-    const card = document.createElement('div');
-    card.style.cssText = 'border:2px solid rgba(108,99,255,.45);border-radius:var(--radius);margin-bottom:6px;overflow:hidden;';
-    card.innerHTML = `
-        <div style="background:linear-gradient(135deg,rgba(108,99,255,.18),rgba(108,99,255,.08));
-            padding:11px 14px;display:flex;justify-content:space-between;align-items:center;cursor:pointer;"
-            onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'':'none';
-                     this.querySelector('.grp-arrow').textContent=this.nextElementSibling.style.display===''?'▲':'▼'">
-            <div>
-                <div style="font-size:13px;font-weight:800;color:var(--accent);">👥 ${groupName} <span style="font-size:11px;font-weight:500;color:var(--text2);">(${members.length}명)</span></div>
-                <div style="font-size:11px;color:var(--text2);margin-top:3px;">
-                    총 납품 ${totalOrders}건 &nbsp;|&nbsp;
-                    매출 <strong style="color:var(--accent);">${fmt(totalSales)}원</strong> &nbsp;|&nbsp;
-                    미수 <strong style="color:${totalUnpaid>0?'#f87171':'var(--text2)'};">${fmt(totalUnpaid)}원</strong>
-                </div>
-            </div>
-            <span class="grp-arrow" style="color:var(--text3);font-size:12px;">▼</span>
-        </div>
-        <div class="grp-members"></div>`;
-    container.appendChild(card);
-
-    // 멤버 카드들은 기존 renderClients가 개별로 그려준 것을 이동
-    // → 여기서는 멤버 컨테이너만 남겨두고, 개별 카드를 _appendClientCard로 삽입
-    const memberWrap = card.querySelector('.grp-members');
-    members.forEach(c => {
-        if (typeof window._appendClientCard === 'function') {
-            window._appendClientCard(memberWrap, c);
-        }
-    });
-}
 
 /* ── 그룹 뷰 렌더 래퍼 (app.js의 renderClients를 패치) ── */
-function _patchRenderClientsForGroup() {
-    if (typeof renderClients !== 'function') return;
-    const _orig = renderClients;
-    window.renderClients = function() {
-        updateGroupViewBar();
-        populateGroupFilter('histGroupFilter', 'histGroupFilterWrap');
-        populateGroupFilter('unpaidGroupFilter', 'unpaidGroupFilterWrap');
-        populateGroupFilter('settleGroupFilter', 'settleGroupFilterWrap');
-        _orig.apply(this, arguments);
-    };
-}
+
 
 /* ── saveClient 패치: group 필드 저장 ── */
 function _patchSaveClientForGroup() {
@@ -1729,67 +1598,11 @@ function _patchSaveClientEditForGroup() {
     if (typeof saveClientEditFromHistory !== 'function') return;
     const _orig = saveClientEditFromHistory;
     window.saveClientEditFromHistory = function() {
-        // ceditGroupName 값을 클라이언트 객체에 반영 후 저장
         const clientId = document.getElementById('histEditClientId') &&
                          document.getElementById('histEditClientId').value;
-        const groupVal = (document.getElementById('ceditGroupName') || {}).value || '';
         if (clientId && window.appData && window.appData.clients) {
             const c = window.appData.clients.find(x => x.id === clientId);
             if (c) c.group = groupVal.trim();
-        }
-        _orig.apply(this, arguments);
-    };
-}
-
-/* ── renderOrders 그룹 필터 패치 ── */
-function _patchRenderOrdersForGroup() {
-    if (typeof renderOrders !== 'function') return;
-    const _orig = renderOrders;
-    window.renderOrders = function() {
-        const groupSel = document.getElementById('histGroupFilter');
-        const groupVal = groupSel ? groupSel.value : '';
-        if (groupVal && window.appData) {
-            const clients = window.appData.clients || [];
-            const memberNames = new Set(clients.filter(c => c.group === groupVal).map(c => c.name));
-            histGroupFilterActive = memberNames.size ? memberNames : null;
-        } else {
-            histGroupFilterActive = null;
-        }
-        _orig.apply(this, arguments);
-    };
-}
-
-/* ── renderUnpaid 그룹 필터 패치 ── */
-function _patchRenderUnpaidForGroup() {
-    if (typeof renderUnpaid !== 'function') return;
-    const _orig = renderUnpaid;
-    window.renderUnpaid = function() {
-        const groupSel = document.getElementById('unpaidGroupFilter');
-        const groupVal = groupSel ? groupSel.value : '';
-        if (groupVal && window.appData) {
-            const clients = window.appData.clients || [];
-            const memberNames = new Set(clients.filter(c => c.group === groupVal).map(c => c.name));
-            window._unpaidGroupFilterActive = memberNames.size ? memberNames : null;
-        } else {
-            window._unpaidGroupFilterActive = null;
-        }
-        _orig.apply(this, arguments);
-    };
-}
-
-/* ── renderSettlement 그룹 필터 패치 ── */
-function _patchRenderSettlementForGroup() {
-    if (typeof renderSettlement !== 'function') return;
-    const _orig = renderSettlement;
-    window.renderSettlement = function() {
-        const groupSel = document.getElementById('settleGroupFilter');
-        const groupVal = groupSel ? groupSel.value : '';
-        if (groupVal && window.appData) {
-            const clients = window.appData.clients || [];
-            const memberNames = new Set(clients.filter(c => c.group === groupVal).map(c => c.name));
-            window._settleGroupFilterActive = memberNames.size ? memberNames : null;
-        } else {
-            window._settleGroupFilterActive = null;
         }
         _orig.apply(this, arguments);
     };
@@ -1807,7 +1620,6 @@ function _patchOpenClientEditForGroup() {
             setTimeout(() => {
                 const clients = (window.appData && window.appData.clients) || [];
                 const c = clients.find(x => x.id === clientId);
-                const inp = document.getElementById('ceditGroupName');
                 if (c && inp) inp.value = c.group || '';
             }, 80);
         };
@@ -1832,12 +1644,8 @@ function _patchSaveClientGroupField() {
 document.addEventListener('DOMContentLoaded', () => {
     // app.js가 defer로 로드되므로 DOMContentLoaded 이후 잠시 대기
     setTimeout(() => {
-        _patchRenderClientsForGroup();
         _patchSaveClientGroupField();
         _patchSaveClientEditForGroup();
-        _patchRenderOrdersForGroup();
-        _patchRenderUnpaidForGroup();
-        _patchRenderSettlementForGroup();
         _patchOpenClientEditForGroup();
         updateGroupViewBar();
     }, 300);

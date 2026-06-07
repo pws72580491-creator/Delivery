@@ -16,6 +16,102 @@ const FIREBASE_CONFIG = {
     measurementId: "G-LXQ1XZMV02"
 };
 
+// ─── CRM 연동 설정 (결제 양방향 동기) ───────────────────────────────────────
+// CRM 앱의 Firebase 프로젝트 설정값을 입력하세요.
+// 비워두면 CRM 역방향 패치가 비활성화됩니다.
+const CRM_FIREBASE_CFG = {
+    apiKey:            "AIzaSyBfSu4_0u_7nSEqo9-HQVKINgF_l59YkE8",
+    authDomain:        "crm-accounting-d7bd0.firebaseapp.com",
+    databaseURL:       "https://crm-accounting-d7bd0-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId:         "crm-accounting-d7bd0",
+    storageBucket:     "crm-accounting-d7bd0.firebasestorage.app",
+    messagingSenderId: "329588634587",
+    appId:             "1:329588634587:web:ebf56826605b7263486dfe",
+};
+
+// CRM 연동 활성화 여부 (databaseURL이 있으면 자동 활성화)
+const CRM_SYNC_ENABLED = !!(CRM_FIREBASE_CFG.databaseURL);
+
+// ─── CRM Firebase Named Instance 확보 ────────────────────────────────────────
+function _getCrmApp() {
+    if (!CRM_SYNC_ENABLED) return null;
+    try { return firebase.app('crm_link'); }
+    catch (e) { return firebase.initializeApp(CRM_FIREBASE_CFG, 'crm_link'); }
+}
+
+/**
+ * 거래장에서 결제 처리 후 → CRM Firebase의 해당 transaction 결제 필드 동기화
+ * CRM에서 이미 _napumId 로 연결된 거래(transaction)만 패치합니다.
+ *
+ * @param {string} orderId  - 거래장 order.id
+ * @param {object} order    - 결제 처리된 order 객체 (isPaid, paidAmount, paidAt, paidMethod 포함)
+ */
+async function _patchCrmTransaction(orderId, order) {
+    if (!CRM_SYNC_ENABLED) return false;
+    if (typeof firebase === 'undefined') return false;
+
+    // 거래장 workspaceId 확보
+    const wsId = localStorage.getItem('workspaceId');
+    if (!wsId) { console.warn('[CRM패치] workspaceId 없음'); return false; }
+
+    // CRM에서 이 order를 가리키는 napumKey 형식: "wsId:orderId"
+    const napumKey = `${wsId}:${orderId}`;
+
+    try {
+        const crmDb = _getCrmApp().database();
+
+        // CRM transactions 에서 _napumId === napumKey 인 항목 검색
+        const txSnap = await crmDb.ref('transactions').orderByChild('_napumId').equalTo(napumKey).once('value');
+        if (!txSnap.exists()) {
+            console.info('[CRM패치] 해당 napumKey의 CRM 거래 없음 (아직 미동기):', napumKey);
+            return false;
+        }
+
+        // 결제 필드 구성
+        const patch = {
+            status:    order.isPaid ? '수금완료' : (order.paidAmount > 0 ? '미수금' : '미수금'),
+            paidAmount: order.paidAmount || 0,
+            paidAt:    order.paidAt || new Date().toISOString(),
+            paidMethod: order.paidMethod || 'cash',
+            updatedAt:  new Date().toISOString(),
+            // 거래장 우선권 플래그: CRM이 이 필드를 다시 덮어쓰지 않도록
+            // (단, CRM에서 다시 처리하면 crmControlled=true로 재취득)
+            dlControlled: true,
+        };
+        if (order.paidMethodDetail) patch.paidMethodDetail = order.paidMethodDetail;
+        if (order.discount)         patch.discount         = order.discount;
+
+        // 매칭된 CRM transaction(들) 모두 패치
+        const updates = {};
+        txSnap.forEach(child => {
+            Object.keys(patch).forEach(k => {
+                updates[`transactions/${child.key}/${k}`] = patch[k];
+            });
+        });
+        await crmDb.ref('/').update(updates);
+
+        console.info('[CRM패치] 성공:', napumKey, '→ status:', patch.status, 'paidAmount:', patch.paidAmount);
+        return true;
+    } catch (e) {
+        console.warn('[CRM패치] 실패:', e.message, '| napumKey:', napumKey);
+        return false;
+    }
+}
+
+/**
+ * 결제 처리 후 CRM 역방향 패치 공통 헬퍼.
+ * toast는 호출부에서 이미 표시하므로 여기선 추가 toast만 띄움.
+ */
+function _afterDlPayPatch(orderId, order) {
+    if (!CRM_SYNC_ENABLED) return;
+    _patchCrmTransaction(orderId, order)
+        .then(ok => {
+            if (ok) toast('📊 CRM에도 반영됨', 'var(--green)', 2500);
+            else     console.info('[CRM패치] 미연동 주문 (CRM에 거래 없음)');
+        })
+        .catch(e => console.warn('[CRM패치] 오류:', e));
+}
+
 // ─── 사용설명서 URL (GitHub raw 주소 — 직접 수정하세요) ───
 // 예: 'https://raw.githubusercontent.com/YOUR_ID/YOUR_REPO/main/manual.md'
 const MANUAL_URL = 'https://raw.githubusercontent.com/pws72580491-creator/Delivery/main/manual.md';
@@ -328,8 +424,6 @@ let settleListVisible = false;  // 기본값 숨기기
 let settleUnit = 'monthly'; // 'monthly' | 'daily' | 'quarterly'
 let clientListVisible = false;  // 기본값 숨기기 (복구/동기화 후 즉시 반영)
 let showHiddenClients = false; // 숨긴 거래처 포함 표시 여부
-let groupViewOn = false;       // 거래처 그룹뷰 ON/OFF
-let histGroupFilterActive = null; // 내역 탭 그룹 필터 (Set 또는 null)
 
 
 // Firebase
@@ -609,7 +703,6 @@ function _minifyClient(c) {
     if (c.phone)     r.phone     = c.phone;
     if (c.address)   r.address   = c.address;
     if (c.note)      r.note      = c.note;
-    if (c.group)     r.group     = c.group; // 거래처 그룹명
     if (c.isHidden)  r.isHidden  = true;   // true일 때만 저장 (false는 기본값이므로 생략)
     const ua = _compactTs(c.updatedAt);
     if (ua)          r.updatedAt = ua;
@@ -1275,7 +1368,7 @@ function saveClient() {
         const c = clients.find(c => c.id === editingClientId);
         if (c) {
             const oldName = c.name;
-            c.name=name; c.phone=phone; c.address=address; c.note=note; c.group=(document.getElementById('clientGroup')?.value||'').trim(); c.updatedAt=new Date().toISOString();
+            c.name=name; c.phone=phone; c.address=address; c.note=note; c.updatedAt=new Date().toISOString();
             // 거래처명이 변경된 경우 관련 전표 일괄 반영
             if (oldName !== name) {
                 let orderCount = 0;
@@ -1301,8 +1394,7 @@ function saveClient() {
             }
         }
     } else {
-        const group = (document.getElementById('clientGroup')?.value || '').trim();
-        clients.push({ id:_uid(), name, phone, address, note, group, isHidden:false, createdAt:new Date().toISOString(), updatedAt:new Date().toISOString() });
+        clients.push({ id:_uid(), name, phone, address, note, isHidden:false, createdAt:new Date().toISOString(), updatedAt:new Date().toISOString() });
         // ★ 로컬 변경 시각 갱신 → Firebase 리스너가 구 서버 데이터로 덮어쓰는 경쟁 방지
         _localWriteTime = Date.now();
         toast('✅ 거래처 등록 완료', 'var(--green)');
@@ -1318,7 +1410,6 @@ function cancelClientEdit() {
     document.getElementById('clientPhone').value = '';
     document.getElementById('clientAddress').value = '';
     document.getElementById('clientNote').value = '';
-    if (document.getElementById('clientGroup')) document.getElementById('clientGroup').value = '';
     if (document.getElementById('clientGroupSuggest')) document.getElementById('clientGroupSuggest').style.display = 'none';
     document.getElementById('dupWarn').style.display = 'none';
     document.getElementById('clientFormTitle').textContent = '거래처 등록';
@@ -1333,7 +1424,6 @@ function editClient(id) {
     document.getElementById('clientPhone').value   = c.phone || '';
     document.getElementById('clientAddress').value = c.address || '';
     document.getElementById('clientNote').value    = c.note || '';
-    if (document.getElementById('clientGroup')) document.getElementById('clientGroup').value = c.group || '';
     document.getElementById('clientFormTitle').textContent = '거래처 수정';
     document.getElementById('clientCancelBtn').style.display = 'block';
     document.getElementById('clientName').focus();
@@ -1415,50 +1505,6 @@ function renderClients() {
         return;
     }
 
-    // ★ 그룹뷰 모드 — clientListVisible 상태와 무관하게 최우선 처리
-    if (groupViewOn) {
-        const groups = [...new Set(filtered.map(c => c.group).filter(Boolean))].sort();
-        const noGroup = filtered.filter(c => !c.group);
-        el.innerHTML = '';
-        // 그룹별 카드
-        groups.forEach(g => {
-            const members = filtered.filter(c => c.group === g);
-            let totalSales = 0, totalUnpaid = 0, totalOrders = 0;
-            members.forEach(c => {
-                const st = statsMap[c.id] || statsMap[c.name] || { total:0, unpaid:0, count:0 };
-                totalSales  += st.total  || 0;
-                totalUnpaid += st.unpaid || 0;
-                totalOrders += st.count  || 0;
-            });
-            const fmt2 = n => n.toLocaleString('ko-KR');
-            const wrap = document.createElement('div');
-            wrap.style.cssText = 'border:2px solid rgba(108,99,255,.45);border-radius:var(--radius);margin-bottom:8px;overflow:hidden;';
-            wrap.innerHTML = `
-                <div style="background:linear-gradient(135deg,rgba(108,99,255,.18),rgba(108,99,255,.08));
-                    padding:11px 14px;display:flex;justify-content:space-between;align-items:center;cursor:pointer;"
-                    onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'':'none';
-                             this.querySelector('.grp-arrow').textContent=this.nextElementSibling.style.display===''?'▲':'▼'">
-                    <div>
-                        <div style="font-size:13px;font-weight:800;color:var(--accent);">👥 ${g} <span style="font-size:11px;font-weight:500;color:var(--text2);">(${members.length}명)</span></div>
-                        <div style="font-size:11px;color:var(--text2);margin-top:3px;">
-                            납품 ${totalOrders}건 &nbsp;|&nbsp;
-                            매출 <strong style="color:var(--accent);">${fmt2(totalSales)}원</strong> &nbsp;|&nbsp;
-                            미수 <strong style="color:${totalUnpaid>0?'#f87171':'var(--text2)'};">${fmt2(totalUnpaid)}원</strong>
-                        </div>
-                    </div>
-                    <span class="grp-arrow" style="color:var(--text3);font-size:12px;">▼</span>
-                </div>
-                <div class="grp-members">${members.map(c => _clientCardHTML(c, statsMap, q)).join('')}</div>`;
-            el.appendChild(wrap);
-        });
-        // 그룹 없는 거래처
-        if (noGroup.length) {
-            const noWrap = document.createElement('div');
-            noWrap.innerHTML = noGroup.map(c => _clientCardHTML(c, statsMap, q)).join('');
-            el.appendChild(noWrap);
-        }
-        return;
-    }
 
     el.innerHTML = filtered.map(c => _clientCardHTML(c, statsMap, q)).join('');
 }
@@ -2286,8 +2332,7 @@ function renderOrders() {
         const mSearch = matchSearch(o.clientName||'',q) || (o.items||[]).some(i=>matchSearch(i.name,q));
         const mDate   = (!start||o.date>=start) && (!end||o.date<=end);
         const mPay    = histPayFilter==='all'?true:histPayFilter==='unpaid'?!o.isPaid:o.isPaid;
-        const mGroup  = histGroupFilterActive ? histGroupFilterActive.has(o.clientName) : true;
-        return mSearch && mDate && mPay && mGroup;
+        return mSearch && mDate && mPay ;
     });
 
     const _et       = o => o.isPaid && o.discount > 0 ? o.total - o.discount : o.total;
@@ -2470,11 +2515,13 @@ async function togglePaid(id) {
         if (!await customConfirm('완납을 취소하고 미수로 되돌릴까요?')) return;
         o.isPaid = false; o.paidAmount = 0;
         delete o.paidAt; delete o.paidNote; delete o.paidMethod; delete o.discount; delete o.paidMethodDetail;
+        delete o.crmControlled; delete o.dlControlled;
         _markDirtyOrder(id); // delta sync 마킹
         _saveAndFlush(); renderOrders(); renderDashboard(); updateInfoCounts(); updateNavBadges();
         _refreshUnpaidIfActive();
         _refreshSettlementIfActive();
         toast('🔴 미수로 변경');
+        _afterDlPayPatch(id, o);
     } else {
         openQuickPay(id);
     }
@@ -2554,6 +2601,7 @@ function confirmQuickPayDiscount(method) {
         ? `${icon} 할인 완납 (할인 ${fmt(discount)}원)`
         : `${icon} 완납 처리`;
     toast(msg, 'var(--green)');
+    _afterDlPayPatch(orderId, o);
 }
 
 // ─── 명세표에서 퀵페이 열기 (결제 후 명세표 자동 갱신) ───
@@ -2596,6 +2644,7 @@ function confirmQuickPay(method) {
     _refreshSettlementIfActive();
     const icon = method === 'transfer' ? '🏦' : '💵';
     toast(icon + ' ' + (method === 'transfer' ? '계좌이체' : '현금') + ' 완납 처리', 'var(--green)');
+    _afterDlPayPatch(orderId, o);
 }
 
 function toggleVoidOrder(id) {
@@ -2721,7 +2770,6 @@ function saveClientEditFromHistory() {
     c.phone     = phone;
     c.address   = address;
     c.note      = note;
-    c.group     = (document.getElementById('ceditGroupName')?.value || '').trim();
     c.updatedAt = new Date().toISOString();
 
     saveData();
@@ -4171,6 +4219,8 @@ async function confirmPartialPayDiscount() {
     showClientStatement(clientName, month);
     const discount = total - amount;
     toast(`✂️ 할인 완납 처리 (할인 ${fmt(discount)}원)`, 'var(--green)');
+    // CRM 역방향 패치: 해당 전표들 각각 패치
+    list.forEach(o => _afterDlPayPatch(o.id, o));
 }
 
 async function confirmPartialPay() {
@@ -4225,6 +4275,8 @@ async function confirmPartialPay() {
         _refreshSettlementIfActive();
         showClientStatement(clientName, month);
         toast(`💳 혼합 완납 (🏦${fmt(transferAmt)}원 + 💵${fmt(cashAmt)}원)`, 'var(--green)');
+        // CRM 역방향 패치
+        list.forEach(o => _afterDlPayPatch(o.id, o));
         return;
     }
 
@@ -4286,6 +4338,8 @@ async function confirmPartialPay() {
             ? methodLbl + ' ' + fullCnt + '건 완납 처리 완료'
             : methodLbl + ' 부분 입금 ' + fmt(amount) + '원 처리 완료';
     toast(msg, 'var(--green)');
+    // CRM 역방향 패치
+    list.forEach(o => _afterDlPayPatch(o.id, o));
 }
 
 // ─── 수금 수정 ───
@@ -4370,6 +4424,7 @@ function confirmPayEdit() {
     closeModal('payEditModal');
     showClientStatement(clientName, month);
     renderOrders(); renderDashboard(); updateInfoCounts(); updateNavBadges();
+    _afterDlPayPatch(o.id, o);
     _refreshUnpaidIfActive();
     _refreshSettlementIfActive();
 }
@@ -6311,7 +6366,7 @@ function exportSettlementExcel() {
 }
 
 function exportJSON() {
-    const data = { clients, orders, prices, stockItems, exportDate:new Date().toISOString(), version:'93' };
+    const data = { clients, orders, prices, stockItems, exportDate:new Date().toISOString(), version:'95' };
     const blob = new Blob([JSON.stringify(data,null,2)], { type:'application/json' });
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement('a');
@@ -6467,11 +6522,15 @@ function _getMySharedClients() {
     try { return JSON.parse(localStorage.getItem('mySharedClients') || '[]'); } catch { return []; }
 }
 function _saveMySharedClients(arr) {
+    // ── 항상 localStorage에 배열 형태로 보존 (빈 배열도 유지) ──
     localStorage.setItem('mySharedClients', JSON.stringify(arr));
-    // Firebase에도 즉시 반영
+    // Firebase에도 즉시 반영 — 빈 배열도 [] 그대로 올려서 null(노드 삭제) 방지
     const myId = localStorage.getItem('workspaceId');
     if (myId && typeof firebase !== 'undefined' && firebase.apps.length) {
-        firebase.database().ref(`workspaces/${myId}/sharedClients`).set(arr.length ? arr : null)
+        // 빈 배열일 때는 플레이스홀더 값으로 보내 노드가 삭제되지 않게 함
+        // → Firebase에서 null 저장 시 노드 자체가 삭제되어 _getMySharedClients()가 의도치 않게 초기화될 수 있음
+        firebase.database().ref(`workspaces/${myId}/sharedClients`)
+            .set(arr.length ? arr : [])
             .catch(() => {});
     }
 }
@@ -6495,7 +6554,7 @@ function renderSharedWsList() {
                     ${allClients.map(name => {
                         const checked = myShared.includes(name);
                         return `<label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:3px 0;">
-                            <input type="checkbox" ${checked ? 'checked' : ''} onchange="toggleMySharedClient('${name.replace(/'/g,"\\'")}',this.checked)"
+                            <input type="checkbox" ${checked ? 'checked' : ''} data-share-name="${escapeAttr(name)}" onchange="toggleMySharedClient('${name.replace(/'/g,"\\'")}',this.checked)"
                                 style="width:16px;height:16px;accent-color:var(--accent);flex-shrink:0;">
                             <span style="font-size:13px;color:var(--text1);">${escapeHtml(name)}</span>
                         </label>`;
@@ -6549,12 +6608,34 @@ async function _loadSharedClientBadges(wsId, idx) {
     }
 }
 
-function toggleMySharedClient(name, checked) {
+async function toggleMySharedClient(name, checked) {
+    // ── 공개 해제 시 실수 방지 확인 ──
+    if (!checked) {
+        // 확인 전까지 체크박스를 다시 켜둠 (낙관적 UI 방지)
+        const allCbs = document.querySelectorAll('#sharedWsList input[type="checkbox"]');
+        allCbs.forEach(cb => {
+            if (cb.getAttribute('data-share-name') === name) cb.checked = true;
+        });
+
+        const ok = await customConfirm(
+            '"' + name + '" 거래처 공유를 해제하면\n상대방이 이 거래처 내역을 더 이상 볼 수 없습니다.\n\n정말 해제하시겠습니까?',
+            '해제',
+            'btn-danger'
+        );
+        if (!ok) return; // 취소 → 변경 없음
+    }
+
     const list = _getMySharedClients();
     if (checked && !list.includes(name)) list.push(name);
     if (!checked) { const i = list.indexOf(name); if (i > -1) list.splice(i, 1); }
     _saveMySharedClients(list);
     toast(checked ? `✅ "${name}" 공개 허용` : `🔒 "${name}" 공개 해제`);
+
+    // ── 확정 후 체크박스 최종 상태 반영 ──
+    const allCbs = document.querySelectorAll('#sharedWsList input[type="checkbox"]');
+    allCbs.forEach(cb => {
+        if (cb.getAttribute('data-share-name') === name) cb.checked = checked;
+    });
 }
 
 function addSharedWs() {
@@ -6573,12 +6654,20 @@ function addSharedWs() {
     toast(`✅ "${id}" 공유 등록 완료`, 'var(--green)');
 }
 
-function removeSharedWs(idx) {
+async function removeSharedWs(idx) {
     const list = _getSharedWs();
-    const removed = list.splice(idx, 1)[0];
+    const target = list[idx];
+    if (!target) return;
+    const ok = await customConfirm(
+        '"' + target.wsId + '" 워크스페이스 공유를 해제하시겠습니까?\n\n해제하면 해당 담당자의 거래처 내역이 더 이상 명세표에 합산되지 않습니다.',
+        '해제',
+        'btn-danger'
+    );
+    if (!ok) return;
+    list.splice(idx, 1);
     _saveSharedWs(list);
     renderSharedWsList();
-    toast(`🗑️ "${removed.wsId}" 공유 해제`);
+    toast(`🗑️ "${target.wsId}" 공유 해제`);
 }
 
 // ─── Firebase ───
@@ -7046,7 +7135,7 @@ async function openManual() {
     const html = _md2html(raw);
 
     // 현재 버전 표시 — md2html 변환 후 h1 태그 뒤에 직접 삽입 (이스케이프 문제 방지)
-    const curVer = document.querySelector('.changelog-ver[style*="green"]')?.textContent || 'v93';
+    const curVer = document.querySelector('.changelog-ver[style*="green"]')?.textContent || 'v95';
     const htmlWithVer = html.replace(
         /<h1>([^<]*납품 관리 Pro[^<]*)<\/h1>/,
         `<h1>$1</h1><div style="font-size:12px;color:var(--text3);margin-top:-10px;margin-bottom:6px;">현재 버전: ${curVer}</div>`
@@ -7503,9 +7592,10 @@ window.addEventListener('DOMContentLoaded', () => {
         waitFirebase(() => {
             _doConnect(savedWs, true);
             // 내 sharedClients를 Firebase에 즉시 반영 (앱 시작 시 동기화)
+            // ※ null 대신 [] 사용 — null 저장 시 Firebase 노드 삭제로 공유 목록이 초기화되는 버그 방지
             const myShared = _getMySharedClients();
             firebase.database().ref(`workspaces/${savedWs}/sharedClients`)
-                .set(myShared.length ? myShared : null).catch(() => {});
+                .set(myShared.length ? myShared : []).catch(() => {});
         });
     }
     // 자동 백업 체크
