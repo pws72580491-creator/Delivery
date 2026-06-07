@@ -11,7 +11,7 @@
     <meta name="apple-mobile-web-app-title" content="납품관리">
     <link rel="apple-touch-icon" href="./icon-192.png">
     <link rel="manifest" href="./manifest.json">
-    <title>납품 관리 Pro v92</title>
+    <title>납품 관리 Pro v93</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js" defer></script>
@@ -38,7 +38,7 @@
             <div class="logo-icon">📦</div>
             <div>
                 <div class="logo-text">납품 관리 Pro</div>
-                <div class="logo-sub">v92 · PWA 앱 설치 지원</div>
+                <div class="logo-sub">v93 · PWA 앱 설치 지원</div>
             </div>
         </div>
         <div class="header-btns">
@@ -633,7 +633,7 @@
     <div class="card">
         <div class="card-title">앱 정보</div>
         <div style="font-size:13px;color:var(--text2);line-height:2;margin-bottom:12px;">
-            버전: <strong style="color:var(--accent);">v92</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
+            버전: <strong style="color:var(--accent);">v93</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
             거래처: <span id="infoClients">0</span>개 &nbsp;·&nbsp;
             납품내역: <span id="infoOrders">0</span>건
         </div>
@@ -647,7 +647,11 @@
             <div id="changelogList" style="display:flex;flex-direction:column;gap:6px;">
                 <!-- 현재 버전 -->
                 <div class="changelog-item">
-                    <span class="changelog-ver" style="color:var(--green);">v92</span>
+                    <span class="changelog-ver" style="color:var(--green);">v93</span>
+                    <span class="changelog-desc">공유 거래처 선택 기능 — 내가 공개할 거래처를 직접 체크박스로 선택. 선택된 거래처만 상대방 명세표에 표시. Firebase에 sharedClients 저장으로 접근 제어. 상대방 공개 허용 거래처 목록 실시간 확인.</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v92</span>
                     <span class="changelog-desc">공유 워크스페이스 기능 — Firebase 동기화 설정에서 담당자 워크스페이스 ID 등록 시, 거래명세표에서 동일 거래처명 내역을 합산 조회. 공유 내역은 📦 배지 표시 및 읽기 전용 처리.</span>
                 </div>
                 <div class="changelog-item">

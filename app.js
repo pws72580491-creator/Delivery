@@ -3407,8 +3407,17 @@ async function showClientStatement(clientName, month) {
     let sharedOrders = [];
     if (sharedWsIds.length && typeof firebase !== 'undefined' && firebase.apps.length) {
         const napumDb = firebase.database();
-        await Promise.all(sharedWsIds.map(async wsId => {
+        await Promise.all(sharedWsIds.map(async item => {
+            const wsId = item.wsId || item;
             try {
+                // 1) 상대방이 허용한 거래처 목록 확인
+                const scSnap = await napumDb.ref(`workspaces/${wsId}/sharedClients`).get();
+                const allowedClients = scSnap.exists() ? (scSnap.val() || []) : [];
+                // 허용 목록이 비어있으면 공유 안 함
+                if (!allowedClients.length) return;
+                // 현재 거래처가 허용 목록에 없으면 스킵
+                if (!allowedClients.includes(clientName)) return;
+                // 2) 허용된 경우에만 내역 fetch
                 const snap = await napumDb.ref(`workspaces/${wsId}/orders`)
                     .orderByChild('clientName').equalTo(clientName).get();
                 if (!snap.exists()) return;
@@ -6302,7 +6311,7 @@ function exportSettlementExcel() {
 }
 
 function exportJSON() {
-    const data = { clients, orders, prices, stockItems, exportDate:new Date().toISOString(), version:'92' };
+    const data = { clients, orders, prices, stockItems, exportDate:new Date().toISOString(), version:'93' };
     const blob = new Blob([JSON.stringify(data,null,2)], { type:'application/json' });
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement('a');
@@ -6438,26 +6447,114 @@ function toggleWsLock() {
 // ─── 공유 워크스페이스 관리 ───────────────────────────────────────────────────
 // 같은 거래처명을 다른 담당자와 공유 — 거래명세표에서 합산 조회
 
+// ─── 공유 워크스페이스 관리 ───────────────────────────────────────────────────
+// 구조: [{ wsId: "abc", label: "담당자명(선택)" }, ...]  — 내가 조회할 상대방 목록
+// 내 공개 허용 거래처: Firebase workspaces/{myId}/sharedClients = ["Q마트","P마트"]
+
 function _getSharedWs() {
-    try { return JSON.parse(localStorage.getItem('sharedWorkspaces') || '[]'); } catch { return []; }
+    try {
+        const raw = JSON.parse(localStorage.getItem('sharedWorkspaces') || '[]');
+        // 구버전(string[]) 호환
+        return raw.map(item => typeof item === 'string' ? { wsId: item } : item);
+    } catch { return []; }
 }
 function _saveSharedWs(arr) {
     localStorage.setItem('sharedWorkspaces', JSON.stringify(arr));
+}
+
+// 내가 공개 허용한 거래처 목록 (Firebase에 저장)
+function _getMySharedClients() {
+    try { return JSON.parse(localStorage.getItem('mySharedClients') || '[]'); } catch { return []; }
+}
+function _saveMySharedClients(arr) {
+    localStorage.setItem('mySharedClients', JSON.stringify(arr));
+    // Firebase에도 즉시 반영
+    const myId = localStorage.getItem('workspaceId');
+    if (myId && typeof firebase !== 'undefined' && firebase.apps.length) {
+        firebase.database().ref(`workspaces/${myId}/sharedClients`).set(arr.length ? arr : null)
+            .catch(() => {});
+    }
 }
 
 function renderSharedWsList() {
     const el = document.getElementById('sharedWsList');
     if (!el) return;
     const list = _getSharedWs();
+
+    // ── 내 공개 허용 거래처 섹션 ──
+    const myShared   = _getMySharedClients();
+    const allClients = (clients || []).map(c => c.name).filter((v,i,a)=>a.indexOf(v)===i).sort((a,b)=>a.localeCompare(b,'ko'));
+
+    const mySection = `
+        <div style="margin-bottom:14px;">
+            <div style="font-size:12px;font-weight:700;color:var(--text1);margin-bottom:6px;">📤 내가 공개할 거래처</div>
+            <div style="font-size:11px;color:var(--text3);margin-bottom:8px;">체크한 거래처만 상대방이 내 내역을 볼 수 있습니다.</div>
+            ${allClients.length === 0
+                ? '<div style="font-size:12px;color:var(--text3);">등록된 거래처가 없습니다.</div>'
+                : `<div style="display:flex;flex-direction:column;gap:4px;max-height:160px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:8px;">
+                    ${allClients.map(name => {
+                        const checked = myShared.includes(name);
+                        return `<label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:3px 0;">
+                            <input type="checkbox" ${checked ? 'checked' : ''} onchange="toggleMySharedClient('${name.replace(/'/g,"\\'")}',this.checked)"
+                                style="width:16px;height:16px;accent-color:var(--accent);flex-shrink:0;">
+                            <span style="font-size:13px;color:var(--text1);">${escapeHtml(name)}</span>
+                        </label>`;
+                    }).join('')}
+                </div>`
+            }
+        </div>
+        <div style="border-top:1px solid var(--border);margin-bottom:14px;"></div>
+        <div style="font-size:12px;font-weight:700;color:var(--text1);margin-bottom:6px;">📥 상대방 워크스페이스 (조회)</div>
+        <div style="font-size:11px;color:var(--text3);margin-bottom:8px;">상대방이 허용한 거래처만 명세표에서 합산됩니다.</div>`;
+
     if (!list.length) {
-        el.innerHTML = '<div style="font-size:12px;color:var(--text3);padding:4px 0;">등록된 공유 워크스페이스가 없습니다.</div>';
+        el.innerHTML = mySection + '<div style="font-size:12px;color:var(--text3);padding:4px 0;">등록된 공유 워크스페이스가 없습니다.</div>';
         return;
     }
-    el.innerHTML = list.map((id, i) => `
-        <div style="display:flex;align-items:center;gap:8px;background:var(--surf2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;">
-            <span style="font-size:13px;flex:1;color:var(--text1);">📦 ${escapeHtml(id)}</span>
-            <button onclick="removeSharedWs(${i})" style="background:none;border:none;cursor:pointer;color:var(--text3);font-size:16px;padding:0 4px;" title="삭제">✕</button>
+
+    el.innerHTML = mySection + list.map((item, i) => `
+        <div style="background:var(--surf2);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:6px;">
+            <div style="display:flex;align-items:center;gap:8px;">
+                <span style="font-size:13px;flex:1;color:var(--text1);font-weight:600;">📦 ${escapeHtml(item.wsId)}</span>
+                <button onclick="removeSharedWs(${i})" style="background:none;border:none;cursor:pointer;color:var(--text3);font-size:16px;padding:0 4px;" title="삭제">✕</button>
+            </div>
+            <div id="sharedClientBadges_${i}" style="margin-top:6px;font-size:11px;color:var(--text3);">
+                <span style="font-size:11px;color:var(--text3);">⏳ 허용 거래처 로딩 중...</span>
+            </div>
         </div>`).join('');
+
+    // 각 워크스페이스의 허용 거래처 목록 비동기 로드
+    list.forEach((item, i) => _loadSharedClientBadges(item.wsId, i));
+}
+
+async function _loadSharedClientBadges(wsId, idx) {
+    const el = document.getElementById(`sharedClientBadges_${idx}`);
+    if (!el) return;
+    try {
+        if (typeof firebase === 'undefined' || !firebase.apps.length) {
+            el.innerHTML = '<span style="color:var(--text3);font-size:11px;">Firebase 미연결 — 연결 후 확인 가능</span>';
+            return;
+        }
+        const snap = await firebase.database().ref(`workspaces/${wsId}/sharedClients`).get();
+        if (!snap.exists() || !snap.val()?.length) {
+            el.innerHTML = '<span style="color:var(--orange);font-size:11px;">⚠️ 공개 거래처 없음 (상대방이 설정 필요)</span>';
+        } else {
+            const names = snap.val();
+            el.innerHTML = '공개 허용: ' + names.map(n =>
+                `<span style="background:#e0e7ff;color:#4f46e5;border-radius:4px;padding:1px 6px;font-size:11px;margin:2px 2px 0 0;display:inline-block;">${escapeHtml(n)}</span>`
+            ).join('');
+        }
+    } catch(e) {
+        el.innerHTML = '<span style="color:var(--red);font-size:11px;">❌ 접근 불가 (ID 확인 필요)</span>';
+    }
+}
+
+function toggleMySharedClient(name, checked) {
+    const list = _getMySharedClients();
+    if (checked && !list.includes(name)) list.push(name);
+    if (!checked) { const i = list.indexOf(name); if (i > -1) list.splice(i, 1); }
+    _saveMySharedClients(list);
+    toast(checked ? `✅ "${name}" 공개 허용` : `🔒 "${name}" 공개 해제`);
 }
 
 function addSharedWs() {
@@ -6467,9 +6564,9 @@ function addSharedWs() {
     const myId = (localStorage.getItem('workspaceId') || '').toLowerCase();
     if (id === myId) return toast('❗ 내 워크스페이스 ID는 추가할 수 없습니다');
     const list = _getSharedWs();
-    if (list.includes(id)) return toast('❗ 이미 등록된 ID입니다');
+    if (list.find(item => item.wsId === id)) return toast('❗ 이미 등록된 ID입니다');
     if (list.length >= 10) return toast('❗ 최대 10개까지 등록 가능합니다');
-    list.push(id);
+    list.push({ wsId: id });
     _saveSharedWs(list);
     input.value = '';
     renderSharedWsList();
@@ -6481,7 +6578,7 @@ function removeSharedWs(idx) {
     const removed = list.splice(idx, 1)[0];
     _saveSharedWs(list);
     renderSharedWsList();
-    toast(`🗑️ "${removed}" 공유 해제`);
+    toast(`🗑️ "${removed.wsId}" 공유 해제`);
 }
 
 // ─── Firebase ───
@@ -6949,7 +7046,7 @@ async function openManual() {
     const html = _md2html(raw);
 
     // 현재 버전 표시 — md2html 변환 후 h1 태그 뒤에 직접 삽입 (이스케이프 문제 방지)
-    const curVer = document.querySelector('.changelog-ver[style*="green"]')?.textContent || 'v92';
+    const curVer = document.querySelector('.changelog-ver[style*="green"]')?.textContent || 'v93';
     const htmlWithVer = html.replace(
         /<h1>([^<]*납품 관리 Pro[^<]*)<\/h1>/,
         `<h1>$1</h1><div style="font-size:12px;color:var(--text3);margin-top:-10px;margin-bottom:6px;">현재 버전: ${curVer}</div>`
@@ -7403,7 +7500,13 @@ window.addEventListener('DOMContentLoaded', () => {
     applyWsLockUI(); // 잠금 여부와 무관하게 항상 UI 동기화
     // 자동 재연결: workspaceId가 저장돼 있으면 연결 시도
     if (savedWs) {
-        waitFirebase(() => _doConnect(savedWs, true));
+        waitFirebase(() => {
+            _doConnect(savedWs, true);
+            // 내 sharedClients를 Firebase에 즉시 반영 (앱 시작 시 동기화)
+            const myShared = _getMySharedClients();
+            firebase.database().ref(`workspaces/${savedWs}/sharedClients`)
+                .set(myShared.length ? myShared : null).catch(() => {});
+        });
     }
     // 자동 백업 체크
     setTimeout(checkAutoBackup, 2000);
