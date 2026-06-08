@@ -1570,7 +1570,7 @@ function _clientCardHTML(c, statsMap, q) {
                 return `<div class="client-tooltip">${memos.map(o => `📅 ${o.date}\n📝 ${escapeHtml(o.note)}`).join('\n\n')}</div>`;
             })()}
             <div>
-                <div class="client-name">${highlight(c.name, q)}</div>
+                <div class="client-name">${highlight(c.name, q)}${c._autoAdded ? `<span class="shared-client-badge">📦 ${escapeHtml(c._sharedLabel||c._sharedFrom||'공유')}</span>` : ''}</div>
                 ${c.phone ? `<div class="client-phone">📞 ${escapeHtml(c.phone)}</div>` : ''}
                 ${c.address ? `<div class="client-phone" style="font-size:11px;">📍 ${escapeHtml(c.address)}</div>` : ''}
                 <div class="client-stats">거래 ${stats.count}건 · ${fmt(stats.total)}원</div>
@@ -1769,22 +1769,65 @@ function recalcStockFromOrders(silent = false) {
 function searchDeliveryClient(q) {
     const drop = document.getElementById('clientDropdown');
     if (!q) { drop.classList.remove('open'); return; }
-    const list = clients.filter(c => matchSearch(c.name, q));
-    if (!list.length) { drop.classList.remove('open'); return; }
-    drop.innerHTML = list.map(c =>
-        `<div class="dropdown-item" onclick="pickDeliveryClient('${escapeAttr(c.id)}','${escapeAttr(c.name)}')">
-            ${escapeHtml(c.name)}${c.phone?` (${escapeHtml(c.phone)})`:''}
+
+    const myList = clients.filter(c => matchSearch(c.name, q));
+    const myNames = new Set(clients.map(c => c.name));
+    const sharedList = _sharedClientsFromWs.filter(s =>
+        matchSearch(s.name, q) && !myNames.has(s.name)
+    );
+
+    if (!myList.length && !sharedList.length) { drop.classList.remove('open'); return; }
+
+    let html = myList.map(c =>
+        `<div class="dropdown-item" onclick="pickDeliveryClient('${escapeAttr(c.id)}','${escapeAttr(c.name)}',null,null)">
+            ${escapeHtml(c.name)}${c.phone ? ` (${escapeHtml(c.phone)})` : ''}
         </div>`).join('');
+
+    if (sharedList.length) {
+        html += `<div class="dropdown-section-label">📦 공유 거래처</div>`;
+        html += sharedList.map(s =>
+            `<div class="dropdown-item dropdown-item-shared" onclick="pickDeliveryClient('__shared__','${escapeAttr(s.name)}','${escapeAttr(s.wsId)}','${escapeAttr(s.wsLabel)}')">
+                ${escapeHtml(s.name)}
+                <span class="shared-ws-badge">${escapeHtml(s.wsLabel)}</span>
+            </div>`).join('');
+    }
+
+    drop.innerHTML = html;
     drop.classList.add('open');
 }
 
-function pickDeliveryClient(id, name) {
+function pickDeliveryClient(id, name, sharedWsId, sharedWsLabel) {
+    // ── 공유 거래처 선택 시 내 clients에 자동 추가 ──
+    if (id === '__shared__') {
+        // 이미 내 clients에 같은 이름이 있으면 그걸 사용
+        let existing = clients.find(c => c.name === name);
+        if (!existing) {
+            // 없으면 자동 추가
+            existing = {
+                id:          _uid(),
+                name:        name,
+                phone:       '',
+                memo:        '',
+                _sharedFrom: sharedWsId,   // 공유 출처 기록
+                _autoAdded:  true,          // 자동 추가 표시
+                _sharedLabel: sharedWsLabel,
+                createdAt:   new Date().toISOString(),
+            };
+            clients.push(existing);
+            _saveAndFlush();
+            invalidateClientsCache();
+            toast(`📦 "${name}" 거래처 자동 추가됨 (${sharedWsLabel})`, 'var(--accent)', 3000);
+        }
+        id = existing.id;
+    }
+
     document.getElementById('selectedClientId').value = id;
     document.getElementById('deliveryClient').value   = name;
     document.getElementById('clientDropdown').classList.remove('open');
     // 미수금 표시
     const hint = document.getElementById('clientUnpaidHint');
     if (hint) {
+        hint.style.color = '';
         const unpaidOrders = orders.filter(o => o.clientId === id && !o.isPaid);
         const unpaidAmt = unpaidOrders.reduce((s,o)=>s+o.total-(o.paidAmount||0), 0);
         if (unpaidAmt > 0) {
@@ -1795,7 +1838,6 @@ function pickDeliveryClient(id, name) {
             hint.classList.remove('visible');
         }
     }
-    // 거래처별 최근 품목 추천 표시
     showClientItemSuggestions(id);
     updateItemDatalist(id);
 }
@@ -2111,9 +2153,11 @@ function _updateDeliveryVoidToggle() {
 }
 
 async function submitOrder() {
-    const clientId = document.getElementById('selectedClientId').value;
-    const client = clients.find(c => c.id===clientId);
-    if (!clientId || !client || !tempGroups.length) return;
+    const clientIdRaw = document.getElementById('selectedClientId').value;
+    const client = clients.find(c => c.id === clientIdRaw);
+    if (!clientIdRaw || !client || !tempGroups.length) return;
+    const clientId   = clientIdRaw;
+    const _sharedWsId = client._sharedFrom || null;
     const isVoid = !!_deliveryIsVoid;
     // ── 자동 재고 차감 (타인거래면 스킵) ──
     if (stockAutoDeduct && !isVoid) {
@@ -2133,12 +2177,13 @@ async function submitOrder() {
     tempGroups.forEach(group => {
         const total = group.items.reduce((s,i)=>s+i.total,0);
         const order = {
-            id: _uid(), clientId, clientName:client.name,
+            id: _uid(), clientId, clientName: client.name,
             date:group.date, items:[...group.items],
             total, note:'', isPaid:false,
             createdAt:new Date().toISOString()
         };
         if (isVoid) order.isVoid = true;
+        if (_sharedWsId) order._sharedFrom = _sharedWsId; // 공유 거래처 출처 태그
         orders.push(order);
         _markDirtyOrder(order.id); // delta sync 마킹
         // 단가 캐시 갱신
@@ -6521,6 +6566,37 @@ function _saveSharedWs(arr) {
     localStorage.setItem('sharedWorkspaces', JSON.stringify(arr));
 }
 
+// ── 공유 워크스페이스에서 받은 거래처 캐시 ──────────────────────────────────
+// { name, wsId, wsLabel } 형태로 보관
+let _sharedClientsFromWs = [];
+
+/**
+ * 등록된 공유 워크스페이스들의 sharedClients 를 Firebase에서 읽어 캐시
+ * 앱 시작, 워크스페이스 연결, 수동 새로고침 시 호출
+ */
+async function _loadSharedClientsFromWs() {
+    const wsArr = _getSharedWs();
+    if (!wsArr.length || typeof firebase === 'undefined' || !firebase.apps.length) {
+        _sharedClientsFromWs = [];
+        return;
+    }
+    const result = [];
+    await Promise.all(wsArr.map(async item => {
+        const wsId    = item.wsId || item;
+        const wsLabel = item.label || wsId;
+        try {
+            const snap = await firebase.database().ref(`workspaces/${wsId}/sharedClients`).get();
+            if (!snap.exists()) return;
+            const names = snap.val() || [];
+            names.forEach(name => {
+                if (!result.find(r => r.name === name && r.wsId === wsId))
+                    result.push({ name, wsId, wsLabel });
+            });
+        } catch(e) { /* 접근 불가 워크스페이스 무시 */ }
+    }));
+    _sharedClientsFromWs = result;
+}
+
 // 내가 공개 허용한 거래처 목록 (Firebase에 저장)
 function _getMySharedClients() {
     try { return JSON.parse(localStorage.getItem('mySharedClients') || '[]'); } catch { return []; }
@@ -6655,6 +6731,7 @@ function addSharedWs() {
     _saveSharedWs(list);
     input.value = '';
     renderSharedWsList();
+    _loadSharedClientsFromWs(); // 공유 거래처 캐시 갱신
     toast(`✅ "${id}" 공유 등록 완료`, 'var(--green)');
 }
 
@@ -6670,7 +6747,24 @@ async function removeSharedWs(idx) {
     if (!ok) return;
     list.splice(idx, 1);
     _saveSharedWs(list);
+    // 해당 워크스페이스에서 자동 추가된 거래처 중 납품 내역 없는 것 제거
+    const removedWsId = target.wsId;
+    const autoAdded = clients.filter(c => c._sharedFrom === removedWsId && c._autoAdded);
+    autoAdded.forEach(c => {
+        const hasOrders = orders.some(o => o.clientId === c.id);
+        if (!hasOrders) {
+            clients.splice(clients.indexOf(c), 1);
+        } else {
+            // 납품 내역 있으면 공유 표시만 제거 (거래처는 유지)
+            delete c._sharedFrom;
+            delete c._autoAdded;
+            delete c._sharedLabel;
+        }
+    });
+    _saveAndFlush();
+    invalidateClientsCache();
     renderSharedWsList();
+    _loadSharedClientsFromWs(); // 공유 거래처 캐시 갱신
     toast(`🗑️ "${target.wsId}" 공유 해제`);
 }
 
@@ -7595,6 +7689,8 @@ window.addEventListener('DOMContentLoaded', () => {
     if (savedWs) {
         waitFirebase(() => {
             _doConnect(savedWs, true);
+            // 공유 워크스페이스 거래처 캐시 로드
+            _loadSharedClientsFromWs();
             // 내 sharedClients를 Firebase에 즉시 반영 (앱 시작 시 동기화)
             // ※ null 대신 [] 사용 — null 저장 시 Firebase 노드 삭제로 공유 목록이 초기화되는 버그 방지
             const myShared = _getMySharedClients();

@@ -1714,6 +1714,50 @@ button, a, input, select, textarea,
 /* ═══════════════════════════════════════
    메모 버튼 & 팝업
 ═══════════════════════════════════════ */
+/* ── 공유 거래처 드롭다운 ── */
+.dropdown-section-label {
+    padding: 6px 12px 4px;
+    font-size: 10px;
+    font-weight: 700;
+    color: #4f46e5;
+    background: #f0f0ff;
+    letter-spacing: .5px;
+    text-transform: uppercase;
+    border-top: 1px solid #e0e7ff;
+    border-bottom: 1px solid #e0e7ff;
+    margin-top: 2px;
+}
+.dropdown-item-shared {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #f8f7ff;
+}
+.dropdown-item-shared:hover { background: #ede9fe; }
+.shared-ws-badge {
+    font-size: 10px;
+    background: #e0e7ff;
+    color: #4f46e5;
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-weight: 700;
+    flex-shrink: 0;
+    margin-left: 8px;
+}
+
+/* ── 자동 추가된 공유 거래처 뱃지 ── */
+.shared-client-badge {
+    display: inline-block;
+    font-size: 10px;
+    background: #e0e7ff;
+    color: #4f46e5;
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-weight: 700;
+    margin-left: 6px;
+    vertical-align: middle;
+}
+
 .memo-btn {
     display:inline-flex; align-items:center; gap:4px;
     padding:4px 10px; border-radius:20px;
