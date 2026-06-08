@@ -7898,6 +7898,7 @@ async function deletePrevMemo(orderId) {
     if (!await customConfirm(`📅 ${o.date} 이전 메모를 삭제할까요?\n\n"${o.note}"`)) return;
     o.note = '';
     o.updatedAt = new Date().toISOString();
+    _markDirtyOrder(o.id);
     _saveAndFlush();
     renderOrders();
     toast('🗑️ 이전 메모 삭제됨', 'var(--text3)');
@@ -7910,6 +7911,7 @@ async function deleteMemoById(orderId) {
 
     o.note = '';
     o.updatedAt = new Date().toISOString();
+    _markDirtyOrder(o.id);
     _saveAndFlush();
     toast('🗑️ 메모 삭제됨', 'var(--text3)');
 
@@ -7965,9 +7967,14 @@ function saveMemoPopup() {
     const text = document.getElementById('memoTextarea').value.trim();
     o.note = text;
     o.updatedAt = new Date().toISOString();
+    _markDirtyOrder(o.id); // Firebase 델타 동기 마킹
     _saveAndFlush();
     closeMemoPopup();
     renderOrders();
+    renderDashboard();
+    updateInfoCounts();
+    updateNavBadges();
+    _refreshUnpaidIfActive();
     toast(text ? '📝 메모 저장됨' : '🗑️ 메모 삭제됨', 'var(--accent)');
 }
 
@@ -7988,18 +7995,11 @@ function toggleClientTooltip(e, card) {
 
 // ─── 핀치줌 / 더블탭 줌 완전 차단 ───
 // (Android Chrome은 viewport user-scalable=no를 무시하므로 JS로 강제 차단)
+// ※ 더블탭 줌은 CSS touch-action:manipulation으로 처리 (touchend preventDefault는 버튼 클릭을 막으므로 제거)
 (function preventZoom() {
     // 핀치줌 차단 (멀티터치)
     document.addEventListener('touchstart', e => {
         if (e.touches.length > 1) e.preventDefault();
-    }, { passive: false });
-
-    // 더블탭 줌 차단
-    let _lastTap = 0;
-    document.addEventListener('touchend', e => {
-        const now = Date.now();
-        if (now - _lastTap < 300) e.preventDefault();
-        _lastTap = now;
     }, { passive: false });
 
     // gesturestart 차단 (iOS Safari 핀치줌)
