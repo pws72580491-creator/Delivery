@@ -1570,7 +1570,7 @@ function _clientCardHTML(c, statsMap, q) {
                 return `<div class="client-tooltip">${memos.map(o => `📅 ${o.date}\n📝 ${escapeHtml(o.note)}`).join('\n\n')}</div>`;
             })()}
             <div>
-                <div class="client-name">${highlight(c.name, q)}${c._autoAdded ? `<span class="shared-client-badge">📦 ${escapeHtml(c._sharedLabel||c._sharedFrom||'공유')}</span>` : ''}</div>
+                <div class="client-name">${highlight(c.name, q)}</div>
                 ${c.phone ? `<div class="client-phone">📞 ${escapeHtml(c.phone)}</div>` : ''}
                 ${c.address ? `<div class="client-phone" style="font-size:11px;">📍 ${escapeHtml(c.address)}</div>` : ''}
                 <div class="client-stats">거래 ${stats.count}건 · ${fmt(stats.total)}원</div>
@@ -1769,65 +1769,22 @@ function recalcStockFromOrders(silent = false) {
 function searchDeliveryClient(q) {
     const drop = document.getElementById('clientDropdown');
     if (!q) { drop.classList.remove('open'); return; }
-
-    const myList = clients.filter(c => matchSearch(c.name, q));
-    const myNames = new Set(clients.map(c => c.name));
-    const sharedList = _sharedClientsFromWs.filter(s =>
-        matchSearch(s.name, q) && !myNames.has(s.name)
-    );
-
-    if (!myList.length && !sharedList.length) { drop.classList.remove('open'); return; }
-
-    let html = myList.map(c =>
-        `<div class="dropdown-item" onclick="pickDeliveryClient('${escapeAttr(c.id)}','${escapeAttr(c.name)}',null,null)">
-            ${escapeHtml(c.name)}${c.phone ? ` (${escapeHtml(c.phone)})` : ''}
+    const list = clients.filter(c => matchSearch(c.name, q));
+    if (!list.length) { drop.classList.remove('open'); return; }
+    drop.innerHTML = list.map(c =>
+        `<div class="dropdown-item" onclick="pickDeliveryClient('${escapeAttr(c.id)}','${escapeAttr(c.name)}')">
+            ${escapeHtml(c.name)}${c.phone?` (${escapeHtml(c.phone)})`:''}
         </div>`).join('');
-
-    if (sharedList.length) {
-        html += `<div class="dropdown-section-label">📦 공유 거래처</div>`;
-        html += sharedList.map(s =>
-            `<div class="dropdown-item dropdown-item-shared" onclick="pickDeliveryClient('__shared__','${escapeAttr(s.name)}','${escapeAttr(s.wsId)}','${escapeAttr(s.wsLabel)}')">
-                ${escapeHtml(s.name)}
-                <span class="shared-ws-badge">${escapeHtml(s.wsLabel)}</span>
-            </div>`).join('');
-    }
-
-    drop.innerHTML = html;
     drop.classList.add('open');
 }
 
-function pickDeliveryClient(id, name, sharedWsId, sharedWsLabel) {
-    // ── 공유 거래처 선택 시 내 clients에 자동 추가 ──
-    if (id === '__shared__') {
-        // 이미 내 clients에 같은 이름이 있으면 그걸 사용
-        let existing = clients.find(c => c.name === name);
-        if (!existing) {
-            // 없으면 자동 추가
-            existing = {
-                id:          _uid(),
-                name:        name,
-                phone:       '',
-                memo:        '',
-                _sharedFrom: sharedWsId,   // 공유 출처 기록
-                _autoAdded:  true,          // 자동 추가 표시
-                _sharedLabel: sharedWsLabel,
-                createdAt:   new Date().toISOString(),
-            };
-            clients.push(existing);
-            _saveAndFlush();
-            invalidateClientsCache();
-            toast(`📦 "${name}" 거래처 자동 추가됨 (${sharedWsLabel})`, 'var(--accent)', 3000);
-        }
-        id = existing.id;
-    }
-
+function pickDeliveryClient(id, name) {
     document.getElementById('selectedClientId').value = id;
     document.getElementById('deliveryClient').value   = name;
     document.getElementById('clientDropdown').classList.remove('open');
     // 미수금 표시
     const hint = document.getElementById('clientUnpaidHint');
     if (hint) {
-        hint.style.color = '';
         const unpaidOrders = orders.filter(o => o.clientId === id && !o.isPaid);
         const unpaidAmt = unpaidOrders.reduce((s,o)=>s+o.total-(o.paidAmount||0), 0);
         if (unpaidAmt > 0) {
@@ -1838,6 +1795,7 @@ function pickDeliveryClient(id, name, sharedWsId, sharedWsLabel) {
             hint.classList.remove('visible');
         }
     }
+    // 거래처별 최근 품목 추천 표시
     showClientItemSuggestions(id);
     updateItemDatalist(id);
 }
@@ -2153,11 +2111,9 @@ function _updateDeliveryVoidToggle() {
 }
 
 async function submitOrder() {
-    const clientIdRaw = document.getElementById('selectedClientId').value;
-    const client = clients.find(c => c.id === clientIdRaw);
-    if (!clientIdRaw || !client || !tempGroups.length) return;
-    const clientId   = clientIdRaw;
-    const _sharedWsId = client._sharedFrom || null;
+    const clientId = document.getElementById('selectedClientId').value;
+    const client = clients.find(c => c.id===clientId);
+    if (!clientId || !client || !tempGroups.length) return;
     const isVoid = !!_deliveryIsVoid;
     // ── 자동 재고 차감 (타인거래면 스킵) ──
     if (stockAutoDeduct && !isVoid) {
@@ -2177,13 +2133,12 @@ async function submitOrder() {
     tempGroups.forEach(group => {
         const total = group.items.reduce((s,i)=>s+i.total,0);
         const order = {
-            id: _uid(), clientId, clientName: client.name,
+            id: _uid(), clientId, clientName:client.name,
             date:group.date, items:[...group.items],
             total, note:'', isPaid:false,
             createdAt:new Date().toISOString()
         };
         if (isVoid) order.isVoid = true;
-        if (_sharedWsId) order._sharedFrom = _sharedWsId; // 공유 거래처 출처 태그
         orders.push(order);
         _markDirtyOrder(order.id); // delta sync 마킹
         // 단가 캐시 갱신
@@ -2214,6 +2169,10 @@ async function submitOrder() {
     _refreshSettlementIfActive();
     _refreshStockIfActive();
     _refreshUnpaidIfActive();
+
+    // ── 납품 등록 시 해당 거래처를 sharedClients에 자동 추가 ──
+    // 대신 납품하는 경우, 별도 설정 없이 상대방이 내 내역을 볼 수 있도록
+    _autoAddSharedClient(_savedClientName);
     // 납품 확정 후: 내역 탭 전환 → 거래명세서 자동 오픈
     setTimeout(() => {
         showTab('history');
@@ -2377,12 +2336,7 @@ function renderOrders() {
     const start = document.getElementById('histStart')?.value || '';
     const end   = document.getElementById('histEnd')?.value || '';
 
-    // 내 납품 내역 + 공유 워크스페이스 납품 내역 합산
-    const allOrders = [
-        ...orders,
-        ..._sharedOrdersCache,
-    ];
-    const filtered = allOrders.filter(o => {
+    const filtered = orders.filter(o => {
         const mSearch = matchSearch(o.clientName||'',q) || (o.items||[]).some(i=>matchSearch(i.name,q));
         const mDate   = (!start||o.date>=start) && (!end||o.date<=end);
         const mPay    = histPayFilter==='all'?true:histPayFilter==='unpaid'?!o.isPaid:o.isPaid;
@@ -2442,8 +2396,7 @@ function renderOrders() {
         const cName = escapeAttr(o.clientName || '');
         const cId   = escapeAttr(o.clientId   || '');
         const oId   = escapeAttr(o.id         || '');
-        const voided   = !!o.isVoid;
-        const readOnly  = !!o._readOnly; // 공유 워크스페이스 내역 (읽기 전용)
+        const voided = !!o.isVoid;
         // 타인거래도 미수/완납 상태 반영한 카드 색상
         const cardClass = `order-card ${voided ? ('voided ' + (o.isPaid ? 'paid' : 'unpaid')) : (o.isPaid ? 'paid' : 'unpaid')}`;
         // 타인거래: 👤배지 + 수금 상태 배지 같이 표시 (수금 처리 가능)
@@ -2487,14 +2440,12 @@ function renderOrders() {
             <div class="order-bottom"><div class="order-total">${fmt(o.total)}원</div></div>
             <div class="order-actions">
                 <button class="btn btn-ghost btn-sm" onclick="showOrderDetail('${oId}')">🔍<span class="btn-label">상세</span></button>
-                ${readOnly
-                    ? `<span class="shared-order-badge">📦 ${escapeHtml(o._sharedWsLabel||'공유')}</span>`
-                    : voided
-                        ? `<button class="btn btn-primary btn-sm" onclick="openOrderEdit('${oId}')">✏️<span class="btn-label">수정</span></button><button class="btn btn-ghost btn-sm" onclick="toggleVoidOrder('${oId}')" style="color:var(--green);border-color:rgba(32,192,92,.4);">↩<span class="btn-label">내거래로</span></button>`
-                        : `<button class="btn btn-primary btn-sm" onclick="openOrderEdit('${oId}')">✏️<span class="btn-label">수정</span></button>`
+                ${voided
+                    ? `<button class="btn btn-primary btn-sm" onclick="openOrderEdit('${oId}')">✏️<span class="btn-label">수정</span></button><button class="btn btn-ghost btn-sm" onclick="toggleVoidOrder('${oId}')" style="color:var(--green);border-color:rgba(32,192,92,.4);">↩<span class="btn-label">내거래로</span></button>`
+                    : `<button class="btn btn-primary btn-sm" onclick="openOrderEdit('${oId}')">✏️<span class="btn-label">수정</span></button>`
                 }
-                ${readOnly ? '' : `<button class="btn btn-ghost btn-sm" onclick="openClientEditFromHistory('${cId}','${cName}')">🏪<span class="btn-label">거래처</span></button>`}
-                ${readOnly ? '' : `<button class="btn btn-danger btn-sm" onclick="deleteOrder('${oId}')">🗑️<span class="btn-label">삭제</span></button>`}
+                <button class="btn btn-ghost btn-sm" onclick="openClientEditFromHistory('${cId}','${cName}')">🏪<span class="btn-label">거래처</span></button>
+                <button class="btn btn-danger btn-sm" onclick="deleteOrder('${oId}')">🗑️<span class="btn-label">삭제</span></button>
             </div>
         </div>`;
     };
@@ -3508,29 +3459,49 @@ async function showClientStatement(clientName, month) {
     const monthStart = month+'-01';
 
     // ── 공유 워크스페이스에서 동일 거래처명 내역 fetch ──
+    // sharedWsIds: 내가 수동 등록한 상대방 목록
+    // sharedPeers: 상대방이 나를 역방향 자동 등록한 목록 (Firebase에서 읽음)
     const sharedWsIds = _getSharedWs();
     let sharedOrders = [];
-    if (sharedWsIds.length && typeof firebase !== 'undefined' && firebase.apps.length) {
+    if (typeof firebase !== 'undefined' && firebase.apps.length) {
         const napumDb = firebase.database();
-        await Promise.all(sharedWsIds.map(async item => {
-            const wsId = item.wsId || item;
+        const myId = (localStorage.getItem('workspaceId') || '').toLowerCase();
+
+        // ── sharedPeers: 상대방이 나를 등록한 워크스페이스 목록 자동 수집 ──
+        let peerIds = [];
+        if (myId) {
             try {
-                // 1) 상대방이 허용한 거래처 목록 확인
-                const scSnap = await napumDb.ref(`workspaces/${wsId}/sharedClients`).get();
-                const allowedClients = scSnap.exists() ? (scSnap.val() || []) : [];
-                // 허용 목록이 비어있으면 공유 안 함
-                if (!allowedClients.length) return;
-                // 현재 거래처가 허용 목록에 없으면 스킵
-                if (!allowedClients.includes(clientName)) return;
-                // 2) 허용된 경우에만 내역 fetch
-                const snap = await napumDb.ref(`workspaces/${wsId}/orders`)
-                    .orderByChild('clientName').equalTo(clientName).get();
-                if (!snap.exists()) return;
-                Object.values(snap.val() || {}).forEach(o => {
-                    sharedOrders.push({ ...o, _sharedWsId: wsId });
-                });
-            } catch(e) { /* 접근 불가 워크스페이스 무시 */ }
-        }));
+                const peersSnap = await napumDb.ref(`workspaces/${myId}/sharedPeers`).get();
+                if (peersSnap.exists()) {
+                    peerIds = Object.keys(peersSnap.val() || {});
+                }
+            } catch(e) { console.warn('[공유] sharedPeers 로드 실패:', e.message); }
+        }
+
+        // 수동 등록 + 역방향 자동 등록 합산 (중복 제거)
+        const manualIds = sharedWsIds.map(item => item.wsId || item);
+        const allPeerIds = [...new Set([...manualIds, ...peerIds])];
+
+        if (allPeerIds.length) {
+            await Promise.all(allPeerIds.map(async wsId => {
+                try {
+                    // 1) 상대방이 허용한 거래처 목록 확인
+                    const scSnap = await napumDb.ref(`workspaces/${wsId}/sharedClients`).get();
+                    const allowedClients = scSnap.exists() ? (scSnap.val() || []) : [];
+                    // 허용 목록이 비어있으면 공유 안 함
+                    if (!allowedClients.length) return;
+                    // 현재 거래처가 허용 목록에 없으면 스킵
+                    if (!allowedClients.includes(clientName)) return;
+                    // 2) 허용된 경우에만 내역 fetch
+                    const snap = await napumDb.ref(`workspaces/${wsId}/orders`)
+                        .orderByChild('clientName').equalTo(clientName).get();
+                    if (!snap.exists()) return;
+                    Object.values(snap.val() || {}).forEach(o => {
+                        sharedOrders.push({ ...o, _sharedWsId: wsId });
+                    });
+                } catch(e) { /* 접근 불가 워크스페이스 무시 */ }
+            }));
+        }
     }
     const hasShared = sharedOrders.length > 0;
     // 내 전표 + 공유 전표 합산
@@ -6574,65 +6545,6 @@ function _saveSharedWs(arr) {
     localStorage.setItem('sharedWorkspaces', JSON.stringify(arr));
 }
 
-// ── 공유 워크스페이스에서 받은 거래처 캐시 ──────────────────────────────────
-// { name, wsId, wsLabel } 형태로 보관
-let _sharedClientsFromWs = [];
-// 공유 워크스페이스에서 가져온 납품 내역 캐시 { wsId, wsLabel, orders[] }
-let _sharedOrdersCache = [];
-
-/**
- * 등록된 공유 워크스페이스들의 sharedClients 를 Firebase에서 읽어 캐시
- * 앱 시작, 워크스페이스 연결, 수동 새로고침 시 호출
- */
-async function _loadSharedClientsFromWs() {
-    const wsArr = _getSharedWs();
-    if (!wsArr.length || typeof firebase === 'undefined' || !firebase.apps.length) {
-        _sharedClientsFromWs = [];
-        return;
-    }
-    const result = [];
-    await Promise.all(wsArr.map(async item => {
-        const wsId    = item.wsId || item;
-        const wsLabel = item.label || wsId;
-        try {
-            const snap = await firebase.database().ref(`workspaces/${wsId}/sharedClients`).get();
-            if (!snap.exists()) return;
-            const names = snap.val() || [];
-            names.forEach(name => {
-                if (!result.find(r => r.name === name && r.wsId === wsId))
-                    result.push({ name, wsId, wsLabel });
-            });
-        } catch(e) { /* 접근 불가 워크스페이스 무시 */ }
-    }));
-    _sharedClientsFromWs = result;
-
-    // ── 공유 워크스페이스 납품 내역도 함께 캐시 ──
-    const ordersResult = [];
-    await Promise.all(wsArr.map(async item => {
-        const wsId    = item.wsId || item;
-        const wsLabel = item.label || wsId;
-        try {
-            // 공개된 거래처 이름 목록 확인
-            const scSnap = await firebase.database().ref(`workspaces/${wsId}/sharedClients`).get();
-            const allowedNames = scSnap.exists() ? (scSnap.val() || []) : [];
-            if (!allowedNames.length) return; // 공개 거래처 없으면 스킵
-
-            const ordSnap = await firebase.database().ref(`workspaces/${wsId}/orders`).get();
-            if (!ordSnap.exists()) return;
-            const wsOrders = Object.values(ordSnap.val() || {})
-                .filter(o => allowedNames.includes(o.clientName)); // 공개된 거래처 내역만
-            wsOrders.forEach(o => ordersResult.push({
-                ...o,
-                _sharedWsId:   wsId,
-                _sharedWsLabel: wsLabel,
-                _readOnly:     true, // 읽기 전용
-            }));
-        } catch(e) { /* 접근 불가 워크스페이스 무시 */ }
-    }));
-    _sharedOrdersCache = ordersResult;
-    renderOrders(); // 내역 탭 갱신
-}
-
 // 내가 공개 허용한 거래처 목록 (Firebase에 저장)
 function _getMySharedClients() {
     try { return JSON.parse(localStorage.getItem('mySharedClients') || '[]'); } catch { return []; }
@@ -6724,6 +6636,26 @@ async function _loadSharedClientBadges(wsId, idx) {
     }
 }
 
+// ── 납품 등록 시 거래처 자동 공개 등록 ──────────────────────────────────────
+// submitOrder()에서 호출. sharedPeers가 있는 경우(= 상대방이 나를 등록한 경우)
+// 해당 거래처를 mySharedClients에 자동 추가하여 상대방이 볼 수 있게 함.
+function _autoAddSharedClient(clientName) {
+    if (!clientName) return;
+    const myId = (localStorage.getItem('workspaceId') || '').toLowerCase();
+    if (!myId || typeof firebase === 'undefined' || !firebase.apps.length) return;
+
+    firebase.database().ref(`workspaces/${myId}/sharedPeers`).get()
+        .then(snap => {
+            if (!snap.exists()) return; // 나를 등록한 상대방이 없으면 스킵
+            const list = _getMySharedClients();
+            if (list.includes(clientName)) return; // 이미 공개 중이면 스킵
+            list.push(clientName);
+            _saveMySharedClients(list);
+            console.info('[공유] 납품 등록으로 거래처 자동 공개:', clientName);
+        })
+        .catch(e => console.warn('[공유] sharedPeers 확인 실패:', e.message));
+}
+
 async function toggleMySharedClient(name, checked) {
     // ── 공개 해제 시 실수 방지 확인 ──
     if (!checked) {
@@ -6754,7 +6686,7 @@ async function toggleMySharedClient(name, checked) {
     });
 }
 
-function addSharedWs() {
+async function addSharedWs() {
     const input = document.getElementById('sharedWsInput');
     const id = (input.value || '').trim().toLowerCase();
     if (!id) return toast('❗ 워크스페이스 ID를 입력하세요');
@@ -6767,8 +6699,19 @@ function addSharedWs() {
     _saveSharedWs(list);
     input.value = '';
     renderSharedWsList();
-    _loadSharedClientsFromWs(); // 공유 거래처 캐시 갱신
     toast(`✅ "${id}" 공유 등록 완료`, 'var(--green)');
+
+    // ── 역방향 자동 등록: 상대방 Firebase의 sharedPeers에 내 ID 추가 ──
+    // 상대방 앱이 다음 번 명세표 조회 시 내 워크스페이스를 자동으로 참조하게 됨
+    if (myId && typeof firebase !== 'undefined' && firebase.apps.length) {
+        try {
+            const peerRef = firebase.database().ref(`workspaces/${id}/sharedPeers/${myId}`);
+            await peerRef.set(true);
+            console.info('[공유] 역방향 자동 등록 완료:', id, '← 내 ID:', myId);
+        } catch(e) {
+            console.warn('[공유] 역방향 등록 실패 (상대방 Firebase 접근 불가):', e.message);
+        }
+    }
 }
 
 async function removeSharedWs(idx) {
@@ -6783,25 +6726,19 @@ async function removeSharedWs(idx) {
     if (!ok) return;
     list.splice(idx, 1);
     _saveSharedWs(list);
-    // 해당 워크스페이스에서 자동 추가된 거래처 중 납품 내역 없는 것 제거
-    const removedWsId = target.wsId;
-    const autoAdded = clients.filter(c => c._sharedFrom === removedWsId && c._autoAdded);
-    autoAdded.forEach(c => {
-        const hasOrders = orders.some(o => o.clientId === c.id);
-        if (!hasOrders) {
-            clients.splice(clients.indexOf(c), 1);
-        } else {
-            // 납품 내역 있으면 공유 표시만 제거 (거래처는 유지)
-            delete c._sharedFrom;
-            delete c._autoAdded;
-            delete c._sharedLabel;
-        }
-    });
-    _saveAndFlush();
-    invalidateClientsCache();
     renderSharedWsList();
-    _loadSharedClientsFromWs(); // 공유 거래처 캐시 갱신
     toast(`🗑️ "${target.wsId}" 공유 해제`);
+
+    // ── 역방향 제거: 상대방 Firebase의 sharedPeers에서 내 ID 삭제 ──
+    const myId = (localStorage.getItem('workspaceId') || '').toLowerCase();
+    if (myId && typeof firebase !== 'undefined' && firebase.apps.length) {
+        try {
+            await firebase.database().ref(`workspaces/${target.wsId}/sharedPeers/${myId}`).remove();
+            console.info('[공유] 역방향 등록 제거 완료:', target.wsId, '← 내 ID:', myId);
+        } catch(e) {
+            console.warn('[공유] 역방향 제거 실패:', e.message);
+        }
+    }
 }
 
 // ─── Firebase ───
@@ -7725,8 +7662,6 @@ window.addEventListener('DOMContentLoaded', () => {
     if (savedWs) {
         waitFirebase(() => {
             _doConnect(savedWs, true);
-            // 공유 워크스페이스 거래처 캐시 로드
-            _loadSharedClientsFromWs();
             // 내 sharedClients를 Firebase에 즉시 반영 (앱 시작 시 동기화)
             // ※ null 대신 [] 사용 — null 저장 시 Firebase 노드 삭제로 공유 목록이 초기화되는 버그 방지
             const myShared = _getMySharedClients();
