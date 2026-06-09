@@ -2377,7 +2377,12 @@ function renderOrders() {
     const start = document.getElementById('histStart')?.value || '';
     const end   = document.getElementById('histEnd')?.value || '';
 
-    const filtered = orders.filter(o => {
+    // 내 납품 내역 + 공유 워크스페이스 납품 내역 합산
+    const allOrders = [
+        ...orders,
+        ..._sharedOrdersCache,
+    ];
+    const filtered = allOrders.filter(o => {
         const mSearch = matchSearch(o.clientName||'',q) || (o.items||[]).some(i=>matchSearch(i.name,q));
         const mDate   = (!start||o.date>=start) && (!end||o.date<=end);
         const mPay    = histPayFilter==='all'?true:histPayFilter==='unpaid'?!o.isPaid:o.isPaid;
@@ -2437,7 +2442,8 @@ function renderOrders() {
         const cName = escapeAttr(o.clientName || '');
         const cId   = escapeAttr(o.clientId   || '');
         const oId   = escapeAttr(o.id         || '');
-        const voided = !!o.isVoid;
+        const voided   = !!o.isVoid;
+        const readOnly  = !!o._readOnly; // 공유 워크스페이스 내역 (읽기 전용)
         // 타인거래도 미수/완납 상태 반영한 카드 색상
         const cardClass = `order-card ${voided ? ('voided ' + (o.isPaid ? 'paid' : 'unpaid')) : (o.isPaid ? 'paid' : 'unpaid')}`;
         // 타인거래: 👤배지 + 수금 상태 배지 같이 표시 (수금 처리 가능)
@@ -2481,12 +2487,14 @@ function renderOrders() {
             <div class="order-bottom"><div class="order-total">${fmt(o.total)}원</div></div>
             <div class="order-actions">
                 <button class="btn btn-ghost btn-sm" onclick="showOrderDetail('${oId}')">🔍<span class="btn-label">상세</span></button>
-                ${voided
-                    ? `<button class="btn btn-primary btn-sm" onclick="openOrderEdit('${oId}')">✏️<span class="btn-label">수정</span></button><button class="btn btn-ghost btn-sm" onclick="toggleVoidOrder('${oId}')" style="color:var(--green);border-color:rgba(32,192,92,.4);">↩<span class="btn-label">내거래로</span></button>`
-                    : `<button class="btn btn-primary btn-sm" onclick="openOrderEdit('${oId}')">✏️<span class="btn-label">수정</span></button>`
+                ${readOnly
+                    ? `<span class="shared-order-badge">📦 ${escapeHtml(o._sharedWsLabel||'공유')}</span>`
+                    : voided
+                        ? `<button class="btn btn-primary btn-sm" onclick="openOrderEdit('${oId}')">✏️<span class="btn-label">수정</span></button><button class="btn btn-ghost btn-sm" onclick="toggleVoidOrder('${oId}')" style="color:var(--green);border-color:rgba(32,192,92,.4);">↩<span class="btn-label">내거래로</span></button>`
+                        : `<button class="btn btn-primary btn-sm" onclick="openOrderEdit('${oId}')">✏️<span class="btn-label">수정</span></button>`
                 }
-                <button class="btn btn-ghost btn-sm" onclick="openClientEditFromHistory('${cId}','${cName}')">🏪<span class="btn-label">거래처</span></button>
-                <button class="btn btn-danger btn-sm" onclick="deleteOrder('${oId}')">🗑️<span class="btn-label">삭제</span></button>
+                ${readOnly ? '' : `<button class="btn btn-ghost btn-sm" onclick="openClientEditFromHistory('${cId}','${cName}')">🏪<span class="btn-label">거래처</span></button>`}
+                ${readOnly ? '' : `<button class="btn btn-danger btn-sm" onclick="deleteOrder('${oId}')">🗑️<span class="btn-label">삭제</span></button>`}
             </div>
         </div>`;
     };
@@ -6569,6 +6577,8 @@ function _saveSharedWs(arr) {
 // ── 공유 워크스페이스에서 받은 거래처 캐시 ──────────────────────────────────
 // { name, wsId, wsLabel } 형태로 보관
 let _sharedClientsFromWs = [];
+// 공유 워크스페이스에서 가져온 납품 내역 캐시 { wsId, wsLabel, orders[] }
+let _sharedOrdersCache = [];
 
 /**
  * 등록된 공유 워크스페이스들의 sharedClients 를 Firebase에서 읽어 캐시
@@ -6595,6 +6605,32 @@ async function _loadSharedClientsFromWs() {
         } catch(e) { /* 접근 불가 워크스페이스 무시 */ }
     }));
     _sharedClientsFromWs = result;
+
+    // ── 공유 워크스페이스 납품 내역도 함께 캐시 ──
+    const ordersResult = [];
+    await Promise.all(wsArr.map(async item => {
+        const wsId    = item.wsId || item;
+        const wsLabel = item.label || wsId;
+        try {
+            // 공개된 거래처 이름 목록 확인
+            const scSnap = await firebase.database().ref(`workspaces/${wsId}/sharedClients`).get();
+            const allowedNames = scSnap.exists() ? (scSnap.val() || []) : [];
+            if (!allowedNames.length) return; // 공개 거래처 없으면 스킵
+
+            const ordSnap = await firebase.database().ref(`workspaces/${wsId}/orders`).get();
+            if (!ordSnap.exists()) return;
+            const wsOrders = Object.values(ordSnap.val() || {})
+                .filter(o => allowedNames.includes(o.clientName)); // 공개된 거래처 내역만
+            wsOrders.forEach(o => ordersResult.push({
+                ...o,
+                _sharedWsId:   wsId,
+                _sharedWsLabel: wsLabel,
+                _readOnly:     true, // 읽기 전용
+            }));
+        } catch(e) { /* 접근 불가 워크스페이스 무시 */ }
+    }));
+    _sharedOrdersCache = ordersResult;
+    renderOrders(); // 내역 탭 갱신
 }
 
 // 내가 공개 허용한 거래처 목록 (Firebase에 저장)
