@@ -365,6 +365,58 @@ function _afterDlPayPatch(orderId, order) {
         .catch(e => console.warn('[CRM패치] 오류:', e));
 }
 
+
+// ╔══════════════════════════════════════════════════════════════╗
+// ║  § 공유 내역 편집 헬퍼 — B가 A의 Firebase에 직접 반영             ║
+// ╚══════════════════════════════════════════════════════════════╝
+
+/**
+ * 공유 내역(o._sharedWsId가 있는 전표)의 변경을 A의 Firebase에 저장
+ * @param {string} wsId       - A의 워크스페이스 ID
+ * @param {string} orderId    - 전표 ID
+ * @param {object|null} patch - null이면 삭제, 아니면 업데이트할 필드
+ */
+async function _patchSharedOrder(wsId, orderId, patch) {
+    if (!wsId || !orderId) return false;
+    if (typeof firebase === 'undefined' || !firebase.apps.length) {
+        toast('❗ 공유 내역 수정은 Firebase 연결이 필요합니다', 'var(--red)', 3500);
+        return false;
+    }
+    try {
+        const ref = firebase.database().ref(`workspaces/${wsId}/orders/${orderId}`);
+        if (patch === null) {
+            await ref.remove();
+        } else {
+            await ref.update({ ...patch, updatedAt: new Date().toISOString() });
+        }
+        // _sharedOrdersCache 즉시 갱신
+        if (patch === null) {
+            const idx = _sharedOrdersCache.findIndex(o => o.id === orderId);
+            if (idx >= 0) _sharedOrdersCache.splice(idx, 1);
+        } else {
+            const cached = _sharedOrdersCache.find(o => o.id === orderId);
+            if (cached) Object.assign(cached, patch);
+        }
+        return true;
+    } catch(e) {
+        console.error('[공유편집] Firebase 오류:', e);
+        toast('❗ 공유 내역 저장 실패: ' + e.message, 'var(--red)', 4000);
+        return false;
+    }
+}
+
+/**
+ * orders 또는 _sharedOrdersCache에서 전표 ID로 전표를 찾아 반환
+ * @returns {{ order, isShared, sharedWsId }}
+ */
+function _findOrderAnywhere(id) {
+    const myOrder = orders.find(o => o.id === id);
+    if (myOrder) return { order: myOrder, isShared: false, sharedWsId: null };
+    const sharedOrder = _sharedOrdersCache.find(o => o.id === id);
+    if (sharedOrder) return { order: sharedOrder, isShared: true, sharedWsId: sharedOrder._sharedWsId };
+    return null;
+}
+
 // ╔══════════════════════════════════════════════════════════════╗
 // ║  § 2  성능 캐시 빌드                                               ║
 // ╚══════════════════════════════════════════════════════════════╝
@@ -1570,7 +1622,7 @@ function _clientCardHTML(c, statsMap, q) {
                 return `<div class="client-tooltip">${memos.map(o => `📅 ${o.date}\n📝 ${escapeHtml(o.note)}`).join('\n\n')}</div>`;
             })()}
             <div>
-                <div class="client-name">${highlight(c.name, q)}</div>
+                <div class="client-name">${highlight(c.name, q)}${c._autoAdded ? `<span class="shared-client-badge">📦 ${escapeHtml(c._sharedLabel||c._sharedFrom||'공유')}</span>` : ''}</div>
                 ${c.phone ? `<div class="client-phone">📞 ${escapeHtml(c.phone)}</div>` : ''}
                 ${c.address ? `<div class="client-phone" style="font-size:11px;">📍 ${escapeHtml(c.address)}</div>` : ''}
                 <div class="client-stats">거래 ${stats.count}건 · ${fmt(stats.total)}원</div>
@@ -1769,24 +1821,64 @@ function recalcStockFromOrders(silent = false) {
 function searchDeliveryClient(q) {
     const drop = document.getElementById('clientDropdown');
     if (!q) { drop.classList.remove('open'); return; }
-    const list = clients.filter(c => matchSearch(c.name, q));
-    if (!list.length) { drop.classList.remove('open'); return; }
-    drop.innerHTML = list.map(c =>
-        `<div class="dropdown-item" onclick="pickDeliveryClient('${escapeAttr(c.id)}','${escapeAttr(c.name)}')">
-            ${escapeHtml(c.name)}${c.phone?` (${escapeHtml(c.phone)})`:''}
+
+    const myList = clients.filter(c => matchSearch(c.name, q));
+    const myNames = new Set(clients.map(c => c.name));
+    const sharedList = _sharedClientsFromWs.filter(s =>
+        matchSearch(s.name, q) && !myNames.has(s.name)
+    );
+
+    if (!myList.length && !sharedList.length) { drop.classList.remove('open'); return; }
+
+    let html = myList.map(c =>
+        `<div class="dropdown-item" onclick="pickDeliveryClient('${escapeAttr(c.id)}','${escapeAttr(c.name)}',null,null)">
+            ${escapeHtml(c.name)}${c.phone ? ` (${escapeHtml(c.phone)})` : ''}
         </div>`).join('');
+
+    if (sharedList.length) {
+        html += `<div class="dropdown-section-label">📦 공유 거래처 <span style="font-size:10px;color:var(--text2);font-weight:400;">— 등록 없이 바로 납품·수정 가능</span></div>`;
+        html += sharedList.map(s =>
+            `<div class="dropdown-item dropdown-item-shared" onclick="pickDeliveryClient('__shared__','${escapeAttr(s.name)}','${escapeAttr(s.wsId)}','${escapeAttr(s.wsLabel)}')">
+                ${escapeHtml(s.name)}
+                <span class="shared-ws-badge">${escapeHtml(s.wsLabel)}</span>
+            </div>`).join('');
+    }
+
+    drop.innerHTML = html;
     drop.classList.add('open');
 }
 
-function pickDeliveryClient(id, name) {
+function pickDeliveryClient(id, name, sharedWsId, sharedWsLabel) {
+    // ── 공유 거래처 선택 시: clients에 추가하지 않고 가상 ID로 처리 ──
+    // 가상 ID 형식: "__shared__:워크스페이스ID:거래처명"
+    if (id === '__shared__') {
+        // 이미 내 clients에 같은 이름이 있으면 그걸 사용 (직접 등록한 경우)
+        const existing = clients.find(c => c.name === name);
+        if (existing) {
+            id = existing.id;
+        } else {
+            // 없으면 가상 ID 유지 — clients에 추가하지 않음
+            id = `__shared__:${sharedWsId}:${name}`;
+        }
+    }
+
     document.getElementById('selectedClientId').value = id;
     document.getElementById('deliveryClient').value   = name;
     document.getElementById('clientDropdown').classList.remove('open');
-    // 미수금 표시
+    // 미수금 표시 (공유 거래처는 공유 캐시에서 집계)
     const hint = document.getElementById('clientUnpaidHint');
     if (hint) {
-        const unpaidOrders = orders.filter(o => o.clientId === id && !o.isPaid);
-        const unpaidAmt = unpaidOrders.reduce((s,o)=>s+o.total-(o.paidAmount||0), 0);
+        hint.style.color = '';
+        let unpaidOrders, unpaidAmt;
+        if (id.startsWith('__shared__:')) {
+            // 공유 캐시 + 내 orders 합산 미수금
+            const fromShared = _sharedOrdersCache.filter(o => o.clientName === name && !o.isPaid);
+            const fromMine   = orders.filter(o => o.clientName === name && !o.isPaid);
+            unpaidOrders = [...fromShared, ...fromMine];
+        } else {
+            unpaidOrders = orders.filter(o => o.clientId === id && !o.isPaid);
+        }
+        unpaidAmt = unpaidOrders.reduce((s,o)=>s+o.total-(o.paidAmount||0), 0);
         if (unpaidAmt > 0) {
             hint.textContent = `💸 현재 미수금: ${fmt(unpaidAmt)}원 (${unpaidOrders.length}건)`;
             hint.classList.add('visible');
@@ -1795,7 +1887,6 @@ function pickDeliveryClient(id, name) {
             hint.classList.remove('visible');
         }
     }
-    // 거래처별 최근 품목 추천 표시
     showClientItemSuggestions(id);
     updateItemDatalist(id);
 }
@@ -2018,7 +2109,16 @@ async function openDeliveryConfirm() {
     const clientId = document.getElementById('selectedClientId').value;
     if (!clientId)          return toast('❗ 거래처를 선택하세요');
     if (!tempGroups.length) return toast('❗ 품목을 추가하세요');
-    const client = clients.find(c => c.id === clientId);
+    // 가상 ID(__shared__:wsId:name)는 clients에 없으므로 가상 객체 생성
+    let client;
+    if (clientId.startsWith('__shared__:')) {
+        const parts = clientId.split(':');
+        // 형식: __shared__:wsId:name (wsId에 ':' 포함 가능하므로 index 2 이후 전체)
+        const clientName = parts.slice(2).join(':');
+        client = { id: clientId, name: clientName, _isSharedVirtual: true, _sharedWsId: parts[1] };
+    } else {
+        client = clients.find(c => c.id === clientId);
+    }
     if (!client) return toast('❗ 거래처를 다시 선택하세요');
 
     // ── 재고 부족 검사 (자동차감 ON이고 타인거래 아닐 때) ──
@@ -2111,12 +2211,24 @@ function _updateDeliveryVoidToggle() {
 }
 
 async function submitOrder() {
-    const clientId = document.getElementById('selectedClientId').value;
-    const client = clients.find(c => c.id===clientId);
-    if (!clientId || !client || !tempGroups.length) return;
+    const clientIdRaw = document.getElementById('selectedClientId').value;
+    // 가상 ID(__shared__:wsId:name) 또는 일반 ID 처리
+    let client;
+    if (clientIdRaw.startsWith('__shared__:')) {
+        const parts = clientIdRaw.split(':');
+        const sharedWsId   = parts[1];
+        const clientName   = parts.slice(2).join(':');
+        client = { id: clientIdRaw, name: clientName, _isSharedVirtual: true, _sharedWsId: sharedWsId };
+    } else {
+        client = clients.find(c => c.id === clientIdRaw);
+    }
+    if (!clientIdRaw || !client || !tempGroups.length) return;
     const isVoid = !!_deliveryIsVoid;
-    // ── 자동 재고 차감 (타인거래면 스킵) ──
-    if (stockAutoDeduct && !isVoid) {
+    const isSharedVirtual = !!client._isSharedVirtual;
+    const sharedTargetWsId = client._sharedWsId || null;
+
+    // ── 자동 재고 차감 (타인거래 또는 공유거래처면 스킵) ──
+    if (stockAutoDeduct && !isVoid && !isSharedVirtual) {
         const today = todayKST();
         tempGroups.forEach(group => {
             (group.items||[]).forEach(it => {
@@ -2130,20 +2242,58 @@ async function submitOrder() {
             });
         });
     }
+
+    const newOrders = [];
     tempGroups.forEach(group => {
         const total = group.items.reduce((s,i)=>s+i.total,0);
         const order = {
-            id: _uid(), clientId, clientName:client.name,
+            id: _uid(), clientId: isSharedVirtual ? '' : clientIdRaw, clientName: client.name,
             date:group.date, items:[...group.items],
             total, note:'', isPaid:false,
             createdAt:new Date().toISOString()
         };
         if (isVoid) order.isVoid = true;
-        orders.push(order);
-        _markDirtyOrder(order.id); // delta sync 마킹
+        newOrders.push(order);
         // 단가 캐시 갱신
         (group.items||[]).forEach(it => { if (it.price > 0) prices[it.name] = it.price; });
     });
+
+    if (isSharedVirtual && sharedTargetWsId) {
+        // ── 공유 거래처: A의 Firebase에 직접 저장 ──
+        if (typeof firebase === 'undefined' || !firebase.apps.length) {
+            return toast('❗ 공유 거래처 납품은 Firebase 연결이 필요합니다', 'var(--red)', 3500);
+        }
+        const db = firebase.database();
+        const updates = {};
+        newOrders.forEach(order => {
+            // A의 워크스페이스 orders 경로에 저장
+            updates[`workspaces/${sharedTargetWsId}/orders/${order.id}`] = order;
+        });
+        try {
+            await db.ref('/').update(updates);
+            // _sharedOrdersCache에도 즉시 반영 (화면 갱신용)
+            newOrders.forEach(order => {
+                const wsItem = _getSharedWs().find(w => w.wsId === sharedTargetWsId);
+                _sharedOrdersCache.push({
+                    ...order,
+                    _sharedWsId:    sharedTargetWsId,
+                    _sharedWsLabel: wsItem?.label || sharedTargetWsId,
+                    _readOnly:      false, // 내가 입력한 공유 내역은 수정 가능
+                    _mySharedEntry: true,  // B가 직접 입력한 공유 내역 표시
+                });
+            });
+            toast('✅ 공유 거래처 납품 등록 완료!', 'var(--green)');
+        } catch(e) {
+            console.error('[공유납품] Firebase 저장 오류:', e);
+            return toast('❗ 공유 거래처 납품 저장 실패: ' + e.message, 'var(--red)', 4000);
+        }
+    } else {
+        // ── 일반 거래처: 내 orders에 저장 ──
+        newOrders.forEach(order => {
+            orders.push(order);
+            _markDirtyOrder(order.id);
+        });
+    }
     // 거래명세서 자동 오픈을 위해 확정 직전에 거래처명·월 저장
     const _savedClientName = client.name;
     const _savedMonth = (tempGroups[0]?.date || todayKST()).slice(0, 7);
@@ -2163,21 +2313,22 @@ async function submitOrder() {
     // 단가 힌트 초기화
     const priceHint = document.getElementById('priceHint');
     if (priceHint) priceHint.textContent = '';
-    renderTempGroups(); saveData(); updateInfoCounts(); updateNavBadges();
+    renderTempGroups();
+    if (!isSharedVirtual) saveData(); // 공유 거래처 납품은 내 로컬 저장 불필요
+    updateInfoCounts(); updateNavBadges();
     renderDashboard();
     updateItemDatalist('');
     _refreshSettlementIfActive();
     _refreshStockIfActive();
     _refreshUnpaidIfActive();
-
-    // ── 납품 등록 시 해당 거래처를 sharedClients에 자동 추가 ──
-    // 대신 납품하는 경우, 별도 설정 없이 상대방이 내 내역을 볼 수 있도록
-    _autoAddSharedClient(_savedClientName);
+    renderOrders(); // 공유 캐시 포함 내역 갱신
     // 납품 확정 후: 내역 탭 전환 → 거래명세서 자동 오픈
     setTimeout(() => {
         showTab('history');
         setHistPeriod('today', document.querySelector('.chip.hist-period[data-p="today"]'));
-        toast(isVoid ? '👤 타인거래로 등록 완료 (재고 차감 제외)' : '✅ 납품 등록 완료!', 'var(--green)');
+        if (!isSharedVirtual) {
+            toast(isVoid ? '👤 타인거래로 등록 완료 (재고 차감 제외)' : '✅ 납품 등록 완료!', 'var(--green)');
+        }
         setTimeout(() => showClientStatement(_savedClientName, _savedMonth), 200);
     }, 80);
 }
@@ -2336,7 +2487,12 @@ function renderOrders() {
     const start = document.getElementById('histStart')?.value || '';
     const end   = document.getElementById('histEnd')?.value || '';
 
-    const filtered = orders.filter(o => {
+    // 내 납품 내역 + 공유 워크스페이스 납품 내역 합산
+    const allOrders = [
+        ...orders,
+        ..._sharedOrdersCache,
+    ];
+    const filtered = allOrders.filter(o => {
         const mSearch = matchSearch(o.clientName||'',q) || (o.items||[]).some(i=>matchSearch(i.name,q));
         const mDate   = (!start||o.date>=start) && (!end||o.date<=end);
         const mPay    = histPayFilter==='all'?true:histPayFilter==='unpaid'?!o.isPaid:o.isPaid;
@@ -2396,7 +2552,8 @@ function renderOrders() {
         const cName = escapeAttr(o.clientName || '');
         const cId   = escapeAttr(o.clientId   || '');
         const oId   = escapeAttr(o.id         || '');
-        const voided = !!o.isVoid;
+        const voided   = !!o.isVoid;
+        const readOnly  = false; // 공유 내역도 수정/결제/삭제 가능
         // 타인거래도 미수/완납 상태 반영한 카드 색상
         const cardClass = `order-card ${voided ? ('voided ' + (o.isPaid ? 'paid' : 'unpaid')) : (o.isPaid ? 'paid' : 'unpaid')}`;
         // 타인거래: 👤배지 + 수금 상태 배지 같이 표시 (수금 처리 가능)
@@ -2440,11 +2597,13 @@ function renderOrders() {
             <div class="order-bottom"><div class="order-total">${fmt(o.total)}원</div></div>
             <div class="order-actions">
                 <button class="btn btn-ghost btn-sm" onclick="showOrderDetail('${oId}')">🔍<span class="btn-label">상세</span></button>
-                ${voided
-                    ? `<button class="btn btn-primary btn-sm" onclick="openOrderEdit('${oId}')">✏️<span class="btn-label">수정</span></button><button class="btn btn-ghost btn-sm" onclick="toggleVoidOrder('${oId}')" style="color:var(--green);border-color:rgba(32,192,92,.4);">↩<span class="btn-label">내거래로</span></button>`
-                    : `<button class="btn btn-primary btn-sm" onclick="openOrderEdit('${oId}')">✏️<span class="btn-label">수정</span></button>`
+                ${o._sharedWsId
+                    ? `<span class="shared-order-badge">📦 ${escapeHtml(o._sharedWsLabel||o._sharedWsId||'공유')}</span>`
+                    : voided
+                        ? `<button class="btn btn-primary btn-sm" onclick="openOrderEdit('${oId}')">✏️<span class="btn-label">수정</span></button><button class="btn btn-ghost btn-sm" onclick="toggleVoidOrder('${oId}')" style="color:var(--green);border-color:rgba(32,192,92,.4);">↩<span class="btn-label">내거래로</span></button>`
+                        : `<button class="btn btn-primary btn-sm" onclick="openOrderEdit('${oId}')">✏️<span class="btn-label">수정</span></button>`
                 }
-                <button class="btn btn-ghost btn-sm" onclick="openClientEditFromHistory('${cId}','${cName}')">🏪<span class="btn-label">거래처</span></button>
+                ${o._sharedWsId ? '' : `<button class="btn btn-ghost btn-sm" onclick="openClientEditFromHistory('${cId}','${cName}')">🏪<span class="btn-label">거래처</span></button>`}
                 <button class="btn btn-danger btn-sm" onclick="deleteOrder('${oId}')">🗑️<span class="btn-label">삭제</span></button>
             </div>
         </div>`;
@@ -2517,19 +2676,26 @@ function renderOrders() {
 
 async function togglePaid(id) {
     // 완납 → 미수 복귀 전용 (미수→완납은 openQuickPay로)
-    const o = orders.find(o=>o.id===id);
-    if (!o) return;
+    const foundToggle = _findOrderAnywhere(id);
+    if (!foundToggle) return;
+    const o = foundToggle.order;
     if (o.isPaid) {
         if (!await customConfirm('완납을 취소하고 미수로 되돌릴까요?')) return;
-        o.isPaid = false; o.paidAmount = 0;
-        delete o.paidAt; delete o.paidNote; delete o.paidMethod; delete o.discount; delete o.paidMethodDetail;
-        delete o.crmControlled; delete o.dlControlled;
-        _markDirtyOrder(id); // delta sync 마킹
-        _saveAndFlush(); renderOrders(); renderDashboard(); updateInfoCounts(); updateNavBadges();
-        _refreshUnpaidIfActive();
-        _refreshSettlementIfActive();
-        toast('🔴 미수로 변경');
-        _afterDlPayPatch(id, o);
+        const patch = { isPaid: false, paidAmount: 0, paidAt: null, paidNote: null,
+                        paidMethod: null, discount: null, paidMethodDetail: null,
+                        crmControlled: null, dlControlled: null };
+        if (foundToggle.isShared) {
+            const ok = await _patchSharedOrder(foundToggle.sharedWsId, id, patch);
+            if (ok) { renderOrders(); renderDashboard(); updateInfoCounts(); updateNavBadges(); _refreshUnpaidIfActive(); _refreshSettlementIfActive(); toast('🔴 미수로 변경'); }
+        } else {
+            Object.assign(o, patch);
+            _markDirtyOrder(id);
+            _saveAndFlush(); renderOrders(); renderDashboard(); updateInfoCounts(); updateNavBadges();
+            _refreshUnpaidIfActive();
+            _refreshSettlementIfActive();
+            toast('🔴 미수로 변경');
+            _afterDlPayPatch(id, o);
+        }
     } else {
         openQuickPay(id);
     }
@@ -2537,8 +2703,9 @@ async function togglePaid(id) {
 
 // ─── 수금방법 퀵 선택 팝업 ───
 function openQuickPay(orderId) {
-    const o = orders.find(x => x.id === orderId);
-    if (!o) return;
+    const foundQp = _findOrderAnywhere(orderId);
+    if (!foundQp) return;
+    const o = foundQp.order;
     document.getElementById('qpOrderId').value = orderId;
     document.getElementById('qpTitle').textContent = o.clientName || '수금 처리';
     document.getElementById('qpSub').textContent   = o.date + ' · ' + fmt(o.total) + '원';
@@ -2583,41 +2750,53 @@ function updateQpDiscountPreview() {
     }
 }
 
-function confirmQuickPayDiscount(method) {
+async function confirmQuickPayDiscount(method) {
     const orderId = document.getElementById('qpOrderId').value;
-    const o = orders.find(x => x.id === orderId);
-    if (!o) return;
+    const foundDisc = _findOrderAnywhere(orderId);
+    if (!foundDisc) return;
+    const o = foundDisc.order;
     const remain = o.total - (o.paidAmount || 0);
     const input  = _moneyVal('qpDiscountAmt');
     if (input <= 0) return toast('❗ 실수령액을 입력하세요');
     if (input > remain) return toast('❗ 실수령액이 청구금액보다 많습니다');
     const discount = remain - input;
-    // 할인 완납: 실수령액만 paidAmount, 차액은 discount 필드, isPaid=true
-    o.isPaid     = true;
-    o.paidAmount = (o.paidAmount || 0) + input;
-    o.paidAt     = new Date().toISOString();
-    o.paidMethod = method;
-    if (discount > 0) o.discount = (o.discount || 0) + discount;
-    delete o.crmControlled; // 납품앱 직접 결제 → CRM 우선권 해제
-    _markDirtyOrder(orderId); // delta sync 마킹
-    closeQuickPay(true);
-    _saveAndFlush(); renderOrders(); renderDashboard(); updateInfoCounts(); updateNavBadges();
-    _refreshUnpaidIfActive();
-    _refreshSettlementIfActive();
+    const patch = {
+        isPaid:     true,
+        paidAmount: (o.paidAmount || 0) + input,
+        paidAt:     new Date().toISOString(),
+        paidMethod: method,
+        crmControlled: null,
+    };
+    if (discount > 0) patch.discount = (o.discount || 0) + discount;
     const icon = method === 'transfer' ? '🏦' : '💵';
-    const msg  = discount > 0
-        ? `${icon} 할인 완납 (할인 ${fmt(discount)}원)`
-        : `${icon} 완납 처리`;
-    toast(msg, 'var(--green)');
-    _afterDlPayPatch(orderId, o);
+    const msg  = discount > 0 ? `${icon} 할인 완납 (할인 ${fmt(discount)}원)` : `${icon} 완납 처리`;
+    closeQuickPay(true);
+    if (foundDisc.isShared) {
+        const ok = await _patchSharedOrder(foundDisc.sharedWsId, orderId, patch);
+        if (ok) {
+            renderOrders(); renderDashboard(); updateInfoCounts(); updateNavBadges();
+            _refreshUnpaidIfActive(); _refreshSettlementIfActive();
+            toast(msg, 'var(--green)');
+        }
+    } else {
+        Object.assign(o, patch);
+        _markDirtyOrder(orderId);
+        closeQuickPay(true);
+        _saveAndFlush(); renderOrders(); renderDashboard(); updateInfoCounts(); updateNavBadges();
+        _refreshUnpaidIfActive();
+        _refreshSettlementIfActive();
+        toast(msg, 'var(--green)');
+        _afterDlPayPatch(orderId, o);
+    }
 }
 
 // ─── 명세표에서 퀵페이 열기 (결제 후 명세표 자동 갱신) ───
 let _qpStatementCtx = null; // { clientName, month }
 
 function openQuickPayFromStatement(orderId, clientName, month) {
-    const o = orders.find(x => x.id === orderId);
-    if (!o) return;
+    const foundQps = _findOrderAnywhere(orderId);
+    if (!foundQps) return;
+    const o = foundQps.order;
     if (o.isPaid) { showOrderDetail(orderId); return; } // 완납이면 상세만
     _qpStatementCtx = { clientName, month };
     openQuickPay(orderId);
@@ -2636,23 +2815,35 @@ function closeQuickPay(paid = false) {
     }
 }
 
-function confirmQuickPay(method) {
+async function confirmQuickPay(method) {
     const orderId = document.getElementById('qpOrderId').value;
-    const o = orders.find(x => x.id === orderId);
-    if (!o) return;
-    o.isPaid     = true;
-    o.paidAmount = o.total;
-    o.paidAt     = new Date().toISOString();
-    o.paidMethod = method;
-    delete o.crmControlled; // 납품앱 직접 결제 → CRM 우선권 해제
-    _markDirtyOrder(orderId); // delta sync 마킹
-    closeQuickPay(true);
-    _saveAndFlush(); renderOrders(); renderDashboard(); updateInfoCounts(); updateNavBadges();
-    _refreshUnpaidIfActive();
-    _refreshSettlementIfActive();
+    const foundCqp = _findOrderAnywhere(orderId);
+    if (!foundCqp) return;
+    const o = foundCqp.order;
+    const patch = {
+        isPaid: true, paidAmount: o.total,
+        paidAt: new Date().toISOString(),
+        paidMethod: method, crmControlled: null
+    };
     const icon = method === 'transfer' ? '🏦' : '💵';
-    toast(icon + ' ' + (method === 'transfer' ? '계좌이체' : '현금') + ' 완납 처리', 'var(--green)');
-    _afterDlPayPatch(orderId, o);
+    const label = icon + ' ' + (method === 'transfer' ? '계좌이체' : '현금') + ' 완납 처리';
+    closeQuickPay(true);
+    if (foundCqp.isShared) {
+        const ok = await _patchSharedOrder(foundCqp.sharedWsId, orderId, patch);
+        if (ok) {
+            renderOrders(); renderDashboard(); updateInfoCounts(); updateNavBadges();
+            _refreshUnpaidIfActive(); _refreshSettlementIfActive();
+            toast(label, 'var(--green)');
+        }
+    } else {
+        Object.assign(o, patch);
+        _markDirtyOrder(orderId);
+        _saveAndFlush(); renderOrders(); renderDashboard(); updateInfoCounts(); updateNavBadges();
+        _refreshUnpaidIfActive();
+        _refreshSettlementIfActive();
+        toast(label, 'var(--green)');
+        _afterDlPayPatch(orderId, o);
+    }
 }
 
 function toggleVoidOrder(id) {
@@ -2668,6 +2859,31 @@ function toggleVoidOrder(id) {
 
 async function deleteOrder(id) {
     if (!await customConfirm('전표를 삭제할까요?')) return;
+
+    // 공유 내역이면 A의 Firebase에서 삭제
+    const foundAnywhere = _findOrderAnywhere(id);
+    if (!foundAnywhere) return;
+    if (foundAnywhere.isShared) {
+        const ok = await _patchSharedOrder(foundAnywhere.sharedWsId, id, null);
+        if (ok) {
+            renderOrders();
+            updateInfoCounts();
+            renderDashboard();
+            updateNavBadges();
+            _refreshUnpaidIfActive();
+            _refreshSettlementIfActive();
+            // 명세표가 열려 있으면 갱신
+            const statModal = document.getElementById('statementModal');
+            if (statModal?.classList.contains('open')) {
+                const clientNameEl = statModal.querySelector('[data-client-name]');
+                const monthEl = statModal.querySelector('[data-month]');
+                if (clientNameEl && monthEl) showClientStatement(clientNameEl.dataset.clientName, monthEl.dataset.month);
+            }
+            toast('🗑️ 공유 전표 삭제 완료');
+        }
+        return;
+    }
+
     const o = orders.find(o=>o.id===id);
     if (!o) return;
 
@@ -2794,8 +3010,13 @@ function saveClientEditFromHistory() {
 let _oeditItems = [];   // 현재 편집 중인 품목 배열
 
 function openOrderEdit(id) {
-    const o = orders.find(o => o.id === id);
-    if (!o) return toast('❗ 전표를 찾을 수 없습니다');
+    // 공유 내역 포함 탐색
+    const found = _findOrderAnywhere(id);
+    if (!found) return toast('❗ 전표를 찾을 수 없습니다');
+    const o = found.order;
+    // 공유 내역이면 모달에 표시
+    const editTitle = document.getElementById('orderEditTitle') || document.getElementById('orderEditModal')?.querySelector('.card-title');
+    if (editTitle) editTitle.textContent = found.isShared ? `📦 공유 납품 수정 (${found.sharedWsId})` : '납품 수정';
     document.getElementById('oeditOrderId').value    = id;
     document.getElementById('oeditClientName').value = o.clientName || '';
     document.getElementById('oeditDate').value       = o.date || '';
@@ -2899,7 +3120,7 @@ function oeditAddItem() {
     document.getElementById('oeditNewName').focus();
 }
 
-function saveOrderEdit() {
+async function saveOrderEdit() {
     const id   = document.getElementById('oeditOrderId').value;
     const date = document.getElementById('oeditDate').value;
     const note = document.getElementById('oeditNote').value.trim();
@@ -2908,8 +3129,40 @@ function saveOrderEdit() {
     // 품목명 공백 체크
     if (_oeditItems.some(it => !(it.name||'').trim())) return toast('❗ 품목명을 모두 입력하세요');
 
-    const o = orders.find(o => o.id === id);
-    if (!o) return toast('❗ 전표를 찾을 수 없습니다');
+    // 공유 내역 포함 탐색
+    const foundEdit = _findOrderAnywhere(id);
+    if (!foundEdit) return toast('❗ 전표를 찾을 수 없습니다');
+    const o = foundEdit.order;
+
+    // ── 공유 내역이면 재고 보정 스킵 후 Firebase에만 저장 ──
+    if (foundEdit.isShared) {
+        const items = _oeditItems.map(it => ({
+            name:  (it.name||'').trim(),
+            qty:   Number(it.qty)   || 0,
+            price: Number(it.price) || 0,
+            total: (Number(it.qty)||0) * (Number(it.price)||0)
+        }));
+        const total = items.reduce((s, it) => s + it.total, 0);
+        const patch = { date, items, total, note };
+        const oeditSw = document.getElementById('oeditVoidSwitch');
+        if (oeditSw) patch.isVoid = oeditSw.dataset.void === '1';
+        items.forEach(it => { if (it.price > 0) prices[it.name] = it.price; });
+        const ok = await _patchSharedOrder(foundEdit.sharedWsId, id, patch);
+        if (ok) {
+            renderOrders();
+            renderDashboard();
+            updateInfoCounts();
+            updateNavBadges();
+            _refreshUnpaidIfActive();
+            _refreshSettlementIfActive();
+            if (document.getElementById('statementModal')?.classList.contains('open')) {
+                showClientStatement(o.clientName, (patch.date || o.date).slice(0, 7));
+            }
+            closeModal('orderEditModal');
+            toast('✅ 공유 납품 내역이 수정되었습니다', 'var(--green)');
+        }
+        return;
+    }
 
     // ── 자동 재고 보정 (수정 전후 수량 차이 반영, 타인거래 제외) ──
     if (stockAutoDeduct && !o.isVoid) {
@@ -3025,11 +3278,14 @@ function saveOrderEdit() {
 }
 
 function showOrderDetail(id) {
-    const o = orders.find(o=>o.id===id);
-    if (!o) return;
+    const foundDetail = _findOrderAnywhere(id);
+    if (!foundDetail) return;
+    const o = foundDetail.order;
+    const sharedBadgeDetail = foundDetail.isShared
+        ? `<span style="font-size:10px;background:#e0e7ff;color:#4f46e5;border-radius:4px;padding:2px 6px;margin-left:6px;font-weight:700;">📦 ${escapeHtml(o._sharedWsId)}</span>` : '';
     document.getElementById('detailContent').innerHTML = `
         <div style="margin-bottom:14px;">
-            <div style="font-size:18px;font-weight:700;margin-bottom:4px;">${escapeHtml(o.clientName||'(없음)')}</div>
+            <div style="font-size:18px;font-weight:700;margin-bottom:4px;">${escapeHtml(o.clientName||'(없음)')}${sharedBadgeDetail}</div>
             <div style="font-size:13px;color:var(--text2);">납품일: ${escapeHtml(o.date)}</div>
         </div>
         <div style="overflow-x:auto;">
@@ -3046,7 +3302,12 @@ function showOrderDetail(id) {
             </tfoot>
         </table>
         </div>
-        ${o.note?`<div style="margin-top:12px;padding:10px;background:var(--surf3);border-radius:8px;font-size:13px;"><strong>메모:</strong> ${escapeHtml(o.note)}</div>`:''}`;
+        ${o.note?`<div style="margin-top:12px;padding:10px;background:var(--surf3);border-radius:8px;font-size:13px;"><strong>메모:</strong> ${escapeHtml(o.note)}</div>`:''}
+        <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end;">
+            <button class="btn btn-ghost btn-sm" onclick="closeModal('detailModal');openOrderEdit('${escapeAttr(o.id)}')">✏️ 수정</button>
+            <button class="btn btn-ghost btn-sm" onclick="closeModal('detailModal');openMemoPopup('${escapeAttr(o.id)}')">📝 메모</button>
+            ${o.isPaid ? `<button class="btn btn-ghost btn-sm" onclick="closeModal('detailModal');togglePaid('${escapeAttr(o.id)}')">↩️ 미수 복귀</button>` : `<button class="btn btn-accent btn-sm" onclick="closeModal('detailModal');openQuickPay('${escapeAttr(o.id)}')">💳 수금</button>`}
+        </div>`;
     openModal('detailModal');
 }
 
@@ -3459,49 +3720,29 @@ async function showClientStatement(clientName, month) {
     const monthStart = month+'-01';
 
     // ── 공유 워크스페이스에서 동일 거래처명 내역 fetch ──
-    // sharedWsIds: 내가 수동 등록한 상대방 목록
-    // sharedPeers: 상대방이 나를 역방향 자동 등록한 목록 (Firebase에서 읽음)
     const sharedWsIds = _getSharedWs();
     let sharedOrders = [];
-    if (typeof firebase !== 'undefined' && firebase.apps.length) {
+    if (sharedWsIds.length && typeof firebase !== 'undefined' && firebase.apps.length) {
         const napumDb = firebase.database();
-        const myId = (localStorage.getItem('workspaceId') || '').toLowerCase();
-
-        // ── sharedPeers: 상대방이 나를 등록한 워크스페이스 목록 자동 수집 ──
-        let peerIds = [];
-        if (myId) {
+        await Promise.all(sharedWsIds.map(async item => {
+            const wsId = item.wsId || item;
             try {
-                const peersSnap = await napumDb.ref(`workspaces/${myId}/sharedPeers`).get();
-                if (peersSnap.exists()) {
-                    peerIds = Object.keys(peersSnap.val() || {});
-                }
-            } catch(e) { console.warn('[공유] sharedPeers 로드 실패:', e.message); }
-        }
-
-        // 수동 등록 + 역방향 자동 등록 합산 (중복 제거)
-        const manualIds = sharedWsIds.map(item => item.wsId || item);
-        const allPeerIds = [...new Set([...manualIds, ...peerIds])];
-
-        if (allPeerIds.length) {
-            await Promise.all(allPeerIds.map(async wsId => {
-                try {
-                    // 1) 상대방이 허용한 거래처 목록 확인
-                    const scSnap = await napumDb.ref(`workspaces/${wsId}/sharedClients`).get();
-                    const allowedClients = scSnap.exists() ? (scSnap.val() || []) : [];
-                    // 허용 목록이 비어있으면 공유 안 함
-                    if (!allowedClients.length) return;
-                    // 현재 거래처가 허용 목록에 없으면 스킵
-                    if (!allowedClients.includes(clientName)) return;
-                    // 2) 허용된 경우에만 내역 fetch
-                    const snap = await napumDb.ref(`workspaces/${wsId}/orders`)
-                        .orderByChild('clientName').equalTo(clientName).get();
-                    if (!snap.exists()) return;
-                    Object.values(snap.val() || {}).forEach(o => {
-                        sharedOrders.push({ ...o, _sharedWsId: wsId });
-                    });
-                } catch(e) { /* 접근 불가 워크스페이스 무시 */ }
-            }));
-        }
+                // 1) 상대방이 허용한 거래처 목록 확인
+                const scSnap = await napumDb.ref(`workspaces/${wsId}/sharedClients`).get();
+                const allowedClients = scSnap.exists() ? (scSnap.val() || []) : [];
+                // 허용 목록이 비어있으면 공유 안 함
+                if (!allowedClients.length) return;
+                // 현재 거래처가 허용 목록에 없으면 스킵
+                if (!allowedClients.includes(clientName)) return;
+                // 2) 허용된 경우에만 내역 fetch
+                const snap = await napumDb.ref(`workspaces/${wsId}/orders`)
+                    .orderByChild('clientName').equalTo(clientName).get();
+                if (!snap.exists()) return;
+                Object.values(snap.val() || {}).forEach(o => {
+                    sharedOrders.push({ ...o, _sharedWsId: wsId });
+                });
+            } catch(e) { /* 접근 불가 워크스페이스 무시 */ }
+        }));
     }
     const hasShared = sharedOrders.length > 0;
     // 내 전표 + 공유 전표 합산
@@ -3560,6 +3801,7 @@ async function showClientStatement(clientName, month) {
         const remain  = partial ? o.total-(o.paidAmount||0) : 0;
         const sharedBadge = o._sharedWsId
             ? `<br><span style="font-size:9px;background:#e0e7ff;color:#4f46e5;border-radius:4px;padding:1px 5px;font-weight:700;">📦${escapeHtml(o._sharedWsId)}</span>` : '';
+        // 공유 내역도 편집 가능 — 배지만 표시
         const voidBadge = o.isVoid ? `<br><span style="font-size:9px;background:rgba(245,166,35,.15);color:var(--orange);border-radius:4px;padding:1px 4px;font-weight:700;">👤타인</span>` : '';
         const statBadge = o.isPaid
             ? (o.discount>0
@@ -3583,12 +3825,11 @@ async function showClientStatement(clientName, month) {
                 </div>
             </td>
         </tr>` : '';
-        // 공유 내역은 읽기 전용 (수정/결제 불가)
-        const rowClick = o._sharedWsId ? null :
-            o.isPaid
+        // 공유 내역도 클릭 가능 (수정/결제 가능)
+        const rowClick = o.isPaid
             ? `showOrderDetail('${o.id||''}')`
             : `openQuickPayFromStatement('${o.id||''}','${escapeAttr(clientName)}','${escapeAttr(month)}')`;
-        const rowTitle  = o._sharedWsId ? '공유 내역 (읽기 전용)' : o.isPaid ? '탭하여 상세 보기' : '탭하여 결제 처리';
+        const rowTitle  = o._sharedWsId ? `📦 공유 내역 (${o._sharedWsId}) — 탭하여 처리` : o.isPaid ? '탭하여 상세 보기' : '탭하여 결제 처리';
         const rowAccent = o._sharedWsId ? 'background:rgba(99,102,241,0.05);' : !o.isPaid ? 'background:rgba(239,68,68,0.04);' : '';
         const rowOnclick = rowClick ? `onclick="${rowClick}"` : '';
         const rowCursor  = rowClick ? 'cursor:pointer;' : 'cursor:default;';
@@ -3606,7 +3847,7 @@ async function showClientStatement(clientName, month) {
         </div>
         ${hasShared ? `<div style="background:#eef2ff;border:1px solid #c7d2fe;border-radius:8px;padding:8px 12px;margin-bottom:12px;font-size:12px;color:#4f46e5;display:flex;align-items:center;gap:6px;">
             🔗 <strong>공유 합산 내역</strong>&nbsp;— 공유 워크스페이스 ${sharedWsIds.length}개 포함
-            <span style="margin-left:auto;font-size:10px;color:#6366f1;">📦 배지 = 공유 내역 (읽기 전용)</span>
+            <span style="margin-left:auto;font-size:10px;color:#6366f1;">📦 배지 = 공유 내역 (수정·결제 가능)</span>
         </div>` : ''}
         <div style="background:var(--surf2);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:14px;">
             ${carryAmt>0?`<div style="display:flex;justify-content:space-between;margin-bottom:7px;"><span style="color:var(--orange);">⏩ 전월 이월</span><strong style="color:var(--orange);">${fmt(carryAmt)}원</strong></div>`:''}
@@ -4006,9 +4247,10 @@ function saveStatementPNG(clientName, month) {
 }
 
 function _getUnpaidList(clientName, month) {
-    // 오래된 전표부터 정렬 (이월 → 당월 순)
+    // 오래된 전표부터 정렬 (이월 → 당월 순) — 공유 캐시도 포함
     const monthStart = month + '-01';
-    return orders
+    const allOrders = [...orders, ..._sharedOrdersCache];
+    return allOrders
         .filter(o => o.clientName === clientName && !o.isPaid &&
                      (o.date?.startsWith(month) || o.date < monthStart))
         .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
@@ -4274,28 +4516,38 @@ async function confirmPartialPay() {
 
         let remain = total, fullCnt = 0, partCnt = 0;
         const now  = new Date().toISOString();
+        const fbUpdates = {}; // 공유 내역 Firebase 업데이트 묶음
         for (const o of list) {
             if (remain <= 0) break;
             const due   = o.total - (o.paidAmount || 0);
             const apply = Math.min(due, remain);
             remain -= apply;
-            // 비율로 이 전표분 이체/현금 배분
             const ratio = total > 0 ? apply / total : 0;
             const applyTransfer = Math.round(transferAmt * ratio);
             const applyCash     = apply - applyTransfer;
-            o.paidMethodDetail = {
-                transfer: applyTransfer,
-                cash:     applyCash
-            };
+            const patch = { paidMethodDetail: { transfer: applyTransfer, cash: applyCash }, paidAt: now, paidMethod: 'mixed' };
+            if (note) patch.paidNote = note;
             if (apply >= due) {
-                o.isPaid = true; o.paidAmount = o.total; o.paidAt = now; o.paidMethod = 'mixed';
-                if (note) o.paidNote = note; else delete o.paidNote;
+                patch.isPaid = true; patch.paidAmount = o.total;
                 fullCnt++;
             } else {
-                o.paidAmount = (o.paidAmount || 0) + apply; o.paidAt = now; o.paidMethod = 'mixed';
-                if (note) o.paidNote = note; else delete o.paidNote;
+                patch.paidAmount = (o.paidAmount || 0) + apply;
                 partCnt++;
             }
+            Object.assign(o, patch);
+            if (o._sharedWsId) {
+                // 공유 내역: Firebase 업데이트 묶음에 추가
+                Object.keys(patch).forEach(k => {
+                    fbUpdates[`workspaces/${o._sharedWsId}/orders/${o.id}/${k}`] = patch[k] ?? null;
+                });
+                fbUpdates[`workspaces/${o._sharedWsId}/orders/${o.id}/updatedAt`] = new Date().toISOString();
+            } else {
+                _markDirtyOrder(o.id);
+            }
+        }
+        // 공유 내역 일괄 Firebase 반영
+        if (Object.keys(fbUpdates).length && typeof firebase !== 'undefined' && firebase.apps.length) {
+            firebase.database().ref('/').update(fbUpdates).catch(e => console.warn('[공유부분수금]', e));
         }
         _saveAndFlush(); closeModal('partialPayModal');
         renderOrders(); renderDashboard(); updateInfoCounts(); updateNavBadges();
@@ -4303,8 +4555,7 @@ async function confirmPartialPay() {
         _refreshSettlementIfActive();
         showClientStatement(clientName, month);
         toast(`💳 혼합 완납 (🏦${fmt(transferAmt)}원 + 💵${fmt(cashAmt)}원)`, 'var(--green)');
-        // CRM 역방향 패치
-        list.forEach(o => _afterDlPayPatch(o.id, o));
+        list.filter(o => !o._sharedWsId).forEach(o => _afterDlPayPatch(o.id, o));
         return;
     }
 
@@ -4326,32 +4577,39 @@ async function confirmPartialPay() {
 
     let remain = amount, fullCnt = 0, partCnt = 0;
     const now  = new Date().toISOString();
+    const fbUpdates2 = {}; // 공유 내역 Firebase 업데이트 묶음
 
     for (const o of list) {
         if (remain <= 0) break;
         const due   = o.total - (o.paidAmount || 0);
         const apply = Math.min(due, remain);
         remain -= apply;
-
+        const resolvedMethod = (o.paidMethod && o.paidMethod !== method) ? 'mixed' : method;
+        const patch = { paidAt: now, paidMethod: resolvedMethod };
+        if (note) patch.paidNote = note;
         if (apply >= due) {
-            // 완납
-            o.isPaid     = true;
-            o.paidAmount = o.total;
-            o.paidAt     = now;
-            o.paidMethod = (o.paidMethod && o.paidMethod !== method) ? 'mixed' : method;
-            if (note) o.paidNote = note; else delete o.paidNote;
+            patch.isPaid = true; patch.paidAmount = o.total;
             fullCnt++;
         } else {
-            // 부분 입금
-            o.paidAmount = (o.paidAmount || 0) + apply;
-            o.paidAt     = now;
-            o.paidMethod = (o.paidMethod && o.paidMethod !== method) ? 'mixed' : method;
-            if (note) o.paidNote = note; else delete o.paidNote;
-            delete o.crmControlled; // 납품앱 직접 결제 → CRM 우선권 해제
+            patch.paidAmount = (o.paidAmount || 0) + apply;
+            patch.crmControlled = null;
             partCnt++;
+        }
+        Object.assign(o, patch);
+        if (o._sharedWsId) {
+            Object.keys(patch).forEach(k => {
+                fbUpdates2[`workspaces/${o._sharedWsId}/orders/${o.id}/${k}`] = patch[k] ?? null;
+            });
+            fbUpdates2[`workspaces/${o._sharedWsId}/orders/${o.id}/updatedAt`] = new Date().toISOString();
+        } else {
+            _markDirtyOrder(o.id);
         }
     }
 
+    // 공유 내역 일괄 Firebase 반영
+    if (Object.keys(fbUpdates2).length && typeof firebase !== 'undefined' && firebase.apps.length) {
+        firebase.database().ref('/').update(fbUpdates2).catch(e => console.warn('[공유부분수금단일]', e));
+    }
     _saveAndFlush();
     closeModal('partialPayModal');
     renderOrders(); renderDashboard(); updateInfoCounts(); updateNavBadges();
@@ -4366,15 +4624,16 @@ async function confirmPartialPay() {
             ? methodLbl + ' ' + fullCnt + '건 완납 처리 완료'
             : methodLbl + ' 부분 입금 ' + fmt(amount) + '원 처리 완료';
     toast(msg, 'var(--green)');
-    // CRM 역방향 패치
-    list.forEach(o => _afterDlPayPatch(o.id, o));
+    // CRM 역방향 패치 (내 전표만)
+    list.filter(o => !o._sharedWsId).forEach(o => _afterDlPayPatch(o.id, o));
 }
 
 // ─── 수금 수정 ───
 
 function openPayEdit(orderId, clientName, month) {
-    const o = orders.find(x => String(x.id) === String(orderId));
-    if (!o) return toast('❗ 전표를 찾을 수 없습니다');
+    const foundPe = _findOrderAnywhere(String(orderId));
+    if (!foundPe) return toast('❗ 전표를 찾을 수 없습니다');
+    const o = foundPe.order;
 
     document.getElementById('peOrderId').value    = orderId;
     document.getElementById('peClientName').value = clientName;
@@ -4417,44 +4676,44 @@ function confirmPayEdit() {
     const note       = document.getElementById('peNote').value.trim();
     const method     = _getPayMethod('pe');
 
-    const o = orders.find(x => String(x.id) === String(orderId));
-    if (!o) return toast('❗ 전표를 찾을 수 없습니다');
+    const foundPeConfirm = _findOrderAnywhere(String(orderId));
+    if (!foundPeConfirm) return toast('❗ 전표를 찾을 수 없습니다');
+    const o = foundPeConfirm.order;
 
     if (amount < 0) return toast('❗ 0 이상의 금액을 입력하세요');
 
+    let patch, toastMsg;
     if (amount === 0) {
-        // 수금 취소 → 미수로 복귀
-        o.paidAmount = 0;
-        o.isPaid     = false;
-        delete o.paidAt; delete o.paidNote; delete o.paidMethod; delete o.paidMethodDetail;
-        delete o.crmControlled; // 수금 취소 → CRM 우선권 초기화
-        toast('🔴 수금 취소 — 미수로 변경됨');
+        patch = { paidAmount: 0, isPaid: false, paidAt: null, paidNote: null,
+                  paidMethod: null, paidMethodDetail: null, crmControlled: null };
+        toastMsg = '🔴 수금 취소 — 미수로 변경됨';
     } else if (amount >= o.total) {
-        // 완납
-        o.paidAmount = o.total;
-        o.isPaid     = true;
-        o.paidAt     = new Date().toISOString();
-        o.paidMethod = method;
-        if (note) o.paidNote = note; else delete o.paidNote;
-        delete o.crmControlled; // 납품앱 직접 결제 → CRM 우선권 해제
-        toast('💚 완납으로 수정됨 · ' + _methodLabel(method), 'var(--green)');
+        patch = { paidAmount: o.total, isPaid: true, paidAt: new Date().toISOString(),
+                  paidMethod: method, crmControlled: null };
+        if (note) patch.paidNote = note;
+        toastMsg = '💚 완납으로 수정됨 · ' + _methodLabel(method);
     } else {
-        // 부분 수금 수정
-        o.paidAmount = amount;
-        o.isPaid     = false;
-        o.paidAt     = new Date().toISOString();
-        o.paidMethod = method;
-        if (note) o.paidNote = note; else delete o.paidNote;
-        toast(_methodLabel(method) + ' ' + fmt(amount) + '원으로 수정됨', 'var(--green)');
+        patch = { paidAmount: amount, isPaid: false, paidAt: new Date().toISOString(), paidMethod: method };
+        if (note) patch.paidNote = note;
+        toastMsg = _methodLabel(method) + ' ' + fmt(amount) + '원으로 수정됨';
     }
+    Object.assign(o, patch);
+    toast(toastMsg, amount > 0 ? 'var(--green)' : undefined);
 
-    _saveAndFlush();
+    if (foundPeConfirm.isShared) {
+        _patchSharedOrder(foundPeConfirm.sharedWsId, orderId, patch)
+            .then(ok => { if (ok) { renderOrders(); renderDashboard(); updateInfoCounts(); updateNavBadges(); _refreshUnpaidIfActive(); _refreshSettlementIfActive(); showClientStatement(clientName, month); } });
+    } else {
+        _markDirtyOrder(orderId);
+        _saveAndFlush();
+        closeModal('payEditModal');
+        showClientStatement(clientName, month);
+        renderOrders(); renderDashboard(); updateInfoCounts(); updateNavBadges();
+        _afterDlPayPatch(o.id, o);
+        _refreshUnpaidIfActive();
+        _refreshSettlementIfActive();
+    }
     closeModal('payEditModal');
-    showClientStatement(clientName, month);
-    renderOrders(); renderDashboard(); updateInfoCounts(); updateNavBadges();
-    _afterDlPayPatch(o.id, o);
-    _refreshUnpaidIfActive();
-    _refreshSettlementIfActive();
 }
 
 async function confirmPayEditCancel() {
@@ -4470,7 +4729,9 @@ let _bulkPayState = null;
 
 function bulkPayClient(clientName, month) {
     const monthStart = month + '-01';
-    const unpaidList = orders.filter(o =>
+    // 공유 캐시 포함
+    const allOrdersForBulk = [...orders, ..._sharedOrdersCache];
+    const unpaidList = allOrdersForBulk.filter(o =>
         o.clientName === clientName &&
         (o.date?.startsWith(month) || o.date < monthStart) &&
         !o.isPaid
@@ -4491,12 +4752,28 @@ function closeBulkPayPopup() {
     _bulkPayState = null;
 }
 
-function _doBulkPay(selectedMethod) {
+async function _doBulkPay(selectedMethod) {
     if (!_bulkPayState) return;
     const { clientName, month, unpaidList } = _bulkPayState;
     closeBulkPayPopup();
     const now = new Date().toISOString();
-    unpaidList.forEach(o => { o.isPaid = true; o.paidAmount = o.total; o.paidAt = now; o.paidMethod = selectedMethod; });
+    const fbBulk = {};
+    unpaidList.forEach(o => {
+        o.isPaid = true; o.paidAmount = o.total; o.paidAt = now; o.paidMethod = selectedMethod;
+        if (o._sharedWsId) {
+            const p = `workspaces/${o._sharedWsId}/orders/${o.id}`;
+            fbBulk[p + '/isPaid']     = true;
+            fbBulk[p + '/paidAmount'] = o.total;
+            fbBulk[p + '/paidAt']     = now;
+            fbBulk[p + '/paidMethod'] = selectedMethod;
+            fbBulk[p + '/updatedAt']  = now;
+        } else {
+            _markDirtyOrder(o.id);
+        }
+    });
+    if (Object.keys(fbBulk).length && typeof firebase !== 'undefined' && firebase.apps.length) {
+        await firebase.database().ref('/').update(fbBulk).catch(e => console.warn('[공유전체완납]', e));
+    }
     _saveAndFlush();
     showClientStatement(clientName, month);
     renderOrders(); renderDashboard(); updateInfoCounts(); updateNavBadges();
@@ -6545,6 +6822,67 @@ function _saveSharedWs(arr) {
     localStorage.setItem('sharedWorkspaces', JSON.stringify(arr));
 }
 
+// ── 공유 워크스페이스에서 받은 거래처 캐시 ──────────────────────────────────
+// { name, wsId, wsLabel } 형태로 보관
+let _sharedClientsFromWs = [];
+// 공유 워크스페이스에서 가져온 납품 내역 캐시 { wsId, wsLabel, orders[] }
+let _sharedOrdersCache = [];
+
+/**
+ * 등록된 공유 워크스페이스들의 sharedClients 를 Firebase에서 읽어 캐시
+ * 앱 시작, 워크스페이스 연결, 수동 새로고침 시 호출
+ */
+async function _loadSharedClientsFromWs() {
+    const wsArr = _getSharedWs();
+    if (!wsArr.length || typeof firebase === 'undefined' || !firebase.apps.length) {
+        _sharedClientsFromWs = [];
+        return;
+    }
+    const result = [];
+    await Promise.all(wsArr.map(async item => {
+        const wsId    = item.wsId || item;
+        const wsLabel = item.label || wsId;
+        try {
+            const snap = await firebase.database().ref(`workspaces/${wsId}/sharedClients`).get();
+            if (!snap.exists()) return;
+            const names = snap.val() || [];
+            names.forEach(name => {
+                if (!result.find(r => r.name === name && r.wsId === wsId))
+                    result.push({ name, wsId, wsLabel });
+            });
+        } catch(e) { /* 접근 불가 워크스페이스 무시 */ }
+    }));
+    _sharedClientsFromWs = result;
+
+    // ── 공유 워크스페이스 납품 내역도 함께 캐시 ──
+    const ordersResult = [];
+    await Promise.all(wsArr.map(async item => {
+        const wsId    = item.wsId || item;
+        const wsLabel = item.label || wsId;
+        try {
+            // 공개된 거래처 이름 목록 확인
+            const scSnap = await firebase.database().ref(`workspaces/${wsId}/sharedClients`).get();
+            const allowedNames = scSnap.exists() ? (scSnap.val() || []) : [];
+            if (!allowedNames.length) return; // 공개 거래처 없으면 스킵
+
+            const ordSnap = await firebase.database().ref(`workspaces/${wsId}/orders`).get();
+            if (!ordSnap.exists()) return;
+            const myWsId = localStorage.getItem('workspaceId') || '';
+            const wsOrders = Object.values(ordSnap.val() || {})
+                .filter(o => allowedNames.includes(o.clientName)); // 공개된 거래처 내역만
+            wsOrders.forEach(o => ordersResult.push({
+                ...o,
+                _sharedWsId:    wsId,
+                _sharedWsLabel: wsLabel,
+                _readOnly:      false,  // 읽기 전용 해제 — 수정/결제/삭제 모두 가능
+                _mySharedEntry: true,   // B가 조회하는 공유 내역 (A의 Firebase에 반영)
+            }));
+        } catch(e) { /* 접근 불가 워크스페이스 무시 */ }
+    }));
+    _sharedOrdersCache = ordersResult;
+    renderOrders(); // 내역 탭 갱신
+}
+
 // 내가 공개 허용한 거래처 목록 (Firebase에 저장)
 function _getMySharedClients() {
     try { return JSON.parse(localStorage.getItem('mySharedClients') || '[]'); } catch { return []; }
@@ -6636,26 +6974,6 @@ async function _loadSharedClientBadges(wsId, idx) {
     }
 }
 
-// ── 납품 등록 시 거래처 자동 공개 등록 ──────────────────────────────────────
-// submitOrder()에서 호출. sharedPeers가 있는 경우(= 상대방이 나를 등록한 경우)
-// 해당 거래처를 mySharedClients에 자동 추가하여 상대방이 볼 수 있게 함.
-function _autoAddSharedClient(clientName) {
-    if (!clientName) return;
-    const myId = (localStorage.getItem('workspaceId') || '').toLowerCase();
-    if (!myId || typeof firebase === 'undefined' || !firebase.apps.length) return;
-
-    firebase.database().ref(`workspaces/${myId}/sharedPeers`).get()
-        .then(snap => {
-            if (!snap.exists()) return; // 나를 등록한 상대방이 없으면 스킵
-            const list = _getMySharedClients();
-            if (list.includes(clientName)) return; // 이미 공개 중이면 스킵
-            list.push(clientName);
-            _saveMySharedClients(list);
-            console.info('[공유] 납품 등록으로 거래처 자동 공개:', clientName);
-        })
-        .catch(e => console.warn('[공유] sharedPeers 확인 실패:', e.message));
-}
-
 async function toggleMySharedClient(name, checked) {
     // ── 공개 해제 시 실수 방지 확인 ──
     if (!checked) {
@@ -6686,7 +7004,7 @@ async function toggleMySharedClient(name, checked) {
     });
 }
 
-async function addSharedWs() {
+function addSharedWs() {
     const input = document.getElementById('sharedWsInput');
     const id = (input.value || '').trim().toLowerCase();
     if (!id) return toast('❗ 워크스페이스 ID를 입력하세요');
@@ -6699,19 +7017,8 @@ async function addSharedWs() {
     _saveSharedWs(list);
     input.value = '';
     renderSharedWsList();
+    _loadSharedClientsFromWs(); // 공유 거래처 캐시 갱신
     toast(`✅ "${id}" 공유 등록 완료`, 'var(--green)');
-
-    // ── 역방향 자동 등록: 상대방 Firebase의 sharedPeers에 내 ID 추가 ──
-    // 상대방 앱이 다음 번 명세표 조회 시 내 워크스페이스를 자동으로 참조하게 됨
-    if (myId && typeof firebase !== 'undefined' && firebase.apps.length) {
-        try {
-            const peerRef = firebase.database().ref(`workspaces/${id}/sharedPeers/${myId}`);
-            await peerRef.set(true);
-            console.info('[공유] 역방향 자동 등록 완료:', id, '← 내 ID:', myId);
-        } catch(e) {
-            console.warn('[공유] 역방향 등록 실패 (상대방 Firebase 접근 불가):', e.message);
-        }
-    }
 }
 
 async function removeSharedWs(idx) {
@@ -6726,19 +7033,25 @@ async function removeSharedWs(idx) {
     if (!ok) return;
     list.splice(idx, 1);
     _saveSharedWs(list);
-    renderSharedWsList();
-    toast(`🗑️ "${target.wsId}" 공유 해제`);
-
-    // ── 역방향 제거: 상대방 Firebase의 sharedPeers에서 내 ID 삭제 ──
-    const myId = (localStorage.getItem('workspaceId') || '').toLowerCase();
-    if (myId && typeof firebase !== 'undefined' && firebase.apps.length) {
-        try {
-            await firebase.database().ref(`workspaces/${target.wsId}/sharedPeers/${myId}`).remove();
-            console.info('[공유] 역방향 등록 제거 완료:', target.wsId, '← 내 ID:', myId);
-        } catch(e) {
-            console.warn('[공유] 역방향 제거 실패:', e.message);
+    // 해당 워크스페이스에서 자동 추가된 거래처 중 납품 내역 없는 것 제거
+    const removedWsId = target.wsId;
+    const autoAdded = clients.filter(c => c._sharedFrom === removedWsId && c._autoAdded);
+    autoAdded.forEach(c => {
+        const hasOrders = orders.some(o => o.clientId === c.id);
+        if (!hasOrders) {
+            clients.splice(clients.indexOf(c), 1);
+        } else {
+            // 납품 내역 있으면 공유 표시만 제거 (거래처는 유지)
+            delete c._sharedFrom;
+            delete c._autoAdded;
+            delete c._sharedLabel;
         }
-    }
+    });
+    _saveAndFlush();
+    invalidateClientsCache();
+    renderSharedWsList();
+    _loadSharedClientsFromWs(); // 공유 거래처 캐시 갱신
+    toast(`🗑️ "${target.wsId}" 공유 해제`);
 }
 
 // ─── Firebase ───
@@ -7662,6 +7975,8 @@ window.addEventListener('DOMContentLoaded', () => {
     if (savedWs) {
         waitFirebase(() => {
             _doConnect(savedWs, true);
+            // 공유 워크스페이스 거래처 캐시 로드
+            _loadSharedClientsFromWs();
             // 내 sharedClients를 Firebase에 즉시 반영 (앱 시작 시 동기화)
             // ※ null 대신 [] 사용 — null 저장 시 Firebase 노드 삭제로 공유 목록이 초기화되는 버그 방지
             const myShared = _getMySharedClients();
@@ -8015,8 +8330,9 @@ function closeMemoDetail() {
 let _memoTargetId = null;
 
 function openMemoPopup(orderId) {
-    const o = orders.find(x => x.id === orderId);
-    if (!o) return;
+    const foundMemo = _findOrderAnywhere(orderId);
+    if (!foundMemo) return;
+    const o = foundMemo.order;
     _memoTargetId = orderId;
     document.getElementById('memoPopupClient').textContent = o.clientName || '';
     document.getElementById('memoTextarea').value = o.note || '';
@@ -8027,22 +8343,32 @@ function closeMemoPopup() {
     document.getElementById('memoPopup').classList.remove('open');
     _memoTargetId = null;
 }
-function saveMemoPopup() {
+async function saveMemoPopup() {
     if (!_memoTargetId) return;
-    const o = orders.find(x => x.id === _memoTargetId);
-    if (!o) return;
+    const foundMemoSave = _findOrderAnywhere(_memoTargetId);
+    if (!foundMemoSave) return;
+    const o = foundMemoSave.order;
     const text = document.getElementById('memoTextarea').value.trim();
-    o.note = text;
-    o.updatedAt = new Date().toISOString();
-    _markDirtyOrder(o.id); // Firebase 델타 동기 마킹
-    _saveAndFlush();
-    closeMemoPopup();
-    renderOrders();
-    renderDashboard();
-    updateInfoCounts();
-    updateNavBadges();
-    _refreshUnpaidIfActive();
-    toast(text ? '📝 메모 저장됨' : '🗑️ 메모 삭제됨', 'var(--accent)');
+    if (foundMemoSave.isShared) {
+        const ok = await _patchSharedOrder(foundMemoSave.sharedWsId, _memoTargetId, { note: text });
+        if (ok) {
+            closeMemoPopup();
+            renderOrders();
+            toast(text ? '📝 메모 저장됨' : '🗑️ 메모 삭제됨', 'var(--accent)');
+        }
+    } else {
+        o.note = text;
+        o.updatedAt = new Date().toISOString();
+        _markDirtyOrder(o.id);
+        _saveAndFlush();
+        closeMemoPopup();
+        renderOrders();
+        renderDashboard();
+        updateInfoCounts();
+        updateNavBadges();
+        _refreshUnpaidIfActive();
+        toast(text ? '📝 메모 저장됨' : '🗑️ 메모 삭제됨', 'var(--accent)');
+    }
 }
 
 // ═══ 거래처 카드 툴팁 토글 ═══
