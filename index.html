@@ -11,7 +11,7 @@
     <meta name="apple-mobile-web-app-title" content="납품관리">
     <link rel="apple-touch-icon" href="./icon-192.png">
     <link rel="manifest" href="./manifest.json">
-    <title>납품 관리 Pro v95</title>
+    <title>납품 관리 Pro v96</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js" defer></script>
@@ -38,7 +38,7 @@
             <div class="logo-icon">📦</div>
             <div>
                 <div class="logo-text">납품 관리 Pro</div>
-                <div class="logo-sub">v95 · PWA 앱 설치 지원</div>
+                <div class="logo-sub">v96 · PWA 앱 설치 지원</div>
             </div>
         </div>
         <div class="header-btns">
@@ -607,7 +607,7 @@
     <div class="card">
         <div class="card-title">앱 정보</div>
         <div style="font-size:13px;color:var(--text2);line-height:2;margin-bottom:12px;">
-            버전: <strong style="color:var(--accent);">v95</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
+            버전: <strong style="color:var(--accent);">v96</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
             거래처: <span id="infoClients">0</span>개 &nbsp;·&nbsp;
             납품내역: <span id="infoOrders">0</span>건
         </div>
@@ -621,7 +621,11 @@
             <div id="changelogList" style="display:flex;flex-direction:column;gap:6px;">
                 <!-- 현재 버전 -->
                 <div class="changelog-item">
-                    <span class="changelog-ver" style="color:var(--green);">v95</span>
+                    <span class="changelog-ver" style="color:var(--green);">v96</span>
+                    <span class="changelog-desc">공유 거래처 직접 납품 — B가 공유 거래처에 납품 시 A의 Firebase orders에 직접 저장. 저장과 동시에 A 화면에 실시간 반영(📦 토스트 알림). B가 입력한 공유 납품은 B도 수정·삭제 가능(_mySharedEntry). writtenBy __shared_by__ 태그로 A의 리스너가 타임스탬프 비교 없이 즉시 orders 갱신.</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v95</span>
                     <span class="changelog-desc">CRM 결제 양방향 동기 — 거래장에서 결제 처리(완납·부분·할인·혼합·수금취소·수금수정) 시 CRM transactions에 즉시 역방향 패치. dlControlled 플래그로 CRM↔거래장 결제 우선권 자동 관리. CRM_FIREBASE_CFG 설정으로 활성화.</span>
                 </div>
                 <div class="changelog-item">

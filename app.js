@@ -543,6 +543,24 @@ function _fbValueHandler(snap) {
         if (_connectGuard)     return;  // 초기 연결 중 레이스 컨디션 차단
         if (d.writtenBy === SESSION_ID) return; // 자기 자신이 올린 echo 차단
 
+        // ★ v96: B가 공유 납품 저장 시 writtenBy = "__shared_by__:{B의 SESSION_ID}"
+        // → A 화면에서 즉시 orders만 갱신 (타임스탬프 비교 우회)
+        if (typeof d.writtenBy === 'string' && d.writtenBy.startsWith('__shared_by__:')) {
+            if (d.orders) {
+                const inc = toArray(d.orders).map(_normOrderFromFb);
+                const h = dataHash(inc);
+                if (h !== lastHash.orders) {
+                    orders = inc;
+                    lastHash.orders = h;
+                    saveToLocal();
+                    _fullRender();
+                    setSyncStatus('online');
+                    toast('📦 공유 납품이 등록됐습니다', 'var(--accent)', 2500);
+                }
+            }
+            return;
+        }
+
         // ★ CRM 외부에서 결제 패치한 경우: 타임스탬프 비교 우회 + orders만 즉시 갱신
         if (d.writtenBy === 'CRM_EXTERNAL') {
             if (d.orders) {
@@ -2269,6 +2287,12 @@ async function submitOrder() {
             // A의 워크스페이스 orders 경로에 저장
             updates[`workspaces/${sharedTargetWsId}/orders/${order.id}`] = order;
         });
+        // ★ v96 핵심 수정: A의 워크스페이스 루트 lastUpdated/writtenBy 업데이트
+        // → A의 .on('value') 리스너가 워크스페이스 루트 변경을 감지해 화면에 반영
+        // writtenBy를 B의 SESSION_ID가 아닌 고정 태그로 설정
+        // → A의 _fbValueHandler에서 자기 SESSION_ID 체크를 통과하도록
+        updates[`workspaces/${sharedTargetWsId}/lastUpdated`] = new Date().toISOString();
+        updates[`workspaces/${sharedTargetWsId}/writtenBy`]   = `__shared_by__:${SESSION_ID}`;
         try {
             await db.ref('/').update(updates);
             // _sharedOrdersCache에도 즉시 반영 (화면 갱신용)
