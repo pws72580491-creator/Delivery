@@ -88,7 +88,7 @@ function updateBackupDirUI(name, granted) {
     const pickBtn = document.getElementById('pickDirBtn');
     if (!info) return;
     if (name) {
-        info.innerHTML = `<span style="color:var(--accent);font-weight:700;">📂 ${name}</span>`
+        info.innerHTML = `<span style="color:var(--accent);font-weight:700;">📂 ${escapeHtml(name)}</span>`
                        + (granted ? '' : ' <span style="color:var(--orange);font-size:11px;">(권한 재확인 필요)</span>');
         if (clearBtn) clearBtn.style.display = 'inline-flex';
         if (pickBtn)  pickBtn.textContent = '📁 폴더 변경';
