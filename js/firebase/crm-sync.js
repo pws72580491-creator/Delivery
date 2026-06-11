@@ -37,7 +37,14 @@ async function _patchCrmTransaction(orderId, order) {
     if (typeof firebase === 'undefined') return false;
 
     // 거래장 workspaceId 확보
-    const wsId = localStorage.getItem('workspaceId');
+    // 공유 납품 전표(_sharedWsId가 있는 전표)는 원본 워크스페이스(A)의 wsId로 napumKey 구성
+    let wsId;
+    if (order && order._sharedWsId) {
+        // 공유 전표: A의 워크스페이스 ID 사용 (CRM의 _napumId는 A_wsId:orderId 형식)
+        wsId = order._sharedWsId;
+    } else {
+        wsId = localStorage.getItem('workspaceId');
+    }
     if (!wsId) { console.warn('[CRM패치] workspaceId 없음'); return false; }
 
     // CRM에서 이 order를 가리키는 napumKey 형식: "wsId:orderId"
@@ -54,18 +61,20 @@ async function _patchCrmTransaction(orderId, order) {
         }
 
         // 결제 필드 구성
+        const _isPaid = !!order.isPaid;
         const patch = {
-            status:    order.isPaid ? '수금완료' : (order.paidAmount > 0 ? '미수금' : '미수금'),
+            status:     _isPaid ? '수금완료' : (order.paidAmount > 0 ? '부분수금' : '미수금'),
             paidAmount: order.paidAmount || 0,
-            paidAt:    order.paidAt || new Date().toISOString(),
-            paidMethod: order.paidMethod || 'cash',
+            // 완납취소 시 null로 명시 — || 연산자로 현재 시각/cash가 잘못 채워지는 것을 방지
+            paidAt:     _isPaid ? (order.paidAt || new Date().toISOString()) : null,
+            paidMethod: _isPaid ? (order.paidMethod || 'cash') : null,
+            paidMethodDetail: _isPaid ? (order.paidMethodDetail || null) : null,
+            discount:   order.discount || null,
             updatedAt:  new Date().toISOString(),
             // 거래장 우선권 플래그: CRM이 이 필드를 다시 덮어쓰지 않도록
             // (단, CRM에서 다시 처리하면 crmControlled=true로 재취득)
             dlControlled: true,
         };
-        if (order.paidMethodDetail) patch.paidMethodDetail = order.paidMethodDetail;
-        if (order.discount)         patch.discount         = order.discount;
 
         // 매칭된 CRM transaction(들) 모두 패치
         const updates = {};

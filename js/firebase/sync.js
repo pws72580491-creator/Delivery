@@ -3,6 +3,90 @@
 // ║  온라인 동기화 코드는 원본과 100% 동일합니다                                  ║
 // ╚══════════════════════════════════════════════════════════════╝
 
+// ─── 공유 납품 오프라인 큐 (v96 이식) ────────────────────────────────────────
+const _SHARED_QUEUE_KEY = '_sharedOrderQueue';
+
+function _getSharedOrderQueue() {
+    try { return JSON.parse(localStorage.getItem(_SHARED_QUEUE_KEY) || '[]'); } catch { return []; }
+}
+function _saveSharedOrderQueue(queue) {
+    try { localStorage.setItem(_SHARED_QUEUE_KEY, JSON.stringify(queue)); } catch(e) {}
+}
+
+/** 오프라인 시 공유 납품을 큐에 저장 */
+function _enqueueSharedOrder(wsId, ordersToQueue) {
+    const queue = _getSharedOrderQueue();
+    ordersToQueue.forEach(order => {
+        queue.push({ wsId, order, queuedAt: new Date().toISOString() });
+    });
+    _saveSharedOrderQueue(queue);
+    _updateSharedQueueBadge();
+}
+
+/** Firebase 재연결 시 오프라인 큐 일괄 업로드 */
+async function _flushSharedOrderQueue() {
+    const queue = _getSharedOrderQueue();
+    if (!queue.length) return;
+    if (typeof firebase === 'undefined' || !firebase.apps.length) return;
+
+    const db = firebase.database();
+    const failed = [];
+    let successCnt = 0;
+
+    for (const item of queue) {
+        try {
+            if (item._delete) {
+                await db.ref(`workspaces/${item.wsId}/orders/${item.orderId}`).remove();
+                const ci = _sharedOrdersCache.findIndex(o => o.id === item.orderId);
+                if (ci >= 0) _sharedOrdersCache.splice(ci, 1);
+            } else {
+                await db.ref(`workspaces/${item.wsId}/orders/${item.order.id}`).set(item.order);
+                const already = _sharedOrdersCache.find(o => o.id === item.order.id);
+                if (!already) {
+                    const wsItem = _getSharedWs().find(w => w.wsId === item.wsId);
+                    _sharedOrdersCache.push({
+                        ...item.order,
+                        _sharedWsId:    item.wsId,
+                        _sharedWsLabel: wsItem?.label || item.wsId,
+                        _readOnly:      false,
+                        _mySharedEntry: true,
+                    });
+                } else {
+                    Object.assign(already, item.order);
+                }
+            }
+            successCnt++;
+        } catch(e) {
+            failed.push(item);
+        }
+    }
+
+    _saveSharedOrderQueue(failed);
+    if (successCnt > 0) {
+        renderOrders(); updateInfoCounts(); updateNavBadges(); renderDashboard();
+        toast(`📤 오프라인 중 작성한 공유 납품 ${successCnt}건이 업로드되었습니다`, 'var(--green)', 4000);
+    }
+    if (failed.length > 0) {
+        console.warn(`[공유큐] ${failed.length}건 업로드 실패 — 다음 연결 시 재시도`);
+    }
+    _updateSharedQueueBadge();
+}
+
+/** 오프라인 큐 배지 UI 갱신 */
+function _updateSharedQueueBadge() {
+    const el = document.getElementById('sharedQueueBadge');
+    if (!el) return;
+    const q = _getSharedOrderQueue();
+    if (q.length > 0) {
+        el.textContent = `📤 공유 ${q.length}건 대기 중 (탭하여 재시도)`;
+        el.style.display = '';
+    } else {
+        el.style.display = 'none';
+    }
+}
+
+
+
 // ─── 워크스페이스 ID 고정 ───
 
 function applyWsLockUI() {
@@ -373,6 +457,9 @@ function _doConnect(id, auto=false) {
                     // (직접 debouncedSync 호출 시 서버에서 변경된 내용을 놓칠 수 있음)
                     isConnected = true;
                     setSyncStatus('online');
+                    // 재연결 시 공유 거래처 목록 갱신 + 오프라인 큐 플러시
+                    _loadSharedClientsFromWs().catch(() => {});
+                    _flushSharedOrderQueue().catch(() => {});
                     if (_initialLoadDone) {
                         workspaceRef.get().then(snap => {
                             const d = snap.val();
@@ -405,6 +492,8 @@ function _doConnect(id, auto=false) {
             // 연결 성공 확인 시점에 isConnected=true 설정
             isConnected = true;
             setTimeout(checkAutoBackup, 1500);
+            // ── 첫 연결 시 오프라인 큐 플러시 ──
+            _flushSharedOrderQueue().catch(() => {});
 
             // 서버에 데이터가 있는지 (어느 키 하나라도)
             const serverHasData = data && (
