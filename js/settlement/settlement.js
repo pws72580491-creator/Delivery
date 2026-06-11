@@ -1165,6 +1165,7 @@ async function confirmPartialPayDiscount() {
             paidAmount: (o.paidAmount || 0) + apply, // 실수령액만 저장
             paidAt:     now,
             paidMethod: method,
+            updatedAt:  now,
         };
         if (discountAmt > 0) patch.discount = (o.discount || 0) + discountAmt;
         if (note) patch.paidNote = note;
