@@ -11,7 +11,7 @@
     <meta name="apple-mobile-web-app-title" content="납품관리">
     <link rel="apple-touch-icon" href="./icon-192.png">
     <link rel="manifest" href="./manifest.json">
-    <title>납품 관리 Pro v97</title>
+    <title>납품 관리 Pro v96</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js" defer></script>
@@ -38,7 +38,7 @@
             <div class="logo-icon">📦</div>
             <div>
                 <div class="logo-text">납품 관리 Pro</div>
-                <div class="logo-sub">v97 · PWA 앱 설치 지원</div>
+                <div class="logo-sub">v96 · PWA 앱 설치 지원</div>
             </div>
         </div>
         <div class="header-btns">
@@ -607,7 +607,7 @@
     <div class="card">
         <div class="card-title">앱 정보</div>
         <div style="font-size:13px;color:var(--text2);line-height:2;margin-bottom:12px;">
-            버전: <strong style="color:var(--accent);">v97</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
+            버전: <strong style="color:var(--accent);">v96</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
             거래처: <span id="infoClients">0</span>개 &nbsp;·&nbsp;
             납품내역: <span id="infoOrders">0</span>건
         </div>
@@ -621,11 +621,7 @@
             <div id="changelogList" style="display:flex;flex-direction:column;gap:6px;">
                 <!-- 현재 버전 -->
                 <div class="changelog-item">
-                    <span class="changelog-ver" style="color:var(--green);">v97</span>
-                    <span class="changelog-desc">코드 모듈화 — app.js(8,498줄) 단일 파일을 15개 모듈로 분리. js/core(state·storage·app), js/firebase(crm-sync·sync), js/ui(core·clients·dashboard·settings·manual), js/delivery(form·history), js/settlement, js/stock, js/utils/backup. 로직·데이터 변경 없음.</span>
-                </div>
-                <div class="changelog-item">
-                    <span class="changelog-ver">v96</span>
+                    <span class="changelog-ver" style="color:var(--green);">v96</span>
                     <span class="changelog-desc">공유 거래처 직접 납품 — B가 공유 거래처에 납품 시 A의 Firebase orders에 직접 저장. 저장과 동시에 A 화면에 실시간 반영(📦 토스트 알림). B가 입력한 공유 납품은 B도 수정·삭제 가능(_mySharedEntry). writtenBy __shared_by__ 태그로 A의 리스너가 타임스탬프 비교 없이 즉시 orders 갱신.</span>
                 </div>
                 <div class="changelog-item">
@@ -1667,22 +1663,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }, 300);
 });
 </script>
-<!-- ── 모듈 로드 순서: 의존성 순서 준수 ── -->
-<script src="./js/core/state.js" defer></script>
-<script src="./js/firebase/crm-sync.js" defer></script>
-<script src="./js/core/storage.js" defer></script>
-<script src="./js/ui/core.js" defer></script>
-<script src="./js/ui/clients.js" defer></script>
-<script src="./js/delivery/form.js" defer></script>
-<script src="./js/delivery/history.js" defer></script>
-<script src="./js/settlement/settlement.js" defer></script>
-<script src="./js/ui/dashboard.js" defer></script>
-<script src="./js/stock/stock.js" defer></script>
-<script src="./js/utils/backup.js" defer></script>
-<script src="./js/ui/settings.js" defer></script>
-<script src="./js/firebase/sync.js" defer></script>
-<script src="./js/ui/manual.js" defer></script>
-<script src="./js/core/app.js" defer></script>
+<script src="./app.js" defer></script>
 <script>
 if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js', { scope: './' })
