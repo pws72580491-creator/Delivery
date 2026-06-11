@@ -1,12 +1,27 @@
-const CACHE_NAME = 'delivery-pro-v95';
+const CACHE_NAME = 'delivery-pro-v97';
 const ASSETS = [
   '/',
   '/index.html',
-  '/app.js',
   '/style.css',
   '/manifest.json',
   '/icon-192.png',
-  '/icon-512.png'
+  '/icon-512.png',
+  // ── JS 모듈 ──
+  '/js/core/state.js',
+  '/js/core/storage.js',
+  '/js/core/app.js',
+  '/js/firebase/crm-sync.js',
+  '/js/firebase/sync.js',
+  '/js/ui/core.js',
+  '/js/ui/clients.js',
+  '/js/ui/dashboard.js',
+  '/js/ui/settings.js',
+  '/js/ui/manual.js',
+  '/js/delivery/form.js',
+  '/js/delivery/history.js',
+  '/js/settlement/settlement.js',
+  '/js/stock/stock.js',
+  '/js/utils/backup.js',
 ];
 
 self.addEventListener('install', e => {
@@ -26,20 +41,17 @@ self.addEventListener('activate', e => {
 });
 
 self.addEventListener('fetch', e => {
-  // Firebase, 폰트, CDN 등 외부 요청은 네트워크 우선
   if (!e.request.url.startsWith(self.location.origin)) {
     return;
   }
-  // Stale-While-Revalidate: 캐시로 즉시 응답 + 백그라운드에서 캐시 갱신
-  // → 구버전에 갇히는 문제 해소 (다음 방문 시 최신 파일 제공)
   e.respondWith(
     caches.open(CACHE_NAME).then(cache =>
       cache.match(e.request).then(cached => {
         const networkFetch = fetch(e.request).then(res => {
           if (res.ok) cache.put(e.request, res.clone());
           return res;
-        }).catch(() => cached); // 네트워크 실패 시 캐시 폴백
-        return cached || networkFetch; // 캐시 있으면 즉시 반환, 없으면 네트워크 대기
+        }).catch(() => cached);
+        return cached || networkFetch;
       })
     )
   );
