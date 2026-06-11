@@ -88,14 +88,10 @@ function pickDeliveryClient(id, name, sharedWsId, sharedWsLabel) {
     // ── 공유 거래처 선택 시: clients에 추가하지 않고 가상 ID로 처리 ──
     // 가상 ID 형식: "__shared__:워크스페이스ID:거래처명"
     if (id === '__shared__') {
-        // 이미 내 clients에 같은 이름이 있으면 그걸 사용 (직접 등록한 경우)
-        const existing = clients.find(c => c.name === name);
-        if (existing) {
-            id = existing.id;
-        } else {
-            // 없으면 가상 ID 유지 — clients에 추가하지 않음
-            id = `__shared__:${sharedWsId}:${name}`;
-        }
+        // ★ Fix: 공유 거래처를 명시적으로 선택한 경우 B의 clients에 같은 이름이 있어도
+        //   가상 ID(__shared__:wsId:name)를 유지 — 그렇지 않으면 B 자신의 Firebase에
+        //   저장되어 A에게 반영되지 않는 문제 발생
+        id = `__shared__:${sharedWsId}:${name}`;
     }
 
     document.getElementById('selectedClientId').value = id;
@@ -511,38 +507,42 @@ async function submitOrder() {
             });
             toast('📤 오프라인 중 — 공유 납품이 대기 큐에 저장됩니다 (재연결 시 자동 업로드)', 'var(--orange)', 4000);
         } else {
-        const db = firebase.database();
-        const updates = {};
-        newOrders.forEach(order => {
-            // A의 워크스페이스 orders 경로에 저장
-            updates[`workspaces/${sharedTargetWsId}/orders/${order.id}`] = order;
-        });
-        // ★ v96 핵심 수정: A의 워크스페이스 루트 lastUpdated/writtenBy 업데이트
-        // → A의 .on('value') 리스너가 워크스페이스 루트 변경을 감지해 화면에 반영
-        // writtenBy를 B의 SESSION_ID가 아닌 고정 태그로 설정
-        // → A의 _fbValueHandler에서 자기 SESSION_ID 체크를 통과하도록
-        updates[`workspaces/${sharedTargetWsId}/lastUpdated`] = new Date().toISOString();
-        updates[`workspaces/${sharedTargetWsId}/writtenBy`]   = `__shared_by__:${SESSION_ID}`;
-        try {
-            await db.ref('/').update(updates);
-            // _sharedOrdersCache에도 즉시 반영 (화면 갱신용)
+            // Firebase 연결 중 — A의 Firebase에 직접 저장
+            const db = firebase.database();
+            const updates = {};
             newOrders.forEach(order => {
-                const wsItem = _getSharedWs().find(w => w.wsId === sharedTargetWsId);
-                _sharedOrdersCache.push({
-                    ...order,
-                    _sharedWsId:    sharedTargetWsId,
-                    _sharedWsLabel: wsItem?.label || sharedTargetWsId,
-                    _readOnly:      false, // 내가 입력한 공유 내역은 수정 가능
-                    _mySharedEntry: true,  // B가 직접 입력한 공유 내역 표시
-                });
+                updates[`workspaces/${sharedTargetWsId}/orders/${order.id}`] = order;
             });
-            toast('✅ 공유 거래처 납품 등록 완료!', 'var(--green)');
-        } catch(e) {
-            // Firebase 저장 실패 시 큐에 보관
-            _enqueueSharedOrder(sharedTargetWsId, newOrders);
-            console.error('[공유납품] Firebase 저장 오류 — 큐 저장:', e);
-            toast('⚠️ 공유 납품 저장 실패 — 대기 큐에 보관됩니다 (재연결 시 자동 업로드)', 'var(--orange)', 4000);
-        }
+            // A의 워크스페이스 루트 lastUpdated/writtenBy 업데이트
+            // → A의 .on('value') 리스너가 워크스페이스 루트 변경을 감지해 화면에 반영
+            updates[`workspaces/${sharedTargetWsId}/lastUpdated`] = new Date().toISOString();
+            updates[`workspaces/${sharedTargetWsId}/writtenBy`]   = `__shared_by__:${SESSION_ID}`;
+            try {
+                await db.ref('/').update(updates);
+                // ★ 실시간 리스너가 있으면 자동으로 _sharedOrdersCache 갱신됨
+                // 리스너가 없는 경우(첫 등록 등)에만 수동으로 캐시에 추가
+                if (!_sharedOrdersListeners[sharedTargetWsId]) {
+                    newOrders.forEach(order => {
+                        const wsItem = _getSharedWs().find(w => w.wsId === sharedTargetWsId);
+                        const already = _sharedOrdersCache.find(o => o.id === order.id);
+                        if (!already) {
+                            _sharedOrdersCache.push({
+                                ...order,
+                                _sharedWsId:    sharedTargetWsId,
+                                _sharedWsLabel: wsItem?.label || sharedTargetWsId,
+                                _readOnly:      false,
+                                _mySharedEntry: true,
+                            });
+                        }
+                    });
+                }
+                toast('✅ 공유 거래처 납품 등록 완료!', 'var(--green)');
+            } catch(e) {
+                // Firebase 저장 실패 시 큐에 보관
+                _enqueueSharedOrder(sharedTargetWsId, newOrders);
+                console.error('[공유납품] Firebase 저장 오류 — 큐 저장:', e);
+                toast('⚠️ 공유 납품 저장 실패 — 대기 큐에 보관됩니다 (재연결 시 자동 업로드)', 'var(--orange)', 4000);
+            }
         } // end else (Firebase 연결됨)
     } else {
         // ── 일반 거래처: 내 orders에 저장 ──
