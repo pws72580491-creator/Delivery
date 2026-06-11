@@ -17,11 +17,20 @@ function _saveSharedOrderQueue(queue) {
 function _enqueueSharedOrder(wsId, ordersToQueue) {
     const queue = _getSharedOrderQueue();
     ordersToQueue.forEach(order => {
-        queue.push({ wsId, order, queuedAt: new Date().toISOString() });
+        queue.push({
+            wsId,
+            order,
+            queuedAt:   new Date().toISOString(),
+            failCount:  0,  // ★ retry 정책: 실패 횟수 추적
+            retryAfter: null, // 다음 재시도 가능 시각
+        });
     });
     _saveSharedOrderQueue(queue);
     _updateSharedQueueBadge();
 }
+
+const _QUEUE_MAX_RETRIES = 3;          // 최대 재시도 횟수
+const _QUEUE_RETRY_DELAYS = [5000, 15000, 60000]; // 1·2·3차 실패 후 대기(ms)
 
 /** Firebase 재연결 시 오프라인 큐 일괄 업로드 */
 async function _flushSharedOrderQueue() {
@@ -29,11 +38,18 @@ async function _flushSharedOrderQueue() {
     if (!queue.length) return;
     if (typeof firebase === 'undefined' || !firebase.apps.length) return;
 
-    const db = firebase.database();
+    const now    = Date.now();
+    const db     = firebase.database();
     const failed = [];
+    const dead   = []; // 최대 재시도 초과 항목
     let successCnt = 0;
 
     for (const item of queue) {
+        // retryAfter 미도래 항목은 이번 플러시에서 건너뜀
+        if (item.retryAfter && new Date(item.retryAfter).getTime() > now) {
+            failed.push(item);
+            continue;
+        }
         try {
             if (item._delete) {
                 await db.ref(`workspaces/${item.wsId}/orders/${item.orderId}`).remove();
@@ -57,17 +73,36 @@ async function _flushSharedOrderQueue() {
             }
             successCnt++;
         } catch(e) {
-            failed.push(item);
+            const fc = (item.failCount || 0) + 1;
+            if (fc >= _QUEUE_MAX_RETRIES) {
+                // 최대 재시도 초과 → 영구 제거 후 사용자에게 알림
+                dead.push(item);
+                console.error(`[공유큐] ${_QUEUE_MAX_RETRIES}회 실패 — 항목 폐기:`, item.order?.id || item.orderId);
+            } else {
+                const delayMs  = _QUEUE_RETRY_DELAYS[fc - 1] || 60000;
+                failed.push({
+                    ...item,
+                    failCount:  fc,
+                    retryAfter: new Date(now + delayMs).toISOString(),
+                    lastError:  e.message || String(e),
+                });
+            }
         }
     }
 
     _saveSharedOrderQueue(failed);
+
     if (successCnt > 0) {
         renderOrders(); updateInfoCounts(); updateNavBadges(); renderDashboard();
         toast(`📤 오프라인 중 작성한 공유 납품 ${successCnt}건이 업로드되었습니다`, 'var(--green)', 4000);
     }
+    if (dead.length > 0) {
+        toast(`⚠️ 공유 납품 ${dead.length}건 업로드 영구 실패 — 직접 재입력 필요`, 'var(--red)', 6000);
+        console.error('[공유큐] 폐기된 항목:', dead);
+    }
     if (failed.length > 0) {
-        console.warn(`[공유큐] ${failed.length}건 업로드 실패 — 다음 연결 시 재시도`);
+        const retrying = failed.filter(f => f.retryAfter);
+        console.warn(`[공유큐] ${retrying.length}건 대기 중 — 다음 연결 시 재시도`);
     }
     _updateSharedQueueBadge();
 }
@@ -156,6 +191,8 @@ function _saveSharedWs(arr) {
 let _sharedClientsFromWs = [];
 // 공유 워크스페이스에서 가져온 납품 내역 캐시 { wsId, wsLabel, orders[] }
 let _sharedOrdersCache = [];
+// 공유 워크스페이스별 실시간 orders 리스너 핸들 { wsId → { ref, cb, allowedNames } }
+const _sharedOrdersListeners = {};
 
 /**
  * 등록된 공유 워크스페이스들의 sharedClients 를 Firebase에서 읽어 캐시
@@ -183,33 +220,70 @@ async function _loadSharedClientsFromWs() {
     }));
     _sharedClientsFromWs = result;
 
-    // ── 공유 워크스페이스 납품 내역도 함께 캐시 ──
-    const ordersResult = [];
+    // ── 공유 워크스페이스 납품 내역 실시간 리스너 등록 ──
+    // 더 이상 없는 워크스페이스 리스너 제거
+    const currentWsIds = new Set(wsArr.map(item => item.wsId || item));
+    for (const wsId of Object.keys(_sharedOrdersListeners)) {
+        if (!currentWsIds.has(wsId)) {
+            const h = _sharedOrdersListeners[wsId];
+            if (h.ref && h.cb) h.ref.off('value', h.cb);
+            delete _sharedOrdersListeners[wsId];
+            // 해당 ws 캐시 제거
+            _sharedOrdersCache = _sharedOrdersCache.filter(o => o._sharedWsId !== wsId);
+        }
+    }
+
+    // 새 워크스페이스 리스너 등록
     await Promise.all(wsArr.map(async item => {
         const wsId    = item.wsId || item;
         const wsLabel = item.label || wsId;
+        if (_sharedOrdersListeners[wsId]) return; // 이미 등록됨
+
         try {
             // 공개된 거래처 이름 목록 확인
             const scSnap = await firebase.database().ref(`workspaces/${wsId}/sharedClients`).get();
             const allowedNames = scSnap.exists() ? (scSnap.val() || []) : [];
-            if (!allowedNames.length) return; // 공개 거래처 없으면 스킵
+            // ★ allowedNames가 비어있어도 orders 리스너를 등록해 둠
+            // → A가 나중에 공개 허용을 추가하면 sharedClients 리스너가 재등록을 트리거
+            // 단, 실제 필터링 시 allowedNames=[] → wsOrders=[] 이므로 데이터 노출 없음
+            const ordersRef = firebase.database().ref(`workspaces/${wsId}/orders`);
 
-            const ordSnap = await firebase.database().ref(`workspaces/${wsId}/orders`).get();
-            if (!ordSnap.exists()) return;
-            const myWsId = localStorage.getItem('workspaceId') || '';
-            const wsOrders = Object.values(ordSnap.val() || {})
-                .filter(o => allowedNames.includes(o.clientName)); // 공개된 거래처 내역만
-            wsOrders.forEach(o => ordersResult.push({
-                ...o,
-                _sharedWsId:    wsId,
-                _sharedWsLabel: wsLabel,
-                _readOnly:      false,  // 읽기 전용 해제 — 수정/결제/삭제 모두 가능
-                _mySharedEntry: true,   // B가 조회하는 공유 내역 (A의 Firebase에 반영)
-            }));
-        } catch(e) { /* 접근 불가 워크스페이스 무시 */ }
+            // 실시간 리스너: A의 orders가 바뀔 때마다 B의 캐시 갱신
+            const ordersCb = snap => {
+                const wsOrders = Object.values(snap.val() || {})
+                    .filter(o => allowedNames.includes(o.clientName))
+                    .map(o => ({
+                        ...o,
+                        _sharedWsId:    wsId,
+                        _sharedWsLabel: wsLabel,
+                        _readOnly:      false,
+                        _mySharedEntry: true,
+                    }));
+                // 이 wsId의 기존 캐시만 교체
+                _sharedOrdersCache = [
+                    ..._sharedOrdersCache.filter(o => o._sharedWsId !== wsId),
+                    ...wsOrders,
+                ];
+                renderOrders(); // 내역 탭 즉시 갱신
+            };
+
+            ordersRef.on('value', ordersCb, e => console.warn('[공유리스너]', wsId, e));
+            _sharedOrdersListeners[wsId] = { ref: ordersRef, cb: ordersCb, allowedNames };
+            console.info('[공유리스너] 등록:', wsId, '허용:', allowedNames);
+        } catch(e) { console.warn('[공유리스너] 등록 실패:', wsId, e.message); }
     }));
-    _sharedOrdersCache = ordersResult;
-    renderOrders(); // 내역 탭 갱신
+    // 초기 렌더
+    renderOrders();
+}
+
+/** 공유 워크스페이스 orders 리스너 전체 해제 (워크스페이스 제거/로그아웃 시) */
+function _detachSharedOrdersListeners() {
+    for (const wsId of Object.keys(_sharedOrdersListeners)) {
+        const h = _sharedOrdersListeners[wsId];
+        if (h.ref && h.cb) h.ref.off('value', h.cb);
+        delete _sharedOrdersListeners[wsId];
+    }
+    _sharedOrdersCache = [];
 }
 
 // 내가 공개 허용한 거래처 목록 (Firebase에 저장)
@@ -346,7 +420,24 @@ function addSharedWs() {
     _saveSharedWs(list);
     input.value = '';
     renderSharedWsList();
-    _loadSharedClientsFromWs(); // 공유 거래처 캐시 갱신
+    _loadSharedClientsFromWs(); // 공유 거래처 캐시 + orders 실시간 리스너 등록
+    // ★ 새로 추가된 ws의 sharedClients 변경도 실시간으로 감지
+    if (typeof firebase !== 'undefined' && firebase.apps.length && isConnected) {
+        firebase.database().ref(`workspaces/${id}/sharedClients`)
+            .on('value', snap => {
+                const newAllowed = snap.exists() ? (snap.val() || []) : [];
+                const h = _sharedOrdersListeners[id];
+                if (!h) { _loadSharedClientsFromWs().catch(() => {}); return; }
+                const prev = JSON.stringify([...h.allowedNames].sort());
+                const next = JSON.stringify([...newAllowed].sort());
+                if (prev === next) return;
+                h.allowedNames = newAllowed;
+                h.ref.off('value', h.cb);
+                delete _sharedOrdersListeners[id];
+                _loadSharedClientsFromWs().catch(() => {});
+                console.info('[공유리스너] sharedClients 변경 감지 → 재등록:', id);
+            });
+    }
     toast(`✅ "${id}" 공유 등록 완료`, 'var(--green)');
 }
 
@@ -376,10 +467,18 @@ async function removeSharedWs(idx) {
             delete c._sharedLabel;
         }
     });
+    // ★ 해당 wsId의 실시간 리스너 즉시 해제
+    const h = _sharedOrdersListeners[removedWsId];
+    if (h) {
+        if (h.ref && h.cb) h.ref.off('value', h.cb);
+        delete _sharedOrdersListeners[removedWsId];
+    }
+    _sharedOrdersCache = _sharedOrdersCache.filter(o => o._sharedWsId !== removedWsId);
     _saveAndFlush();
     invalidateClientsCache();
     renderSharedWsList();
-    _loadSharedClientsFromWs(); // 공유 거래처 캐시 갱신
+    renderOrders();
+    _loadSharedClientsFromWs(); // 남은 ws 캐시 갱신
     toast(`🗑️ "${target.wsId}" 공유 해제`);
 }
 
@@ -389,7 +488,7 @@ function setSyncStatus(state) {
     const el = document.getElementById('syncStatus');
     const id = localStorage.getItem('workspaceId')||'';
     el.className = ''; // reset
-    if (state==='online')  { el.innerHTML=`🟢 온라인 동기화: ${id}`; el.classList.add('status-online'); }
+    if (state==='online')  { el.innerHTML=`🟢 온라인 동기화: ${escapeHtml(id)}`; el.classList.add('status-online'); }
     else if (state==='syncing') { el.innerHTML='🟡 동기화 중...'; el.classList.add('status-syncing'); }
     else if (state==='error')   { el.innerHTML='🔴 동기화 오류 — 재연결 시도 중'; el.classList.add('status-error'); }
     else                        { el.innerHTML='⬡ 오프라인 모드'; el.classList.add('status-offline'); }
@@ -431,6 +530,11 @@ function _doConnect(id, auto=false) {
             try { firebase.database().setPersistenceEnabled(true); } catch(e) {}
         }
         if (workspaceRef) workspaceRef.off();
+        // ★ 재연결 시 기존 sharedClients 리스너 중복 방지 — 먼저 전부 해제
+        _getSharedWs().forEach(item => {
+            const wsId = item.wsId || item;
+            try { firebase.database().ref(`workspaces/${wsId}/sharedClients`).off(); } catch(e) {}
+        });
         workspaceRef = firebase.database().ref('workspaces/'+id);
         localStorage.setItem('workspaceId', id);
 
@@ -445,6 +549,32 @@ function _doConnect(id, auto=false) {
 
         // ── 실시간 리스너를 .get() 이전에 먼저 등록 (이벤트 유실 방지) ──
         workspaceRef.on('value', _fbValueHandler);
+
+        // ★ 공유 워크스페이스의 sharedClients 변경 감지 리스너
+        // A가 공개 허용 거래처를 추가/제거하면 B의 orders 리스너 allowedNames도 즉시 갱신
+        _getSharedWs().forEach(item => {
+            const wsId = item.wsId || item;
+            firebase.database().ref(`workspaces/${wsId}/sharedClients`)
+                .on('value', snap => {
+                    const newAllowed = snap.exists() ? (snap.val() || []) : [];
+                    const h = _sharedOrdersListeners[wsId];
+                    if (!h) {
+                        // 리스너가 없으면 새로 등록 (처음 공개 허용이 생긴 경우)
+                        _loadSharedClientsFromWs().catch(() => {});
+                        return;
+                    }
+                    // allowedNames 변경이 없으면 무시
+                    const prev = JSON.stringify([...h.allowedNames].sort());
+                    const next = JSON.stringify([...newAllowed].sort());
+                    if (prev === next) return;
+                    h.allowedNames = newAllowed;
+                    // orders 리스너 재등록 (allowedNames 필터가 클로저에 캡처되므로 재등록 필요)
+                    h.ref.off('value', h.cb);
+                    delete _sharedOrdersListeners[wsId];
+                    _loadSharedClientsFromWs().catch(() => {});
+                    console.info('[공유리스너] sharedClients 변경 감지 → 재등록:', wsId);
+                });
+        });
 
         // ── Firebase 소켓 실제 연결 상태 추적 (.info/connected) ──
         // window.online/offline 이벤트는 WiFi 수준만 감지 → 슬립·방화벽·모바일 백그라운드 후
@@ -652,6 +782,12 @@ function disconnectWorkspace() {
     if (workspaceRef) workspaceRef.off();
     // .info/connected 리스너 해제 (연결 해제 시 불필요한 상태 변경 차단)
     try { firebase.database().ref('.info/connected').off(); } catch(e) {}
+    // ★ 공유 워크스페이스 실시간 리스너 전체 해제 (orders + sharedClients)
+    _detachSharedOrdersListeners();
+    _getSharedWs().forEach(item => {
+        const wsId = item.wsId || item;
+        try { firebase.database().ref(`workspaces/${wsId}/sharedClients`).off(); } catch(e) {}
+    });
     // 실시간 폴링 백업 타이머 정리
     if (_rtPollTimer) { clearInterval(_rtPollTimer); _rtPollTimer = null; }
     debouncedSync.cancel();
