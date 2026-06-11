@@ -1152,6 +1152,7 @@ async function confirmPartialPayDiscount() {
 
     const now = new Date().toISOString();
     let remain = amount;
+    const fbUpdates = {}; // 공유 내역 Firebase 업데이트 묶음
 
     for (const o of list) {
         const due = o.total - (o.paidAmount || 0);
@@ -1159,13 +1160,32 @@ async function confirmPartialPayDiscount() {
         const apply = Math.min(due, remain);
         remain -= apply;
         const discountAmt = due - apply; // 이 전표에 적용된 할인액
-        o.isPaid     = true;
-        o.paidAmount = (o.paidAmount || 0) + apply;  // 실수령액만 저장
-        o.paidAt     = now;
-        o.paidMethod = method;
-        if (discountAmt > 0) o.discount = (o.discount || 0) + discountAmt;
-        if (note) o.paidNote = note; else delete o.paidNote;
+        const patch = {
+            isPaid:     true,
+            paidAmount: (o.paidAmount || 0) + apply, // 실수령액만 저장
+            paidAt:     now,
+            paidMethod: method,
+        };
+        if (discountAmt > 0) patch.discount = (o.discount || 0) + discountAmt;
+        if (note) patch.paidNote = note;
+        Object.assign(o, patch);
         delete o.crmControlled; // 납품앱 직접 결제 → CRM 우선권 해제
+
+        if (o._sharedWsId) {
+            // 공유 전표: A의 Firebase에 직접 반영
+            Object.keys(patch).forEach(k => {
+                fbUpdates[`workspaces/${o._sharedWsId}/orders/${o.id}/${k}`] = patch[k] ?? null;
+            });
+            fbUpdates[`workspaces/${o._sharedWsId}/orders/${o.id}/updatedAt`] = now;
+        } else {
+            _markDirtyOrder(o.id); // 내 전표: delta sync 마킹
+        }
+    }
+
+    // 공유 내역 일괄 Firebase 반영
+    if (Object.keys(fbUpdates).length && typeof firebase !== 'undefined' && firebase.apps.length) {
+        firebase.database().ref('/').update(fbUpdates)
+            .catch(e => console.warn('[할인완납공유]', e));
     }
 
     _saveAndFlush();
@@ -1176,8 +1196,8 @@ async function confirmPartialPayDiscount() {
     showClientStatement(clientName, month);
     const discount = total - amount;
     toast(`✂️ 할인 완납 처리 (할인 ${fmt(discount)}원)`, 'var(--green)');
-    // CRM 역방향 패치: 해당 전표들 각각 패치
-    list.forEach(o => _afterDlPayPatch(o.id, o));
+    // CRM 역방향 패치: 내 전표만 (공유 전표는 A의 거래장이 직접 처리)
+    list.filter(o => !o._sharedWsId).forEach(o => _afterDlPayPatch(o.id, o));
 }
 
 async function confirmPartialPay() {
@@ -1389,7 +1409,15 @@ function confirmPayEdit() {
 
     if (foundPeConfirm.isShared) {
         _patchSharedOrder(foundPeConfirm.sharedWsId, orderId, patch)
-            .then(ok => { if (ok) { renderOrders(); renderDashboard(); updateInfoCounts(); updateNavBadges(); _refreshUnpaidIfActive(); _refreshSettlementIfActive(); showClientStatement(clientName, month); } });
+            .then(ok => {
+                if (ok) {
+                    renderOrders(); renderDashboard(); updateInfoCounts(); updateNavBadges();
+                    _refreshUnpaidIfActive(); _refreshSettlementIfActive();
+                    showClientStatement(clientName, month);
+                    // 공유 전표도 CRM 역방향 패치
+                    _afterDlPayPatch(o.id, o);
+                }
+            });
     } else {
         _markDirtyOrder(orderId);
         _saveAndFlush();
@@ -1467,5 +1495,7 @@ async function _doBulkPay(selectedMethod) {
     _refreshUnpaidIfActive();
     _refreshSettlementIfActive();
     toast(`💚 ${unpaidList.length}건 완납 처리 완료 · ${_methodLabel(selectedMethod)}`, 'var(--green)');
+    // CRM 역방향 패치 (내 전표 + 공유 전표 모두 — wsId는 crm-sync가 _sharedWsId로 판단)
+    unpaidList.forEach(o => _afterDlPayPatch(o.id, o));
 }
 
