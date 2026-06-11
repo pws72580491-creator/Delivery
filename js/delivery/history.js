@@ -351,7 +351,13 @@ async function togglePaid(id) {
                         crmControlled: null, dlControlled: null };
         if (foundToggle.isShared) {
             const ok = await _patchSharedOrder(foundToggle.sharedWsId, id, patch);
-            if (ok) { renderOrders(); renderDashboard(); updateInfoCounts(); updateNavBadges(); _refreshUnpaidIfActive(); _refreshSettlementIfActive(); toast('🔴 미수로 변경'); }
+            if (ok) {
+                renderOrders(); renderDashboard(); updateInfoCounts(); updateNavBadges();
+                _refreshUnpaidIfActive(); _refreshSettlementIfActive();
+                toast('🔴 미수로 변경');
+                // 공유 전표도 CRM 역방향 패치 (미수금 상태로 반영)
+                _afterDlPayPatch(id, { ...o, ...patch });
+            }
         } else {
             Object.assign(o, patch);
             _markDirtyOrder(id);
@@ -442,6 +448,8 @@ async function confirmQuickPayDiscount(method) {
             renderOrders(); renderDashboard(); updateInfoCounts(); updateNavBadges();
             _refreshUnpaidIfActive(); _refreshSettlementIfActive();
             toast(msg, 'var(--green)');
+            // 공유 전표도 CRM 역방향 패치 (wsId는 crm-sync가 _sharedWsId로 판단)
+            _afterDlPayPatch(orderId, o);
         }
     } else {
         Object.assign(o, patch);
@@ -499,6 +507,8 @@ async function confirmQuickPay(method) {
             renderOrders(); renderDashboard(); updateInfoCounts(); updateNavBadges();
             _refreshUnpaidIfActive(); _refreshSettlementIfActive();
             toast(label, 'var(--green)');
+            // 공유 전표도 CRM 역방향 패치 (wsId는 crm-sync가 _sharedWsId로 판단)
+            _afterDlPayPatch(orderId, o);
         }
     } else {
         Object.assign(o, patch);

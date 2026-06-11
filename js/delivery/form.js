@@ -497,8 +497,20 @@ async function submitOrder() {
     if (isSharedVirtual && sharedTargetWsId) {
         // ── 공유 거래처: A의 Firebase에 직접 저장 ──
         if (typeof firebase === 'undefined' || !firebase.apps.length) {
-            return toast('❗ 공유 거래처 납품은 Firebase 연결이 필요합니다', 'var(--red)', 3500);
-        }
+            // Firebase 미연결 시 오프라인 큐에 저장 → 재연결 시 자동 업로드
+            _enqueueSharedOrder(sharedTargetWsId, newOrders);
+            newOrders.forEach(order => {
+                const wsItem = _getSharedWs().find(w => w.wsId === sharedTargetWsId);
+                _sharedOrdersCache.push({
+                    ...order,
+                    _sharedWsId:    sharedTargetWsId,
+                    _sharedWsLabel: wsItem?.label || sharedTargetWsId,
+                    _readOnly:      false,
+                    _mySharedEntry: true,
+                });
+            });
+            toast('📤 오프라인 중 — 공유 납품이 대기 큐에 저장됩니다 (재연결 시 자동 업로드)', 'var(--orange)', 4000);
+        } else {
         const db = firebase.database();
         const updates = {};
         newOrders.forEach(order => {
@@ -526,9 +538,12 @@ async function submitOrder() {
             });
             toast('✅ 공유 거래처 납품 등록 완료!', 'var(--green)');
         } catch(e) {
-            console.error('[공유납품] Firebase 저장 오류:', e);
-            return toast('❗ 공유 거래처 납품 저장 실패: ' + e.message, 'var(--red)', 4000);
+            // Firebase 저장 실패 시 큐에 보관
+            _enqueueSharedOrder(sharedTargetWsId, newOrders);
+            console.error('[공유납품] Firebase 저장 오류 — 큐 저장:', e);
+            toast('⚠️ 공유 납품 저장 실패 — 대기 큐에 보관됩니다 (재연결 시 자동 업로드)', 'var(--orange)', 4000);
         }
+        } // end else (Firebase 연결됨)
     } else {
         // ── 일반 거래처: 내 orders에 저장 ──
         newOrders.forEach(order => {
