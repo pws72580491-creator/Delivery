@@ -887,7 +887,20 @@ function _flushSync() {
 
 // 화면 꺼짐 / 다른 앱으로 전환 시
 document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'hidden') _flushSync();
+    if (document.visibilityState === 'hidden') {
+        _flushSync();
+    } else {
+        // 탭 복귀 시: 실시간 리스너가 살아 있으면 자동 갱신됨 (별도 작업 불필요)
+        // 리스너가 없는 경우(오프라인 복귀, 첫 연결 전 등)에만 수동 갱신
+        try {
+            const listeners = typeof _sharedOrdersListeners !== 'undefined'
+                ? _sharedOrdersListeners : {};
+            if (isConnected && Object.keys(listeners).length === 0
+                && typeof _getSharedWs === 'function' && _getSharedWs().length > 0) {
+                _loadSharedClientsFromWs().catch(() => {});
+            }
+        } catch(e) { /* 초기화 전 호출 무시 */ }
+    }
 });
 
 // 브라우저 탭 닫기 / PWA 종료 시

@@ -303,9 +303,14 @@ const debouncedSync = debounce(async () => {
     if (ph !== lastHash.prices)  { updates.prices     = prices;     changed = true; }
     if (sh !== lastHash.stock)   { updates.stockItems = _getLightStock(); changed = true; }
     if (!changed) return;
-    // writtenBy를 데이터와 함께 업로드 — 리스너가 자기 업데이트를 정확히 무시하도록
-    updates.lastUpdated = new Date().toISOString();
+    // writtenBy / version 필드: 리스너 echo 식별 + 충돌 감지
+    const nowIso = new Date().toISOString();
+    updates.lastUpdated = nowIso;
     updates.writtenBy   = SESSION_ID;
+    // ★ version: 업로드마다 단조 증가 (로컬 timestamp 기반)
+    // _fbValueHandler에서 version이 로컬보다 작으면 서버 수신을 무시해 충돌 방지
+    updates.version = Date.now();
+    localStorage.setItem('ws_version', String(updates.version));
     // ★ Problem 3 수정: 업로드 전에 dirty set을 스냅샷으로 복사해 두고
     //   실패 시 해당 id들을 다시 dirty로 복원 → 재시도 시 누락 방지
     const dirtySnap   = new Set(_dirtyOrders);

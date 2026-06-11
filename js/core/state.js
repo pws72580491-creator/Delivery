@@ -341,7 +341,13 @@ let lastHash = { clients:'', orders:'', prices:'', stock:'' };
 // 변경된 order id만 추적 → debouncedSync에서 건별 업로드 (payload 최소화)
 const _dirtyOrders   = new Set(); // 변경/추가된 order id
 const _deletedOrders = new Set(); // 삭제된 order id
-function _markDirtyOrder(id)   { _dirtyOrders.add(String(id));   _deletedOrders.delete(String(id)); }
+function _markDirtyOrder(id) {
+    _dirtyOrders.add(String(id));
+    _deletedOrders.delete(String(id));
+    // ★ 수정 전표 updatedAt 자동 갱신 (Firebase 충돌 판단 기준)
+    const o = orders.find(x => String(x.id) === String(id));
+    if (o && !o._skipUpdatedAt) o.updatedAt = new Date().toISOString();
+}
 function _markDeletedOrder(id) { _deletedOrders.add(String(id)); _dirtyOrders.delete(String(id)); }
 function _clearOrderDelta()    { _dirtyOrders.clear(); _deletedOrders.clear(); }
 
@@ -390,6 +396,19 @@ function _fbValueHandler(snap) {
         if (!_initialLoadDone) return;  // 초기 .get() 처리 전 차단
         if (_connectGuard)     return;  // 초기 연결 중 레이스 컨디션 차단
         if (d.writtenBy === SESSION_ID) return; // 자기 자신이 올린 echo 차단
+
+        // ★ version 기반 충돌 감지: 서버 version이 로컬보다 낮으면 stale 수신 무시
+        // (로컬에서 막 업로드한 직후 다른 기기의 이전 버전이 늦게 도착하는 경우 방어)
+        if (d.version) {
+            const localVer = parseInt(localStorage.getItem('ws_version') || '0', 10);
+            if (d.version < localVer && d.writtenBy !== 'CRM_EXTERNAL') {
+                console.info('[충돌감지] 서버 version이 로컬보다 낮음 — 수신 무시',
+                    'server:', d.version, 'local:', localVer);
+                return;
+            }
+            // 수신 성공 시 로컬 version 갱신
+            localStorage.setItem('ws_version', String(d.version));
+        }
 
         // ★ v96: B가 공유 납품 저장 시 writtenBy = "__shared_by__:{B의 SESSION_ID}"
         // → A 화면에서 즉시 orders만 갱신 (타임스탬프 비교 우회)
