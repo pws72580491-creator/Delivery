@@ -1,4 +1,4 @@
-const CACHE_NAME = 'delivery-pro-v97';
+const CACHE_NAME = 'delivery-pro-v97-flat';
 const ASSETS = [
   '/',
   '/index.html',
@@ -7,21 +7,21 @@ const ASSETS = [
   '/icon-192.png',
   '/icon-512.png',
   // ── JS 모듈 ──
-  '/js/core/state.js',
-  '/js/core/storage.js',
-  '/js/core/app.js',
-  '/js/firebase/crm-sync.js',
-  '/js/firebase/sync.js',
-  '/js/ui/core.js',
-  '/js/ui/clients.js',
-  '/js/ui/dashboard.js',
-  '/js/ui/settings.js',
-  '/js/ui/manual.js',
-  '/js/delivery/form.js',
-  '/js/delivery/history.js',
-  '/js/settlement/settlement.js',
-  '/js/stock/stock.js',
-  '/js/utils/backup.js',
+  '/js/state.js',
+  '/js/storage.js',
+  '/js/app.js',
+  '/js/crm-sync.js',
+  '/js/sync.js',
+  '/js/core.js',
+  '/js/clients.js',
+  '/js/dashboard.js',
+  '/js/settings.js',
+  '/js/manual.js',
+  '/js/form.js',
+  '/js/history.js',
+  '/js/settlement.js',
+  '/js/stock.js',
+  '/js/backup.js',
 ];
 
 self.addEventListener('install', e => {
