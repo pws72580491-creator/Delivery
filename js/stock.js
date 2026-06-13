@@ -500,13 +500,25 @@ function getYesterdayClosingQty(si) {
     const todayStartUTC = new Date(today + 'T00:00:00+09:00').getTime();
     const log = (si.log || []);
 
-    // 오늘 이전(어제 이하) 이력 중 가장 최근 것 — at 타임스탬프 기준
+    // 오늘 이전(어제 이하) 이력 중 가장 최근 것
+    // ※ auto(납품차감) 타입은 at=저장시각(오늘)이지만 date=납품날짜이므로
+    //    date 기준으로 오늘 여부를 판단해야 함
     const prevLog = log
         .filter(l => {
+            if (l.type === 'auto') {
+                // 납품차감은 납품날짜(date)가 오늘 이전인 것만 포함
+                return (l.date || '') < today;
+            }
             const t = l.at ? new Date(l.at).getTime() : 0;
             return t > 0 && t < todayStartUTC;
         })
-        .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
+        .sort((a, b) => {
+            // auto 로그는 at 대신 date+'T23:59:59+09:00' 기준으로 정렬
+            const getTs = l => l.type === 'auto'
+                ? new Date((l.date || '1970-01-01') + 'T23:59:59+09:00').getTime()
+                : new Date(l.at).getTime();
+            return getTs(b) - getTs(a);
+        });
 
     if (prevLog.length > 0) {
         // 어제까지 마지막 이력의 after가 어제 마감 재고

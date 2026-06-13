@@ -201,7 +201,12 @@ const _sharedOrdersListeners = {};
 async function _loadSharedClientsFromWs() {
     const wsArr = _getSharedWs();
     if (!wsArr.length || typeof firebase === 'undefined' || !firebase.apps.length) {
-        _sharedClientsFromWs = [];
+        // ★ 오프라인/미연결 시: localStorage 캐시로 공유 거래처 목록 복원
+        //   (오프라인 중에도 공유 거래처 직접납품 선택 가능하도록, v96 이식)
+        try {
+            const cached = JSON.parse(localStorage.getItem('_sharedClientsCache') || '[]');
+            _sharedClientsFromWs = Array.isArray(cached) ? cached : [];
+        } catch(e) { _sharedClientsFromWs = []; }
         return;
     }
     const result = [];
@@ -219,6 +224,8 @@ async function _loadSharedClientsFromWs() {
         } catch(e) { /* 접근 불가 워크스페이스 무시 */ }
     }));
     _sharedClientsFromWs = result;
+    // ★ 다음 오프라인 시작 시 사용할 캐시 저장
+    try { localStorage.setItem('_sharedClientsCache', JSON.stringify(result)); } catch(e) {}
 
     // ── 공유 워크스페이스 납품 내역 실시간 리스너 등록 ──
     // 더 이상 없는 워크스페이스 리스너 제거
@@ -495,6 +502,9 @@ function setSyncStatus(state) {
     // 연결 중일 때만 "현재 워크스페이스 삭제" 버튼 표시
     const delRow = document.getElementById('deleteCurrentWsRow');
     if (delRow) delRow.style.display = (state === 'online') ? 'block' : 'none';
+    // 연결 중 + CRM 연동 활성화 시에만 "CRM 재동기화" 버튼 표시
+    const crmRow = document.getElementById('crmResyncRow');
+    if (crmRow) crmRow.style.display = (state === 'online' && typeof CRM_SYNC_ENABLED !== 'undefined' && CRM_SYNC_ENABLED) ? 'block' : 'none';
 }
 
 // Firebase SDK 로드 완료 대기 (defer 스크립트 타이밍 보정)
@@ -587,16 +597,24 @@ function _doConnect(id, auto=false) {
                     // (직접 debouncedSync 호출 시 서버에서 변경된 내용을 놓칠 수 있음)
                     isConnected = true;
                     setSyncStatus('online');
-                    // 재연결 시 공유 거래처 목록 갱신 + 오프라인 큐 플러시
+                    // 재연결 시 공유 거래처 목록 갱신
                     _loadSharedClientsFromWs().catch(() => {});
-                    _flushSharedOrderQueue().catch(() => {});
                     if (_initialLoadDone) {
-                        workspaceRef.get().then(snap => {
+                        // ★ v99 fix: 서버 상태 확인 완료 후 큐 flush — 순서 보장
+                        // 큐 flush를 먼저 하면 flush 직전 .get() 스냅샷이 flush 이전 상태를
+                        // 찍어서 로컬이 오래된 것처럼 판단하는 false-stale 문제 차단
+                        workspaceRef.get().then(async snap => {
                             const d = snap.val();
-                            if (!d) { debouncedSync(); return; }
+                            if (!d) {
+                                await _flushSharedOrderQueue().catch(() => {});
+                                debouncedSync();
+                                return;
+                            }
                             const serverTime = d.lastUpdated ? new Date(d.lastUpdated).getTime() : 0;
                             const lastLocalMs = (() => { const s = localStorage.getItem('lastLocalUpdated'); return s ? new Date(s).getTime() : 0; })();
                             const localWriteMs = Math.max(_localWriteTime, lastLocalMs);
+                            // 큐 flush 먼저 완료 후 로컬↔서버 판단
+                            await _flushSharedOrderQueue().catch(() => {});
                             if (localWriteMs > serverTime) {
                                 // 로컬이 최신 → 서버에 올리기
                                 debouncedSync();
@@ -604,7 +622,13 @@ function _doConnect(id, auto=false) {
                                 // 서버가 최신 → 리스너가 받아서 처리 (강제 트리거)
                                 _fbValueHandler(snap);
                             }
-                        }).catch(() => debouncedSync()); // 실패 시 일단 올리기
+                        }).catch(async () => {
+                            await _flushSharedOrderQueue().catch(() => {});
+                            debouncedSync(); // 실패 시 일단 올리기
+                        });
+                    } else {
+                        // 초기 로드 전이면 큐만 flush
+                        _flushSharedOrderQueue().catch(() => {});
                     }
                 }
             } else {
@@ -652,13 +676,16 @@ function _doConnect(id, auto=false) {
                     const _buildUploadPayload = () => {
                         const ordersMap = {};
                         orders.forEach(o => { ordersMap[o.id] = _minifyOrder(o); });
+                        const ver = Date.now();
+                        localStorage.setItem('ws_version', String(ver));
                         return {
                             clients:    clients.map(_minifyClient),
                             orders:     ordersMap,
                             prices,
                             stockItems: _getLightStock(),
                             lastUpdated: new Date().toISOString(),
-                            writtenBy:  SESSION_ID
+                            writtenBy:  SESSION_ID,
+                            version:    ver,  // ★ v99 fix: 충돌 감지용 version 포함
                         };
                     };
                     if (auto) {
@@ -714,10 +741,19 @@ function _doConnect(id, auto=false) {
             } else if (localHasData) {
                 // ── 서버 비어있음 → 로컬 데이터 업로드 ──
                 const ch = dataHash(clients), oh = dataHash(orders), ph = dataHash(prices), sh = dataHash(stockItems);
+                // ★ v99 fix: _minifyOrder 적용 + version 포함
+                const ordersMap = {};
+                orders.forEach(o => { ordersMap[o.id] = _minifyOrder(o); });
+                const ver = Date.now();
+                localStorage.setItem('ws_version', String(ver));
                 workspaceRef.update({
-                    clients, orders, prices, stockItems,
+                    clients:    clients.map(_minifyClient),
+                    orders:     ordersMap,
+                    prices,
+                    stockItems: _getLightStock(),
                     lastUpdated: new Date().toISOString(),
-                    writtenBy: SESSION_ID
+                    writtenBy:  SESSION_ID,
+                    version:    ver,
                 }).then(() => {
                     lastHash.clients = ch; lastHash.orders = oh; lastHash.prices = ph; lastHash.stock = sh;
                     setSyncStatus('online');
@@ -739,7 +775,8 @@ function _doConnect(id, auto=false) {
             // — 실시간 리스너(.on)와 중복 방지: hash 비교 후 실제 변경분만 처리
             if (_rtPollTimer) clearInterval(_rtPollTimer);
             _rtPollTimer = setInterval(() => {
-                if (!workspaceRef || !isConnected || _syncGuard) return;
+                // ★ v99 fix: _connectGuard 중(초기 연결 처리 중)에는 폴링 생략
+                if (!workspaceRef || !isConnected || _syncGuard || _connectGuard) return;
                 workspaceRef.get().then(snap => {
                     const d = snap.val();
                     if (!d) return;

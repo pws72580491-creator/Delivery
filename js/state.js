@@ -415,13 +415,29 @@ function _fbValueHandler(snap) {
 
         // ★ v96: B가 공유 납품 저장 시 writtenBy = "__shared_by__:{B의 SESSION_ID}"
         // → A 화면에서 즉시 orders만 갱신 (타임스탬프 비교 우회)
+        // ★ v99 fix: 전체 교체 대신 개별 order merge — 다기기 동시 작업 시 내 데이터 보호
         if (typeof d.writtenBy === 'string' && d.writtenBy.startsWith('__shared_by__:')) {
             if (d.orders) {
-                const inc = toArray(d.orders).map(_normOrderFromFb);
-                const h = dataHash(inc);
-                if (h !== lastHash.orders) {
-                    orders = inc;
-                    lastHash.orders = h;
+                const incoming = toArray(d.orders).map(_normOrderFromFb);
+                // 서버에서 온 orders map 기준으로 기존 orders를 개별 merge
+                const serverMap = {};
+                incoming.forEach(o => { serverMap[o.id] = o; });
+                let changed = false;
+                // 1) 서버에 있는 항목: 추가 or 갱신
+                incoming.forEach(o => {
+                    const idx = orders.findIndex(x => x.id === o.id);
+                    if (idx < 0) {
+                        orders.push(o);
+                        changed = true;
+                    } else if (dataHash(orders[idx]) !== dataHash(o)) {
+                        orders[idx] = o;
+                        changed = true;
+                    }
+                });
+                // 2) 로컬에는 있지만 서버 스냅샷에 없는 항목은 건드리지 않음
+                //    (공유 납품 writtenBy이므로 내 로컬 전표 삭제 위험 차단)
+                if (changed) {
+                    lastHash.orders = dataHash(orders);
                     saveToLocal();
                     _fullRender();
                     setSyncStatus('online');
@@ -432,13 +448,23 @@ function _fbValueHandler(snap) {
         }
 
         // ★ CRM 외부에서 결제 패치한 경우: 타임스탬프 비교 우회 + orders만 즉시 갱신
+        // ★ v99 fix: 전체 교체 대신 개별 order merge — 내 로컬 전표 보호
         if (d.writtenBy === 'CRM_EXTERNAL') {
             if (d.orders) {
-                const inc = toArray(d.orders).map(_normOrderFromFb);
-                const h = dataHash(inc);
-                if (h !== lastHash.orders) {
-                    orders = inc;
-                    lastHash.orders = h;
+                const incoming = toArray(d.orders).map(_normOrderFromFb);
+                let changed = false;
+                incoming.forEach(o => {
+                    const idx = orders.findIndex(x => x.id === o.id);
+                    if (idx < 0) {
+                        orders.push(o);
+                        changed = true;
+                    } else if (dataHash(orders[idx]) !== dataHash(o)) {
+                        orders[idx] = o;
+                        changed = true;
+                    }
+                });
+                if (changed) {
+                    lastHash.orders = dataHash(orders);
                     saveToLocal();
                     _fullRender();
                     setSyncStatus('online');

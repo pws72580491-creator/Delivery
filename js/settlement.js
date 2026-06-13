@@ -1169,8 +1169,9 @@ async function confirmPartialPayDiscount() {
         };
         if (discountAmt > 0) patch.discount = (o.discount || 0) + discountAmt;
         if (note) patch.paidNote = note;
+        patch.crmControlled = null; // 납품앱 직접 결제 → CRM 우선권 해제 (공유 전표 Firebase에도 반영)
         Object.assign(o, patch);
-        delete o.crmControlled; // 납품앱 직접 결제 → CRM 우선권 해제
+        delete o.crmControlled;
 
         if (o._sharedWsId) {
             // 공유 전표: A의 Firebase에 직접 반영

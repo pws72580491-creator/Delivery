@@ -262,6 +262,8 @@ function normalizeBackupData(data) {
 
 const debouncedSync = debounce(async () => {
     if (!workspaceRef || !isConnected) return;  // 오프라인이거나 미연결 시 즉시 중단
+    // ★ v99 fix: 이미 업로드 진행 중이면 중복 실행 차단 (이후 호출은 debounce 재예약으로 처리)
+    if (_syncGuard) return;
     const ch = dataHash(clients);
     const oh = dataHash(orders);
     const ph = dataHash(prices);
@@ -274,6 +276,8 @@ const debouncedSync = debounce(async () => {
         if (_nd > 0 && _nd < 20) {
             // delta: 변경된 항목만 개별 경로 업로드
             // ★ CRM 우선권: 서버의 결제 필드를 읽어 merge 후 업로드
+            // ★ v99 fix: _syncGuard 세팅 후 await — 이 사이에 다른 debouncedSync 진입 차단
+            _syncGuard = true;
             const serverSnap = await workspaceRef.child('orders').once('value').catch(() => null);
             const serverOrders = serverSnap ? serverSnap.val() : {};
             for (const id of _dirtyOrders) {
@@ -288,6 +292,8 @@ const debouncedSync = debounce(async () => {
         } else {
             // full: bulk 작업·첫 동기화 시 전체 map 업로드
             // ★ CRM 우선권: 서버 결제 필드를 먼저 읽어 merge
+            // ★ v99 fix: 동일하게 _syncGuard 선점 후 await
+            _syncGuard = true;
             const serverSnap2 = await workspaceRef.child('orders').once('value').catch(() => null);
             const serverOrders2 = serverSnap2 ? serverSnap2.val() : {};
             const ordersMap = {};
@@ -302,7 +308,7 @@ const debouncedSync = debounce(async () => {
     }
     if (ph !== lastHash.prices)  { updates.prices     = prices;     changed = true; }
     if (sh !== lastHash.stock)   { updates.stockItems = _getLightStock(); changed = true; }
-    if (!changed) return;
+    if (!changed) { _syncGuard = false; return; }
     // writtenBy / version 필드: 리스너 echo 식별 + 충돌 감지
     const nowIso = new Date().toISOString();
     updates.lastUpdated = nowIso;
@@ -421,6 +427,12 @@ function _refreshUnpaidIfActive() {
 // ─── 메모 즉시 동기화 헬퍼 (메모 저장/삭제 공통 패턴) ───
 function _saveAndFlush() {
     saveData();
+    // ★ v99 fix: _syncGuard 중이면 _flushSync가 차단됨
+    // → debouncedSync를 취소하지 않고 그대로 두어 업로드 완료 후 자동 재시도 보장
+    if (_syncGuard) {
+        saveToLocal();
+        return;
+    }
     debouncedSync.cancel();
     _flushSync();
     saveToLocal();

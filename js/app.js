@@ -150,16 +150,12 @@ function initPullToRefresh() {
                     _fullRender();
                     // Firebase 연결 중이면 서버 최신 데이터 받아서 반영
                     if (isConnected && workspaceRef) {
-                        workspaceRef.get().then(async snap => {
-                            const d = snap.val();
-                            if (!d) return;
-                            if (d.clients)    { clients    = toArray(d.clients).map(_normClientFromFb); }
-                            if (d.orders)     { orders     = toArray(d.orders).map(_normOrderFromFb); }
-                            if (d.prices)     { prices     = d.prices; }
-                            if (d.stockItems) { stockItems = toArray(d.stockItems).map(normStock); }
-                            lastHash = { clients:dataHash(clients), orders:dataHash(orders), prices:dataHash(prices), stock:dataHash(stockItems) };
-                            saveToLocal();
-                            _fullRender();
+                        // ★ v99 fix: 업로드 중(_syncGuard=true)이면 서버 덮어쓰기 차단
+                        // _fbValueHandler 경유 → CRM·공유납품 보호 로직 + hash 비교 적용
+                        if (_syncGuard) return;
+                        workspaceRef.get().then(snap => {
+                            if (!snap.val()) return;
+                            _fbValueHandler(snap);
                         }).catch(()=>{});
                     }
                 } catch(e) { console.warn('pull-to-refresh 오류', e); }
@@ -414,62 +410,31 @@ window.addEventListener('DOMContentLoaded', () => {
     window.addEventListener('online', () => {
         const sid = localStorage.getItem('workspaceId');
         if (workspaceRef) {
-            // ── 서버 먼저 읽기 → 시간 비교 → 로컬이 더 최신일 때만 업로드 ──
-            // (기존: 무조건 업로드 후 서버 재로드 → 멀티기기 경쟁 조건 발생)
-            debouncedSync.cancel();
-            workspaceRef.get().then(async snap => {
-                const d = snap.val();
-                isConnected = true;
-                setSyncStatus('online');
-                if (!d) {
-                    // 서버 비어있음 → 로컬 업로드
-                    const ch=dataHash(clients),oh=dataHash(orders),ph=dataHash(prices),sh=dataHash(stockItems);
-                    const ordersMap = {}; orders.forEach(o => { ordersMap[o.id] = _minifyOrder(o); });
-                    workspaceRef.update({
-                        clients: clients.map(_minifyClient),
-                        orders: ordersMap, prices, stockItems,
-                        lastUpdated: new Date().toISOString(), writtenBy: SESSION_ID
-                    }).then(() => {
-                        lastHash.clients=ch; lastHash.orders=oh; lastHash.prices=ph; lastHash.stock=sh;
-                        _clearOrderDelta();
-                    }).catch(() => {});
-                    return;
-                }
-                // 서버·로컬 시간 비교
-                const serverTime = d.lastUpdated ? new Date(d.lastUpdated).getTime() : 0;
-                const lastLocalUpdated = localStorage.getItem('lastLocalUpdated');
-                const localTime = Math.max(
-                    _localWriteTime,
-                    lastLocalUpdated ? new Date(lastLocalUpdated).getTime() : 0
-                );
-                if (localTime > serverTime) {
-                    // 로컬이 더 최신 → minify 적용 후 업로드
-                    const ch=dataHash(clients),oh=dataHash(orders),ph=dataHash(prices),sh=dataHash(stockItems);
-                    const ordersMap = {}; orders.forEach(o => { ordersMap[o.id] = _minifyOrder(o); });
-                    workspaceRef.update({
-                        clients: clients.map(_minifyClient),
-                        orders: ordersMap, prices, stockItems,
-                        lastUpdated: new Date().toISOString(), writtenBy: SESSION_ID
-                    }).then(() => {
-                        lastHash.clients=ch; lastHash.orders=oh; lastHash.prices=ph; lastHash.stock=sh;
-                        _clearOrderDelta();
-                    }).catch(() => {});
-                } else {
-                    // 서버가 더 최신 (오프라인 중 다른 기기가 변경) → 서버 데이터 적용
-                    if (d.clients)    clients    = toArray(d.clients).map(_normClientFromFb);
-                    if (d.orders)     orders     = toArray(d.orders).map(_normOrderFromFb);
-                    if (d.prices)     prices     = d.prices;
-                    if (d.stockItems) stockItems = toArray(d.stockItems).map(normStock);
-                    lastHash.clients=dataHash(clients); lastHash.orders=dataHash(orders);
-                    lastHash.prices=dataHash(prices);   lastHash.stock=dataHash(stockItems);
-                    _clearOrderDelta();
-                    invalidateOrdersCache();
-                    saveToLocal();
-                    _fullRender();
-                }
-            }).catch(() => {
-                // .get() 실패 시 .info/connected가 재연결 후 debouncedSync() 트리거
-            });
+            // ★ v99 fix: window.online은 .info/connected의 보완 역할
+            // 실제 로컬↔서버 판단은 .info/connected 핸들러가 담당하므로
+            // 여기서는 isConnected 상태만 확인 후 debouncedSync에 위임
+            // (직접 update()로 전체 map을 올리면 delta 로직·version 필드가 무력화됨)
+            if (!isConnected) {
+                // .info/connected 리스너가 아직 반응 전인 경우만 보완 처리
+                workspaceRef.get().then(snap => {
+                    const d = snap.val();
+                    isConnected = true;
+                    setSyncStatus('online');
+                    const serverTime = d?.lastUpdated ? new Date(d.lastUpdated).getTime() : 0;
+                    const lastLocalMs = (() => {
+                        const s = localStorage.getItem('lastLocalUpdated');
+                        return s ? new Date(s).getTime() : 0;
+                    })();
+                    const localTime = Math.max(_localWriteTime, lastLocalMs);
+                    if (localTime > serverTime) {
+                        // 로컬이 최신 → debouncedSync에 위임 (delta + version 포함)
+                        debouncedSync();
+                    } else if (d) {
+                        // 서버가 최신 → _fbValueHandler 경유 (CRM·공유납품 보호 로직 포함)
+                        _fbValueHandler(snap);
+                    }
+                }).catch(() => { debouncedSync(); });
+            }
         } else {
             if (sid) {
                 document.getElementById('workspaceId').value = sid;
@@ -849,6 +814,9 @@ function toggleClientTooltip(e, card) {
 // 자주 껐다 켜는 환경에서 debounce 대기 중 종료로 인한 데이터 유실 방지
 function _flushSync() {
     if (!workspaceRef || !isConnected) return;
+    // ★ v99 fix: debouncedSync 업로드 진행 중이면 충돌 방지를 위해 건너뜀
+    // (visibilitychange hidden 시 debouncedSync와 동시 실행 race condition 차단)
+    if (_syncGuard) return;
     const ch = dataHash(clients);
     const oh = dataHash(orders);
     const ph = dataHash(prices);
@@ -867,15 +835,19 @@ function _flushSync() {
     if (ph !== lastHash.prices)  { updates.prices     = prices;     changed = true; }
     if (sh !== lastHash.stock)   { updates.stockItems = _getLightStock(); changed = true; }
     if (!changed) return;
-    updates.lastUpdated = new Date().toISOString();
+    const nowIso = new Date().toISOString();
+    updates.lastUpdated = nowIso;
     updates.writtenBy   = SESSION_ID;
+    // ★ v99 fix: version 필드 포함 — _fbValueHandler의 stale 감지가 flushSync echo도 올바르게 처리
+    updates.version = Date.now();
+    localStorage.setItem('ws_version', String(updates.version));
     if (updates.clients)    lastHash.clients = ch;
     if (updates.orders)     lastHash.orders  = oh;
     if (updates.prices)     lastHash.prices  = ph;
     if (updates.stockItems) lastHash.stock   = sh;
     debouncedSync.cancel(); // 대기 중인 debounce 취소 (중복 방지)
     workspaceRef.update(updates).then(() => {
-        localStorage.setItem('lastLocalUpdated', updates.lastUpdated);
+        localStorage.setItem('lastLocalUpdated', nowIso);
     }).catch(() => {
         // 롤백 — 다음 실행 시 재시도
         if (updates.clients)    lastHash.clients = '';

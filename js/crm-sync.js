@@ -181,3 +181,57 @@ function _findOrderAnywhere(id) {
     return null;
 }
 
+
+// ╔══════════════════════════════════════════════════════════════╗
+// ║  § CRM 일괄 재동기화 — 놓친 거래/결제 따라잡기 (v99)              ║
+// ╚══════════════════════════════════════════════════════════════╝
+
+/**
+ * 결제 정보가 있는 모든 전표(내 전표 + 공유 전표)를 CRM에 일괄 재패치합니다.
+ * - 일시적 오류·오프라인 등으로 CRM에 반영되지 못한 결제 내역을 따라잡기 위한
+ *   수동 "재동기화" 기능입니다.
+ * - _patchCrmTransaction은 CRM에 해당 napumKey 거래가 없으면 조용히 스킵하므로
+ *   안전하게 전체를 순회해도 무방합니다(미연동 주문은 통계에서 "미연동"으로 집계).
+ * - Firebase RTDB 과다 호출 방지를 위해 순차 처리 + 약간의 딜레이를 둡니다.
+ */
+async function resyncAllPaymentsToCrm() {
+    if (!CRM_SYNC_ENABLED) {
+        toast('❗ CRM 연동이 설정되지 않았습니다 (CRM_FIREBASE_CFG 확인)', 'var(--red)');
+        return;
+    }
+    if (typeof firebase === 'undefined' || !firebase.apps.length || !isConnected) {
+        toast('❗ Firebase에 연결된 상태에서만 재동기화할 수 있습니다', 'var(--red)');
+        return;
+    }
+
+    // 결제(완납/부분/미수 전환 등) 정보가 한 번이라도 기록된 전표만 대상
+    const targets = [
+        ...orders,
+        ..._sharedOrdersCache,
+    ].filter(o => !o.isVoid && (o.isPaid || (o.paidAmount || 0) > 0));
+
+    if (!targets.length) {
+        toast('✅ 재동기화할 결제 내역이 없습니다');
+        return;
+    }
+
+    toast(`🔄 CRM 재동기화 시작 — ${targets.length}건 확인 중...`, 'var(--accent)', 3000);
+
+    let synced = 0, skipped = 0, failed = 0;
+    for (const o of targets) {
+        try {
+            const ok = await _patchCrmTransaction(o.id, o);
+            if (ok) synced++; else skipped++;
+        } catch (e) {
+            failed++;
+            console.warn('[CRM재동기화] 오류:', o.id, e.message);
+        }
+        // RTDB 과다 호출 방지 — 건당 약간의 간격
+        await new Promise(r => setTimeout(r, 150));
+    }
+
+    const summary = `🔄 CRM 재동기화 완료 — 반영 ${synced}건 / 미연동 ${skipped}건` +
+        (failed > 0 ? ` / 실패 ${failed}건` : '');
+    toast(summary, failed > 0 ? 'var(--orange)' : 'var(--green)', 5000);
+    console.info('[CRM재동기화]', { total: targets.length, synced, skipped, failed });
+}
