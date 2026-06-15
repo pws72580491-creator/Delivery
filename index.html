@@ -11,7 +11,7 @@
     <meta name="apple-mobile-web-app-title" content="납품관리">
     <link rel="apple-touch-icon" href="./icon-192.png">
     <link rel="manifest" href="./manifest.json">
-    <title>납품 관리 Pro v99</title>
+    <title>납품 관리 Pro v100</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js" defer></script>
@@ -38,7 +38,7 @@
             <div class="logo-icon">📦</div>
             <div>
                 <div class="logo-text">납품 관리 Pro</div>
-                <div class="logo-sub">v99 · PWA 앱 설치 지원</div>
+                <div class="logo-sub">v100 · PWA 앱 설치 지원</div>
             </div>
         </div>
         <div class="header-btns">
@@ -607,7 +607,7 @@
     <div class="card">
         <div class="card-title">앱 정보</div>
         <div style="font-size:13px;color:var(--text2);line-height:2;margin-bottom:12px;">
-            버전: <strong style="color:var(--accent);">v99</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
+            버전: <strong style="color:var(--accent);">v100</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
             거래처: <span id="infoClients">0</span>개 &nbsp;·&nbsp;
             납품내역: <span id="infoOrders">0</span>건
         </div>
@@ -621,12 +621,12 @@
             <div id="changelogList" style="display:flex;flex-direction:column;gap:6px;">
                 <!-- 현재 버전 -->
                 <div class="changelog-item">
-                    <span class="changelog-ver" style="color:var(--green);">v98</span>
-                    <span class="changelog-desc">통합본 — 여러 v97 작업분(공유 워크스페이스 실시간 리스너·재시도 큐·version 충돌감지·CRM 결제 재시도)을 하나로 병합. ① 재고 이력 "오늘 이전" 판단 시 auto(납품차감) 로그를 date 기준으로 처리하도록 수정(어제재고 계산 오류 수정) ② 공유 거래처 목록 오프라인 캐시 복원(_sharedClientsCache, v96 이식) ③ 할인 완납 처리 시 crmControlled 해제가 공유 전표 Firebase에도 반영되도록 수정 ④ CRM 결제 동기화 재확인 기능 추가(설정 → Firebase 모달, 놓친 결제 일괄 재패치)</span>
+                    <span class="changelog-ver" style="color:var(--green);">v100</span>
+                    <span class="changelog-desc">버그 수정 통합본 — ① invalidateClientsCache() 미정의 오류 수정(sync.js removeSharedWs 호출 시 ReferenceError 발생) ② renderMemoView() onclick 속성에 escapeHtml 대신 escapeAttr 적용(거래처명 특수문자 onclick 파괴 버그) ③ renderSharedWsList() toggleMySharedClient onclick에 name.replace() 대신 escapeAttr 적용(공유 거래처명 특수문자 버그) ④ confirmPayEdit() closeModal 중복 호출 제거(수금 수정 완료 후 모달이 두 번 닫히는 버그)</span>
                 </div>
                 <div class="changelog-item">
-                    <span class="changelog-ver">v97</span>
-                    <span class="changelog-desc">코드 모듈화 — app.js(8,498줄) 단일 파일을 15개 모듈로 분리. js/core(state·storage·app), js/firebase(crm-sync·sync), js/ui(core·clients·dashboard·settings·manual), js/delivery(form·history), js/settlement, js/stock, js/utils/backup. 로직·데이터 변경 없음.</span>
+                    <span class="changelog-ver" style="color:var(--green);">v99</span>
+                    <span class="changelog-desc">통합본 — 여러 v97 작업분(공유 워크스페이스 실시간 리스너·재시도 큐·version 충돌감지·CRM 결제 재시도)을 하나로 병합. ① 재고 이력 \"오늘 이전\" 판단 시 auto(납품차감) 로그를 date 기준으로 처리하도록 수정(어제재고 계산 오류 수정) ② 공유 거래처 목록 오프라인 캐시 복원(_sharedClientsCache, v96 이식) ③ 할인 완납 처리 시 crmControlled 해제가 공유 전표 Firebase에도 반영되도록 수정 ④ CRM 결제 동기화 재확인 기능 추가(설정 → Firebase 모달, 놓친 결제 일괄 재패치)</span>
                 </div>
                 <div class="changelog-item">
                     <span class="changelog-ver">v96</span>
