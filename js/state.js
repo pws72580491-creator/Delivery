@@ -276,6 +276,12 @@ function invalidateOrdersCache() {
     _recentPricesCache = null;
 }
 
+// ★ fix: sync.js removeSharedWs에서 호출 — clients 캐시만 선택 무효화
+function invalidateClientsCache() {
+    _clientStatsCache = null;
+    _clientItemsCache = null;
+}
+
 function _buildClientStatsCache() {
     if (_clientStatsCache) return _clientStatsCache;
     const m = {};

@@ -617,9 +617,10 @@ function renderMemoView() {
         .map(([name, ords]) => {
             const cnt     = ords.length;
             const preview = ords[0].note.length > 24 ? ords[0].note.slice(0, 24) + '…' : ords[0].note;
-            const safeName = escapeHtml(name);
-            return `<div class="memo-view-client-card" onclick="openMemoDetail('${safeName}')">
-                <div class="memo-view-client-name">${safeName} <span class="memo-count-badge">${cnt}건</span></div>
+            const safeNameHtml = escapeHtml(name);
+            const safeNameAttr = escapeAttr(name);
+            return `<div class="memo-view-client-card" onclick="openMemoDetail('${safeNameAttr}')">
+                <div class="memo-view-client-name">${safeNameHtml} <span class="memo-count-badge">${cnt}건</span></div>
                 <div class="memo-view-preview">${escapeHtml(preview)}</div>
             </div>`;
         }).join('');

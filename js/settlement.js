@@ -1430,7 +1430,7 @@ function confirmPayEdit() {
         _refreshUnpaidIfActive();
         _refreshSettlementIfActive();
     }
-    closeModal('payEditModal');
+    // ★ fix: closeModal 중복 호출 제거 (else 분기에서 이미 호출됨)
 }
 
 async function confirmPayEditCancel() {

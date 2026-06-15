@@ -330,7 +330,7 @@ function renderSharedWsList() {
                     ${allClients.map(name => {
                         const checked = myShared.includes(name);
                         return `<label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:3px 0;">
-                            <input type="checkbox" ${checked ? 'checked' : ''} data-share-name="${escapeAttr(name)}" onchange="toggleMySharedClient('${name.replace(/'/g,"\\'")}',this.checked)"
+                            <input type="checkbox" ${checked ? 'checked' : ''} data-share-name="${escapeAttr(name)}" onchange="toggleMySharedClient('${escapeAttr(name)}',this.checked)"
                                 style="width:16px;height:16px;accent-color:var(--accent);flex-shrink:0;">
                             <span style="font-size:13px;color:var(--text1);">${escapeHtml(name)}</span>
                         </label>`;
