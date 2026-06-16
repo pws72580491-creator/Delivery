@@ -103,7 +103,7 @@ function renderSummaryBox(totalSales, paidAmount, unpaidAmount) {
 function renderSettlement() {
     const month = document.getElementById('settlementMonth').value;
     if (!month) return;
-    let filtered = applyPayFilter(orders.filter(o=>o.date?.startsWith(month)));
+    let filtered = applyPayFilter(orders.filter(o=>!o.delegatedBy && o.date?.startsWith(month)));
     // ★ 그룹 필터
     if (window._settleGroupFilterActive) {
         filtered = filtered.filter(o => window._settleGroupFilterActive.has(o.clientName));
@@ -141,7 +141,7 @@ function renderSettlementDaily() {
     const [yr, mo, dd] = date.split('-');
     const dateLabel = `${yr}년 ${parseInt(mo)}월 ${parseInt(dd)}일 (${dow})`;
 
-    let dayOrders = applyPayFilter(orders.filter(o => o.date === date));
+    let dayOrders = applyPayFilter(orders.filter(o => !o.delegatedBy && o.date === date));
     const _et = o => o.isPaid && o.discount > 0 ? o.total - o.discount : o.total;
     const totalSales  = dayOrders.reduce((s,o)=>s+_et(o),0);
     const paidAmount  = dayOrders.reduce((s,o)=>s+_actualPaid(o),0);
@@ -213,7 +213,7 @@ function renderSettlementQuarterly() {
         { label:'4분기', months:['10','11','12'], emoji:'❄️' },
     ];
 
-    let allYearOrders = applyPayFilter(orders.filter(o=>o.date?.startsWith(String(year))));
+    let allYearOrders = applyPayFilter(orders.filter(o=>!o.delegatedBy && o.date?.startsWith(String(year))));
     const _et = o => o.isPaid && o.discount > 0 ? o.total - o.discount : o.total;
     const yearTotal  = allYearOrders.reduce((s,o)=>s+_et(o),0);
     const yearPaid   = allYearOrders.reduce((s,o)=>s+_actualPaid(o),0);
@@ -221,12 +221,12 @@ function renderSettlementQuarterly() {
 
     const qData = quarters.map(q => {
         const mos = q.months.map(m=>`${year}-${m}`);
-        const list = applyPayFilter(orders.filter(o=> mos.some(m=>o.date?.startsWith(m))));
+        const list = applyPayFilter(orders.filter(o=> !o.delegatedBy && mos.some(m=>o.date?.startsWith(m))));
         const sales  = list.reduce((s,o)=>s+_et(o),0);
         const paid   = list.reduce((s,o)=>s+_actualPaid(o),0);
         // 월별 세부
         const monthRows = q.months.map(m => {
-            const ml = applyPayFilter(orders.filter(o=>o.date?.startsWith(`${year}-${m}`)));
+            const ml = applyPayFilter(orders.filter(o=>!o.delegatedBy && o.date?.startsWith(`${year}-${m}`)));
             const ms = ml.reduce((s,o)=>s+_et(o),0);
             const mp = ml.reduce((s,o)=>s+_actualPaid(o),0);
             return { month:`${year}-${m}`, sales:ms, paid:mp, count:ml.length };
@@ -416,7 +416,9 @@ async function showClientStatement(clientName, month) {
             try {
                 // 1) 상대방이 허용한 거래처 목록 확인
                 const scSnap = await napumDb.ref(`workspaces/${wsId}/sharedClients`).get();
-                const allowedClients = scSnap.exists() ? (scSnap.val() || []) : [];
+                if (!scSnap.exists()) return;
+                const rawSc = scSnap.val() || [];
+                const allowedClients = rawSc.map(item => typeof item === 'string' ? item : item.name);
                 // 허용 목록이 비어있으면 공유 안 함
                 if (!allowedClients.length) return;
                 // 현재 거래처가 허용 목록에 없으면 스킵
@@ -606,13 +608,13 @@ async function showClientStatement(clientName, month) {
 
 function saveStatementPNG(clientName, month) {
     const monthStart = month + '-01';
-    const filt = orders.filter(o => o.clientName === clientName && o.date?.startsWith(month))
+    const filt = orders.filter(o => !o.delegatedBy && o.clientName === clientName && o.date?.startsWith(month))
                        .sort((a, b) => (a.date||"").localeCompare(b.date||""));
     const _effectiveTotal = o => o.isPaid && o.discount > 0 ? o.total - o.discount : o.total;
     const monthTotal  = filt.reduce((s, o) => s + _effectiveTotal(o), 0);
     const monthPaid   = filt.reduce((s,o)=>s+_actualPaid(o),0);
     const monthUnpaid = monthTotal - monthPaid;
-    const carryOrders = orders.filter(o => o.clientName === clientName && o.date < monthStart && !o.isPaid)
+    const carryOrders = orders.filter(o => !o.delegatedBy && o.clientName === clientName && o.date < monthStart && !o.isPaid)
                               .sort((a, b) => (a.date||"").localeCompare(b.date||""));
     const carryAmt    = carryOrders.reduce((s, o) => s + o.total - (o.paidAmount || 0), 0);
     const grandUnpaid = carryAmt + monthUnpaid;

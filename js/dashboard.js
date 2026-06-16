@@ -8,7 +8,8 @@ function renderDashboard() {
     const _et   = o => o.isPaid && o.discount > 0 ? o.total - o.discount : o.total;
     const sales  = curr.reduce((s,o)=>s+_et(o),0);
     // 미수금: 전체 기간 누적 미수금
-    const totalUnpaid = orders.reduce((s, o) => {
+    // delegatedBy: 대납 거래는 미수금 집계에서도 제외
+    const totalUnpaid = orders.filter(o => !o.delegatedBy).reduce((s, o) => {
         const remain = Math.max(0, o.total - _actualPaid(o));
         return s + (o.isPaid ? 0 : remain);
     }, 0);
@@ -100,7 +101,7 @@ function _renderWeekBarChart() {
         label: d.slice(5),
         day: ['일','월','화','수','목','금','토'][new Date(d).getDay()],
         isToday: d === today,
-        sales: orders.filter(o => o.date === d && !o.isVoid).reduce((s, o) => s + _et(o), 0)
+        sales: orders.filter(o => o.date === d && !o.isVoid && !o.delegatedBy).reduce((s, o) => s + _et(o), 0)
     }));
     const maxVal = Math.max(...data.map(d => d.sales), 1);
     const weekTotal = data.reduce((s, d) => s + d.sales, 0);
@@ -309,7 +310,7 @@ function renderSettleBarChart(monthKey) {
         while (m <= 0) { m += 12; y--; }
         while (m > 12) { m -= 12; y++; }
         const ym = `${y}-${String(m).padStart(2,'0')}`;
-        const mos = orders.filter(o => o.date?.startsWith(ym));
+        const mos = orders.filter(o => o.date?.startsWith(ym) && !o.delegatedBy);
         const _et  = o => o.isPaid && o.discount > 0 ? o.total - o.discount : o.total;
         const total = mos.reduce((s, o) => s + _et(o), 0);
         const paid  = mos.reduce((s, o) => s + _actualPaid(o), 0);

@@ -174,6 +174,7 @@ function toggleWsLock() {
 // ─── 공유 워크스페이스 관리 ───────────────────────────────────────────────────
 // 구조: [{ wsId: "abc", label: "담당자명(선택)" }, ...]  — 내가 조회할 상대방 목록
 // 내 공개 허용 거래처: Firebase workspaces/{myId}/sharedClients = ["Q마트","P마트"]
+// 공유된 거래처에 납품 시 order.delegatedBy = 납품자 wsId → 납품자 앱에서만 표시
 
 function _getSharedWs() {
     try {
@@ -216,7 +217,9 @@ async function _loadSharedClientsFromWs() {
         try {
             const snap = await firebase.database().ref(`workspaces/${wsId}/sharedClients`).get();
             if (!snap.exists()) return;
-            const names = snap.val() || [];
+            // sharedClients: string[] (공개 허용 거래처 이름 목록)
+            const rawList = snap.val() || [];
+            const names = rawList.map(item => typeof item === 'string' ? item : item.name);
             names.forEach(name => {
                 if (!result.find(r => r.name === name && r.wsId === wsId))
                     result.push({ name, wsId, wsLabel });
@@ -249,16 +252,26 @@ async function _loadSharedClientsFromWs() {
         try {
             // 공개된 거래처 이름 목록 확인
             const scSnap = await firebase.database().ref(`workspaces/${wsId}/sharedClients`).get();
-            const allowedNames = scSnap.exists() ? (scSnap.val() || []) : [];
+            const myWsId2 = (localStorage.getItem('workspaceId') || '').toLowerCase();
+            let allowedNames = [];
+            if (scSnap.exists()) {
+                const rawSc = scSnap.val() || [];
+                allowedNames = rawSc.map(item => typeof item === 'string' ? item : item.name);
+            }
             // ★ allowedNames가 비어있어도 orders 리스너를 등록해 둠
-            // → A가 나중에 공개 허용을 추가하면 sharedClients 리스너가 재등록을 트리거
-            // 단, 실제 필터링 시 allowedNames=[] → wsOrders=[] 이므로 데이터 노출 없음
             const ordersRef = firebase.database().ref(`workspaces/${wsId}/orders`);
 
             // 실시간 리스너: A의 orders가 바뀔 때마다 B의 캐시 갱신
             const ordersCb = snap => {
                 const wsOrders = Object.values(snap.val() || {})
-                    .filter(o => allowedNames.includes(o.clientName))
+                    .filter(o => {
+                        // ★ 핵심 필터: 거래처가 공개 목록에 있고
+                        if (!allowedNames.includes(o.clientName)) return false;
+                        // ★ delegatedBy가 없으면 원래 거래처 담당자(A)가 납품한 것 → 보이면 안 됨
+                        // delegatedBy가 내 wsId면 내가 납품한 것 → 보여야 함
+                        if (!o.delegatedBy) return false;
+                        return o.delegatedBy === myWsId2;
+                    })
                     .map(o => ({
                         ...o,
                         _sharedWsId:    wsId,
@@ -297,16 +310,19 @@ function _detachSharedOrdersListeners() {
 function _getMySharedClients() {
     try { return JSON.parse(localStorage.getItem('mySharedClients') || '[]'); } catch { return []; }
 }
+/** mySharedClients: string[] 형태 */
+function _normalizeMySharedClients(arr) {
+    // 구버전 {name,allowedWsIds} 객체가 섞여있을 경우 string[]으로 정규화
+    return arr.map(item => typeof item === 'string' ? item : item.name);
+}
 function _saveMySharedClients(arr) {
-    // ── 항상 localStorage에 배열 형태로 보존 (빈 배열도 유지) ──
-    localStorage.setItem('mySharedClients', JSON.stringify(arr));
-    // Firebase에도 즉시 반영 — 빈 배열도 [] 그대로 올려서 null(노드 삭제) 방지
+    // arr: string[] 형태로 저장
+    const normalized = _normalizeMySharedClients(arr);
+    localStorage.setItem('mySharedClients', JSON.stringify(normalized));
     const myId = localStorage.getItem('workspaceId');
     if (myId && typeof firebase !== 'undefined' && firebase.apps.length) {
-        // 빈 배열일 때는 플레이스홀더 값으로 보내 노드가 삭제되지 않게 함
-        // → Firebase에서 null 저장 시 노드 자체가 삭제되어 _getMySharedClients()가 의도치 않게 초기화될 수 있음
         firebase.database().ref(`workspaces/${myId}/sharedClients`)
-            .set(arr.length ? arr : [])
+            .set(normalized.length ? normalized : [])
             .catch(() => {});
     }
 }
@@ -320,15 +336,17 @@ function renderSharedWsList() {
     const myShared   = _getMySharedClients();
     const allClients = (clients || []).map(c => c.name).filter((v,i,a)=>a.indexOf(v)===i).sort((a,b)=>a.localeCompare(b,'ko'));
 
+    const mySharedNames = _normalizeMySharedClients(myShared);
+
     const mySection = `
         <div style="margin-bottom:14px;">
             <div style="font-size:12px;font-weight:700;color:var(--text1);margin-bottom:6px;">📤 내가 공개할 거래처</div>
-            <div style="font-size:11px;color:var(--text3);margin-bottom:8px;">체크한 거래처만 상대방이 내 내역을 볼 수 있습니다.</div>
+            <div style="font-size:11px;color:var(--text3);margin-bottom:8px;">체크한 거래처는 대신 납품한 담당자 앱에서만 보입니다.</div>
             ${allClients.length === 0
                 ? '<div style="font-size:12px;color:var(--text3);">등록된 거래처가 없습니다.</div>'
                 : `<div style="display:flex;flex-direction:column;gap:4px;max-height:160px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:8px;">
                     ${allClients.map(name => {
-                        const checked = myShared.includes(name);
+                        const checked = mySharedNames.includes(name);
                         return `<label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:3px 0;">
                             <input type="checkbox" ${checked ? 'checked' : ''} data-share-name="${escapeAttr(name)}" onchange="toggleMySharedClient('${escapeAttr(name)}',this.checked)"
                                 style="width:16px;height:16px;accent-color:var(--accent);flex-shrink:0;">
@@ -374,7 +392,8 @@ async function _loadSharedClientBadges(wsId, idx) {
         if (!snap.exists() || !snap.val()?.length) {
             el.innerHTML = '<span style="color:var(--orange);font-size:11px;">⚠️ 공개 거래처 없음 (상대방이 설정 필요)</span>';
         } else {
-            const names = snap.val();
+            const rawList = snap.val() || [];
+            const names = rawList.map(item => typeof item === 'string' ? item : item.name);
             el.innerHTML = '공개 허용: ' + names.map(n =>
                 `<span style="background:#e0e7ff;color:#4f46e5;border-radius:4px;padding:1px 6px;font-size:11px;margin:2px 2px 0 0;display:inline-block;">${escapeHtml(n)}</span>`
             ).join('');
@@ -401,7 +420,7 @@ async function toggleMySharedClient(name, checked) {
         if (!ok) return; // 취소 → 변경 없음
     }
 
-    const list = _getMySharedClients();
+    const list = _normalizeMySharedClients(_getMySharedClients());
     if (checked && !list.includes(name)) list.push(name);
     if (!checked) { const i = list.indexOf(name); if (i > -1) list.splice(i, 1); }
     _saveMySharedClients(list);
@@ -432,7 +451,8 @@ function addSharedWs() {
     if (typeof firebase !== 'undefined' && firebase.apps.length && isConnected) {
         firebase.database().ref(`workspaces/${id}/sharedClients`)
             .on('value', snap => {
-                const newAllowed = snap.exists() ? (snap.val() || []) : [];
+                const rawNew = snap.exists() ? (snap.val() || []) : [];
+                const newAllowed = rawNew.map(i => typeof i === 'string' ? i : i.name);
                 const h = _sharedOrdersListeners[id];
                 if (!h) { _loadSharedClientsFromWs().catch(() => {}); return; }
                 const prev = JSON.stringify([...h.allowedNames].sort());
@@ -566,7 +586,8 @@ function _doConnect(id, auto=false) {
             const wsId = item.wsId || item;
             firebase.database().ref(`workspaces/${wsId}/sharedClients`)
                 .on('value', snap => {
-                    const newAllowed = snap.exists() ? (snap.val() || []) : [];
+                    const rawNew2 = snap.exists() ? (snap.val() || []) : [];
+                    const newAllowed = rawNew2.map(i => typeof i === 'string' ? i : i.name);
                     const h = _sharedOrdersListeners[wsId];
                     if (!h) {
                         // 리스너가 없으면 새로 등록 (처음 공개 허용이 생긴 경우)

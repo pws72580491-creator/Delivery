@@ -485,6 +485,9 @@ async function submitOrder() {
             createdAt:new Date().toISOString()
         };
         if (isVoid) order.isVoid = true;
+        // ★ 공유 거래처 대납 표시: A의 Firebase에 저장되지만 B(SESSION_ID)가 납품한 거래
+        // → A 앱에서 총매출 집계 시 제외, B 앱에서만 매출로 인식
+        if (isSharedVirtual) order.delegatedBy = (localStorage.getItem('workspaceId') || SESSION_ID); // ★ wsId로 저장 (재시작 후에도 동일 식별)
         newOrders.push(order);
         // 단가 캐시 갱신
         (group.items||[]).forEach(it => { if (it.price > 0) prices[it.name] = it.price; });

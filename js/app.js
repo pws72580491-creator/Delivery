@@ -394,8 +394,9 @@ window.addEventListener('DOMContentLoaded', () => {
             // 공유 워크스페이스 거래처 캐시 로드
             _loadSharedClientsFromWs();
             // 내 sharedClients를 Firebase에 즉시 반영 (앱 시작 시 동기화)
-            // ※ null 대신 [] 사용 — null 저장 시 Firebase 노드 삭제로 공유 목록이 초기화되는 버그 방지
-            const myShared = _getMySharedClients();
+            // _normalizeMySharedClients: 혹시 남아있는 객체 구조를 string[]으로 정규화
+            const myShared = _normalizeMySharedClients(_getMySharedClients());
+            if (myShared.length) localStorage.setItem('mySharedClients', JSON.stringify(myShared));
             firebase.database().ref(`workspaces/${savedWs}/sharedClients`)
                 .set(myShared.length ? myShared : []).catch(() => {});
         });

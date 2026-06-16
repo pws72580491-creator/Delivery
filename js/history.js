@@ -130,7 +130,8 @@ function _updateTodayCountWidget(filteredOrders, start, end) {
             periodLabel = `${start.slice(5).replace('-','/')}~${end.slice(5).replace('-','/')} 거래`;
         }
     }
-    const base = (filteredOrders || []).filter(o => !o.isVoid);
+    // ★ delegatedBy: 대납 거래는 오늘 거래 건수/금액에서 제외 (A 앱 기준)
+    const base = (filteredOrders || []).filter(o => !o.isVoid && !o.delegatedBy);
     const count = base.length;
     const amt   = base.reduce((s, o) => s + o.total, 0);
 
@@ -165,8 +166,11 @@ function renderOrders() {
     });
 
     const _et       = o => o.isPaid && o.discount > 0 ? o.total - o.discount : o.total;
-    const totalAmt  = filtered.filter(o=>!o.isVoid).reduce((s,o)=>s+_et(o),0);
-    const paidAmt     = filtered.filter(o=>!o.isVoid).reduce((s,o)=>s+_actualPaid(o),0);
+    // ★ delegatedBy: 다른 담당자가 대신 납품한 거래 → 내 매출 집계에서 제외
+    // (B가 A의 거래처에 납품 → A의 orders에 기록되지만 A의 매출은 아님)
+    const _isMine   = o => !o.delegatedBy;
+    const totalAmt  = filtered.filter(o=>!o.isVoid && _isMine(o)).reduce((s,o)=>s+_et(o),0);
+    const paidAmt     = filtered.filter(o=>!o.isVoid && _isMine(o)).reduce((s,o)=>s+_actualPaid(o),0);
     const unpaidAmt   = Math.max(0, totalAmt - paidAmt);
     // 수금방법별 집계 (paidMethodDetail 우선, 없으면 paidMethod 기준)
     let cashAmt = 0, transferAmt = 0, mixedAmt = 0, otherPaidAmt = 0;
@@ -223,9 +227,15 @@ function renderOrders() {
         const cardClass = `order-card ${voided ? ('voided ' + (o.isPaid ? 'paid' : 'unpaid')) : (o.isPaid ? 'paid' : 'unpaid')}`;
         // 타인거래: 👤배지 + 수금 상태 배지 같이 표시 (수금 처리 가능)
         const payBadge = `<span class="pay-badge ${o.isPaid?'paid':((o.paidAmount||0)>0?'':'unpaid')}" style="${(o.paidAmount||0)>0&&!o.isPaid?'background:#3b82f625;color:#60a5fa;':''}" onclick="${o.isPaid ? `togglePaid('${oId}')` : `openQuickPay('${oId}')` }">${o.isPaid?(o.discount>0?`✂️ 할인완납`:'✅ 완납'):(o.paidAmount||0)>0?'💳 부분':'⚠ 미수'}</span>`;
+        // ★ 대납 뱃지: delegatedBy가 있으면 A 앱에서 "대납(매출제외)" 표시
+        const delegatedBadge = o.delegatedBy
+            ? `<span style="font-size:10px;background:#fef3c7;color:#92400e;border-radius:4px;padding:1px 5px;display:inline-block;margin-bottom:2px;">🔄 대납(매출제외)</span>`
+            : '';
         const badgeHtml = voided
-            ? `<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;"><span class="void-badge">👤 타인거래</span>${payBadge}</div>`
-            : payBadge;
+            ? `<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">${delegatedBadge}<span class="void-badge">👤 타인거래</span>${payBadge}</div>`
+            : delegatedBadge
+                ? `<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">${delegatedBadge}${payBadge}</div>`
+                : payBadge;
         const memoLabel = o.note ? '📝 메모수정' : '📝 메모';
         const memoClass = o.note ? 'memo-btn has-memo' : 'memo-btn';
 
