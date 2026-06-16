@@ -38,7 +38,7 @@
             <div class="logo-icon">📦</div>
             <div>
                 <div class="logo-text">납품 관리 Pro</div>
-                <div class="logo-sub">v100 · PWA 앱 설치 지원</div>
+                <div class="logo-sub">v102 · PWA 앱 설치 지원</div>
             </div>
         </div>
         <div class="header-btns">
@@ -607,7 +607,7 @@
     <div class="card">
         <div class="card-title">앱 정보</div>
         <div style="font-size:13px;color:var(--text2);line-height:2;margin-bottom:12px;">
-            버전: <strong style="color:var(--accent);">v100</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
+            버전: <strong style="color:var(--accent);">v102</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
             거래처: <span id="infoClients">0</span>개 &nbsp;·&nbsp;
             납품내역: <span id="infoOrders">0</span>건
         </div>
@@ -621,7 +621,15 @@
             <div id="changelogList" style="display:flex;flex-direction:column;gap:6px;">
                 <!-- 현재 버전 -->
                 <div class="changelog-item">
-                    <span class="changelog-ver" style="color:var(--green);">v100</span>
+                    <span class="changelog-ver" style="color:var(--green);">v102</span>
+                    <span class="changelog-desc">공유 거래처 대납 표시 로직 재설계 — 거래처 담당자(A)가 아닌 다른 사용자(B, C 등)가 공유 거래처에 대신 납품한 내역이, 같은 거래처를 구독 중인 제3자(C)에게도 노출되던 버그 수정. order.delegatedBy를 SESSION_ID(재시작마다 변경) 대신 워크스페이스ID로 저장하고, 공유 주문 리스너가 delegatedBy === 내 워크스페이스ID인 건만 표시하도록 변경. 이제 누가 대신 납품하든 사전 설정 없이 본인 + 거래처 담당자 앱에만 자동으로 보임.</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v101</span>
+                    <span class="changelog-desc">공유 거래처 노출 범위 1차 수정(v102에서 delegatedBy 기반 방식으로 대체됨)</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v100</span>
                     <span class="changelog-desc">버그 수정 통합본 — ① invalidateClientsCache() 미정의 오류 수정(sync.js removeSharedWs 호출 시 ReferenceError 발생) ② renderMemoView() onclick 속성에 escapeHtml 대신 escapeAttr 적용(거래처명 특수문자 onclick 파괴 버그) ③ renderSharedWsList() toggleMySharedClient onclick에 name.replace() 대신 escapeAttr 적용(공유 거래처명 특수문자 버그) ④ confirmPayEdit() closeModal 중복 호출 제거(수금 수정 완료 후 모달이 두 번 닫히는 버그)</span>
                 </div>
                 <div class="changelog-item">
