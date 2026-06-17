@@ -130,8 +130,9 @@ function _updateTodayCountWidget(filteredOrders, start, end) {
             periodLabel = `${start.slice(5).replace('-','/')}~${end.slice(5).replace('-','/')} 거래`;
         }
     }
-    // ★ delegatedBy: 대납 거래는 오늘 거래 건수/금액에서 제외 (A 앱 기준)
-    const base = (filteredOrders || []).filter(o => !o.isVoid && !o.delegatedBy);
+    // ★ delegatedBy 판단: A 입장(내 orders)에서는 delegatedBy 있으면 대납 거래(매출 제외)
+    //   B 입장(_mySharedEntry로 들어온 항목)에서는 이미 "내가 대납한 것"만 필터링되어 들어오므로 매출에 포함
+    const base = (filteredOrders || []).filter(o => !o.isVoid && (o._mySharedEntry || !o.delegatedBy));
     const count = base.length;
     const amt   = base.reduce((s, o) => s + o.total, 0);
 
@@ -166,9 +167,8 @@ function renderOrders() {
     });
 
     const _et       = o => o.isPaid && o.discount > 0 ? o.total - o.discount : o.total;
-    // ★ delegatedBy: 다른 담당자가 대신 납품한 거래 → 내 매출 집계에서 제외
-    // (B가 A의 거래처에 납품 → A의 orders에 기록되지만 A의 매출은 아님)
-    const _isMine   = o => !o.delegatedBy;
+    // ★ delegatedBy: A 입장에선 남이 대납한 거래는 매출 제외, B 입장(_mySharedEntry)에선 본인이 대납한 매출이므로 포함
+    const _isMine   = o => o._mySharedEntry || !o.delegatedBy;
     const totalAmt  = filtered.filter(o=>!o.isVoid && _isMine(o)).reduce((s,o)=>s+_et(o),0);
     const paidAmt     = filtered.filter(o=>!o.isVoid && _isMine(o)).reduce((s,o)=>s+_actualPaid(o),0);
     const unpaidAmt   = Math.max(0, totalAmt - paidAmt);
@@ -227,9 +227,11 @@ function renderOrders() {
         const cardClass = `order-card ${voided ? ('voided ' + (o.isPaid ? 'paid' : 'unpaid')) : (o.isPaid ? 'paid' : 'unpaid')}`;
         // 타인거래: 👤배지 + 수금 상태 배지 같이 표시 (수금 처리 가능)
         const payBadge = `<span class="pay-badge ${o.isPaid?'paid':((o.paidAmount||0)>0?'':'unpaid')}" style="${(o.paidAmount||0)>0&&!o.isPaid?'background:#3b82f625;color:#60a5fa;':''}" onclick="${o.isPaid ? `togglePaid('${oId}')` : `openQuickPay('${oId}')` }">${o.isPaid?(o.discount>0?`✂️ 할인완납`:'✅ 완납'):(o.paidAmount||0)>0?'💳 부분':'⚠ 미수'}</span>`;
-        // ★ 대납 뱃지: delegatedBy가 있으면 A 앱에서 "대납(매출제외)" 표시
+        // ★ 대납 뱃지: A 화면(내 orders, delegatedBy 있음)에선 "매출제외", B 화면(_mySharedEntry)에선 "내 매출"로 구분 표시
         const delegatedBadge = o.delegatedBy
-            ? `<span style="font-size:10px;background:#fef3c7;color:#92400e;border-radius:4px;padding:1px 5px;display:inline-block;margin-bottom:2px;">🔄 대납(매출제외)</span>`
+            ? (o._mySharedEntry
+                ? `<span style=\"font-size:10px;background:#dbeafe;color:#1d4ed8;border-radius:4px;padding:1px 5px;display:inline-block;margin-bottom:2px;\">🔄 대납(내 매출)</span>`
+                : `<span style=\"font-size:10px;background:#fef3c7;color:#92400e;border-radius:4px;padding:1px 5px;display:inline-block;margin-bottom:2px;\">🔄 대납(매출제외)</span>`)
             : '';
         const badgeHtml = voided
             ? `<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">${delegatedBadge}<span class="void-badge">👤 타인거래</span>${payBadge}</div>`
@@ -849,14 +851,25 @@ async function saveOrderEdit() {
         return;
     }
 
-    // ── 자동 재고 보정 (수정 전후 수량 차이 반영, 타인거래 제외) ──
-    if (stockAutoDeduct && !o.isVoid) {
-        // 수정 전 품목 맵 { 정규화된이름: qty }
+    // ③ 타인거래 토글 — 재고 보정 분기에 필요하므로 미리 계산
+    const oeditSw   = document.getElementById('oeditVoidSwitch');
+    const newIsVoid = oeditSw ? oeditSw.dataset.void === '1' : !!o.isVoid;
+    const wasVoid   = !!o.isVoid;
+
+    // ── 자동 재고 보정 (수정 전후 수량 차이 반영) ──
+    // 분기는 "수정 후" 상태(newIsVoid) 기준: 최종적으로 타인거래가 되면 재고를 건드리지 않음
+    // (내거래→타인거래 전환 시 기존 차감분을 복구하지 않는 기존 정책과 동일하게 유지).
+    // 반대로 타인거래였다가 내거래로 전환되면, 그동안 재고에 전혀 반영된 적이 없으므로
+    // 수정 전 수량(oldMap)을 0으로 취급해 새 수량 전체를 차감한다.
+    if (stockAutoDeduct && !newIsVoid) {
+        // 수정 전 품목 맵 { 정규화된이름: qty } — 타인거래였다면 반영된 적 없으므로 비워둠
         const oldMap = {};
-        (o.items||[]).forEach(it => {
-            const key = normItemName(it.name);
-            oldMap[key] = (oldMap[key]||0) + (Number(it.qty)||0);
-        });
+        if (!wasVoid) {
+            (o.items||[]).forEach(it => {
+                const key = normItemName(it.name);
+                oldMap[key] = (oldMap[key]||0) + (Number(it.qty)||0);
+            });
+        }
         // 수정 후 품목 맵
         const newMap = {};
         _oeditItems.forEach(it => {
@@ -865,6 +878,7 @@ async function saveOrderEdit() {
         });
         // 모든 품목명 합집합
         const allKeys = new Set([...Object.keys(oldMap), ...Object.keys(newMap)]);
+        const reasonLabel = wasVoid ? '타인거래→내거래 전환반영' : '납품수정보정';
         allKeys.forEach(key => {
             const oldQty = oldMap[key]||0;
             const newQty = newMap[key]||0;
@@ -883,7 +897,7 @@ async function saveOrderEdit() {
             const logType = 'edit_adj';
             (si.log = si.log||[]).unshift({
                 type: logType, qty: actual, before, after: si.qty,
-                reason: '납품수정보정(' + (o.clientName||'') + ')',
+                reason: reasonLabel + '(' + (o.clientName||'') + ')',
                 date: todayKST(), at: new Date().toISOString()
             });
             si.log = _trimLogByDate(si.log);
@@ -905,13 +919,9 @@ async function saveOrderEdit() {
     o.note  = note;
     o.updatedAt = new Date().toISOString();
     _markDirtyOrder(o.id); // delta sync 마킹
-    // ③ 타인거래 토글 반영
-    const oeditSw = document.getElementById('oeditVoidSwitch');
-    const newIsVoid = oeditSw ? oeditSw.dataset.void === '1' : !!o.isVoid;
-    const wasVoid = !!o.isVoid;
+    // ③ 타인거래 토글 반영 (oeditSw/newIsVoid/wasVoid는 재고 보정 단계에서 이미 계산됨)
     o.isVoid = newIsVoid;
-    // 타인거래 → 내거래 전환 시 자동 재고 차감 보정 (위 품목 차이 보정과 별도로 처리됨)
-    // 내거래 → 타인거래 전환 시 이미 차감된 재고는 복구하지 않음 (데이터 일관성 유지)
+    // 재고 반영은 위 자동 재고 보정 단계에서 newIsVoid/wasVoid 기준으로 이미 처리됨
     // ── paidAmount 캡핑: 새 합계보다 초과 지불된 경우 조정 ──
     let _autoCompleted = false;
     if (!o.isPaid) {

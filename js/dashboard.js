@@ -4,7 +4,7 @@
 
 function renderDashboard() {
     const month = todayKST().slice(0,7);
-    const curr  = orders.filter(o=>o.date?.startsWith(month));
+    const curr  = orders.filter(o=>o.date?.startsWith(month) && !o.delegatedBy);
     const _et   = o => o.isPaid && o.discount > 0 ? o.total - o.discount : o.total;
     const sales  = curr.reduce((s,o)=>s+_et(o),0);
     // 미수금: 전체 기간 누적 미수금

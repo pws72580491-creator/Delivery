@@ -424,10 +424,15 @@ async function showClientStatement(clientName, month) {
                 // 현재 거래처가 허용 목록에 없으면 스킵
                 if (!allowedClients.includes(clientName)) return;
                 // 2) 허용된 경우에만 내역 fetch
+                const myWsId = (localStorage.getItem('workspaceId') || '').toLowerCase();
                 const snap = await napumDb.ref(`workspaces/${wsId}/orders`)
                     .orderByChild('clientName').equalTo(clientName).get();
                 if (!snap.exists()) return;
                 Object.values(snap.val() || {}).forEach(o => {
+                    // ★ delegatedBy가 없으면(=원 거래처 담당자 본인이 직접 납품) 또는
+                    //   delegatedBy가 내 wsId가 아니면(=다른 사용자가 대납) 제외
+                    //   → 내가 직접 대납한 거래만 명세표에 포함
+                    if (!o.delegatedBy || o.delegatedBy !== myWsId) return;
                     sharedOrders.push({ ...o, _sharedWsId: wsId });
                 });
             } catch(e) { /* 접근 불가 워크스페이스 무시 */ }

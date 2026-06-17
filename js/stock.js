@@ -101,6 +101,12 @@ function getPrevStockAtDate(si, targetDateStr) {
 
 function onStockDateChange(val) {
     const today = todayKST();
+    const minDate = kstAddDays(today, -1); // 재고 로그 보관 한계(어제) — 그 이전은 정확한 조회 불가
+    if (val && val < minDate) {
+        toast('❗ 재고 이력은 어제까지만 정확히 조회됩니다', 'var(--orange)');
+        val = minDate;
+        document.getElementById('stockViewDate').value = minDate;
+    }
     if (!val || val >= today) {
         // 오늘이거나 미래면 오늘 모드
         stockViewDate = '';
@@ -117,7 +123,9 @@ function onStockDateChange(val) {
 
 function resetStockToToday() {
     stockViewDate = '';
-    document.getElementById('stockViewDate').value = todayKST();
+    const input = document.getElementById('stockViewDate');
+    input.value = todayKST();
+    input.min   = kstAddDays(todayKST(), -1);
     document.getElementById('stockHistoryBanner').classList.remove('visible');
     renderStock();
 }
@@ -127,6 +135,7 @@ function stockDateNav(delta) {
     const cur = input.value || todayKST();
     const next = kstAddDays(cur, delta);
     if (next > todayKST()) return; // 미래 날짜 이동 방지
+    if (next < kstAddDays(todayKST(), -1)) return; // 재고 로그는 어제·오늘만 보관 — 그 이전은 부정확하므로 이동 차단
     input.value = next;
     onStockDateChange(next);
 }

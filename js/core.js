@@ -146,7 +146,10 @@ function showTab(name) {
     }
     if (name === 'stock') {
         const sdInput = document.getElementById('stockViewDate');
-        if (sdInput && !sdInput.value) sdInput.value = todayKST();
+        if (sdInput) {
+            sdInput.min = kstAddDays(todayKST(), -1); // 로그 보관 한계(어제) 이전 선택 차단
+            if (!sdInput.value) sdInput.value = todayKST();
+        }
         refreshStockCarryover(true);  // 재고 이월은 정합성상 항상 실행
         // refreshStockCarryover가 항상 renderStock()을 호출하므로 dirty 해제
         _dirty['stock'] = false;

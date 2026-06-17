@@ -18,7 +18,11 @@ function findStockByName(name) {
 function recalcStockFromOrders(silent = false) {
     if (!stockAutoDeduct) return 0;
     let fixedCount = 0;
+    const today = todayKST();
     orders.forEach(o => {
+        // ★ 오늘 전표만 대상 — 재고 로그가 어제·오늘만 보관되므로(중복방지 체크 한계),
+        //   날짜 필터가 없으면 과거 전표가 매번 다시 차감되는 심각한 버그가 됨
+        if (o.date !== today) return;
         if (o.isVoid || !(o.items||[]).length) return;
         o.items.forEach(it => {
             const si = findStockByName(it.name);
@@ -487,7 +491,7 @@ async function submitOrder() {
         if (isVoid) order.isVoid = true;
         // ★ 공유 거래처 대납 표시: A의 Firebase에 저장되지만 B(SESSION_ID)가 납품한 거래
         // → A 앱에서 총매출 집계 시 제외, B 앱에서만 매출로 인식
-        if (isSharedVirtual) order.delegatedBy = (localStorage.getItem('workspaceId') || SESSION_ID); // ★ wsId로 저장 (재시작 후에도 동일 식별)
+        if (isSharedVirtual) order.delegatedBy = ((localStorage.getItem('workspaceId') || SESSION_ID) + '').toLowerCase(); // ★ wsId로 저장 (재시작 후에도 동일 식별, sync.js 비교 로직과 대소문자 일치)
         newOrders.push(order);
         // 단가 캐시 갱신
         (group.items||[]).forEach(it => { if (it.price > 0) prices[it.name] = it.price; });
