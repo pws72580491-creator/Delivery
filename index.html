@@ -11,7 +11,7 @@
     <meta name="apple-mobile-web-app-title" content="납품관리">
     <link rel="apple-touch-icon" href="./icon-192.png">
     <link rel="manifest" href="./manifest.json">
-    <title>납품 관리 Pro v102</title>
+    <title>납품 관리 Pro v103</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js" defer></script>
@@ -38,7 +38,7 @@
             <div class="logo-icon">📦</div>
             <div>
                 <div class="logo-text">납품 관리 Pro</div>
-                <div class="logo-sub">v102 · PWA 앱 설치 지원</div>
+                <div class="logo-sub">v103 · PWA 앱 설치 지원</div>
             </div>
         </div>
         <div class="header-btns">
@@ -607,7 +607,7 @@
     <div class="card">
         <div class="card-title">앱 정보</div>
         <div style="font-size:13px;color:var(--text2);line-height:2;margin-bottom:12px;">
-            버전: <strong style="color:var(--accent);">v102</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
+            버전: <strong style="color:var(--accent);">v103</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
             거래처: <span id="infoClients">0</span>개 &nbsp;·&nbsp;
             납품내역: <span id="infoOrders">0</span>건
         </div>
@@ -621,8 +621,12 @@
             <div id="changelogList" style="display:flex;flex-direction:column;gap:6px;">
                 <!-- 현재 버전 -->
                 <div class="changelog-item">
-                    <span class="changelog-ver" style="color:var(--green);">v102</span>
-                    <span class="changelog-desc">공유 거래처 대납 표시 로직 재설계 — 거래처 담당자(A)가 아닌 다른 사용자(B, C 등)가 공유 거래처에 대신 납품한 내역이, 같은 거래처를 구독 중인 제3자(C)에게도 노출되던 버그 수정. order.delegatedBy를 SESSION_ID(재시작마다 변경) 대신 워크스페이스ID로 저장하고, 공유 주문 리스너가 delegatedBy === 내 워크스페이스ID인 건만 표시하도록 변경. 이제 누가 대신 납품하든 사전 설정 없이 본인 + 거래처 담당자 앱에만 자동으로 보임.</span>
+                    <span class="changelog-ver" style="color:var(--green);">v103</span>
+                    <span class="changelog-desc">재고 버그 3건 수정 — ① recalcStockFromOrders(재고탭 🔄 버튼)에 날짜 필터 누락 수정: 재고 로그가 어제·오늘만 보관되어 중복방지 체크가 무력화되면서 누를 때마다 과거 전표가 재차감되던 심각한 버그 → 오늘 전표만 대상으로 한정 ② 재고 과거 조회(◀▶·날짜선택)가 로그 보관 한계(어제)보다 이전으로 이동 시 부정확한 추정치를 경고 없이 보여주던 문제 수정 → 어제 이전 이동 차단 + min 속성·안내 토스트 추가 ③ 전표 수정 모달에서 타인거래↔내거래 전환 시 재고 보정이 수정 전 isVoid 기준으로 분기되어 전환 케이스에서 재고가 반영되지 않던 문제 수정 → 수정 후 상태 기준으로 분기, 타인거래→내거래 전환 시 신규 수량 전체 차감</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v102</span>
+                    <span class="changelog-desc">공유 거래처 대납 표시 로직 재설계 — 거래처 담당자(A)가 아닌 다른 사용자(B, C 등)가 공유 거래처에 대신 납품한 내역이, 같은 거래처를 구독 중인 제3자(C)에게도 노출되던 버그 수정. order.delegatedBy를 SESSION_ID(재시작마다 변경) 대신 워크스페이스ID로 저장하고, 공유 주문 리스너가 delegatedBy === 내 워크스페이스ID인 건만 표시하도록 변경. 이제 누가 대신 납품하든 사전 설정 없이 본인 + 거래처 담당자 앱에만 자동으로 보임. 추가로 history.js에서 대납 거래를 매출 집계에서 무조건 제외하던 로직을 수정하여, 대납을 한 본인(B) 화면에서는 정상적으로 매출에 포함되도록 수정(_mySharedEntry 플래그로 구분).</span>
                 </div>
                 <div class="changelog-item">
                     <span class="changelog-ver">v101</span>
