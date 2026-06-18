@@ -291,7 +291,11 @@ document.addEventListener('keydown', e => {
 function focusNext(nextId, action) {
     if (action) { action(); return; }
     const el = document.getElementById(nextId);
-    if (el) el.focus();
+    if (!el) return;
+    el.focus();
+    setTimeout(() => {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 80);
 }
 
 function bindEnter(id, nextId, action) {
@@ -358,7 +362,9 @@ window.addEventListener('DOMContentLoaded', () => {
         'histSearch':     'orderList',
         'settleSearch':   'settlementTable',
     };
-    ['deliveryClient','clientSearch','histSearch','settleSearch'].forEach(id => {
+    // deliveryClient는 bindEnter에서 처리하므로 여기선 더블탭만 초기화
+    _initDoubleTapSelect(document.getElementById('deliveryClient'));
+    ['clientSearch','histSearch','settleSearch'].forEach(id => {
         _initDoubleTapSelect(document.getElementById(id));
         // 모바일: Enter(이동) 키 입력 시 키보드 닫기 + 결과 목록으로 스크롤
         const el = document.getElementById(id);
