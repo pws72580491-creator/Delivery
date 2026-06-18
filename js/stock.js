@@ -1031,22 +1031,38 @@ function openStockLog(id) {
 
 // ─── 저장공간 사용량 바 업데이트 ───
 
+function _calcTodayOut(name) {
+    const today = todayKST();
+    return orders
+        .filter(o => o.date === today)
+        .flatMap(o => o.items || [])
+        .filter(item => normItemName(item.name) === normItemName(name))
+        .reduce((sum, item) => sum + Number(item.qty || 0), 0);
+}
+
 function initEggItems() {
     let added = 0;
+    const today = todayKST();
     EGG_ITEMS_DEFAULT.forEach(egg => {
         const exists = stockItems.some(s => normItemName(s.name) === normItemName(egg.name));
         if (!exists) {
+            const todayOut = stockAutoDeduct ? _calcTodayOut(egg.name) : 0;
+            const initLog = [];
+            if (stockAutoDeduct && todayOut > 0) {
+                initLog.push({ type:'auto', qty: -todayOut, before: 0, after: -todayOut,
+                    reason:'등록 시 오늘 납품 자동 반영', date: today, at: new Date().toISOString() });
+            }
             stockItems.push(normStock({
-                id: _uid(), name: egg.name, qty: 0,
+                id: _uid(), name: egg.name, qty: Math.max(0, -todayOut),
                 unit: egg.unit, low: egg.low, danger: egg.danger, note: egg.note,
-                log: []
+                log: initLog
             }));
             added++;
         }
     });
     if (added > 0) {
         saveData(); _markDirty('stock'); renderStock();
-        toast(`🥚 달걀 ${added}종 등록 완료`, 'var(--green)');
+        toast(`🥚 달걀 ${added}종 등록 완료 (오늘 납품 자동 반영)`, 'var(--green)');
     } else {
         toast('이미 모든 달걀 품목이 등록되어 있습니다');
     }
@@ -1075,20 +1091,27 @@ function checkEtcInitBanner() {
 
 function initEtcItems() {
     let added = 0;
+    const today = todayKST();
     ETC_ITEMS_DEFAULT.forEach(etc => {
         const exists = stockItems.some(s => normItemName(s.name) === normItemName(etc.name));
         if (!exists) {
+            const todayOut = stockAutoDeduct ? _calcTodayOut(etc.name) : 0;
+            const initLog = [];
+            if (stockAutoDeduct && todayOut > 0) {
+                initLog.push({ type:'auto', qty: -todayOut, before: 0, after: -todayOut,
+                    reason:'등록 시 오늘 납품 자동 반영', date: today, at: new Date().toISOString() });
+            }
             stockItems.push(normStock({
-                id: _uid(), name: etc.name, qty: 0,
+                id: _uid(), name: etc.name, qty: Math.max(0, -todayOut),
                 unit: etc.unit, low: etc.low, danger: etc.danger, note: etc.note || '',
-                log: []
+                log: initLog
             }));
             added++;
         }
     });
     if (added > 0) {
         saveData(); _markDirty('stock'); renderStock();
-        toast(`📦 기타 품목 ${added}종 등록 완료`, 'var(--accent)');
+        toast(`📦 기타 품목 ${added}종 등록 완료 (오늘 납품 자동 반영)`, 'var(--accent)');
     } else {
         toast('이미 모든 기타 품목이 등록되어 있습니다');
     }
