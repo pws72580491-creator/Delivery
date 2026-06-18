@@ -11,7 +11,7 @@
     <meta name="apple-mobile-web-app-title" content="납품관리">
     <link rel="apple-touch-icon" href="./icon-192.png">
     <link rel="manifest" href="./manifest.json">
-    <title>납품 관리 Pro v104</title>
+    <title>납품 관리 Pro v105</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js" defer></script>
@@ -38,7 +38,7 @@
             <div class="logo-icon">📦</div>
             <div>
                 <div class="logo-text">납품 관리 Pro</div>
-                <div class="logo-sub">v104 · PWA 앱 설치 지원</div>
+                <div class="logo-sub">v105 · PWA 앱 설치 지원</div>
             </div>
         </div>
         <div class="header-btns">
@@ -355,6 +355,15 @@
       <button class="btn btn-ghost btn-sm" onclick="document.getElementById('eggInitBanner').style.display='none'">나중에</button>
     </div>
   </div>
+  <!-- 기타 품목 빠른 등록 배너 -->
+  <div id="etcInitBanner" style="display:none;margin-bottom:12px;background:linear-gradient(135deg,#ede9fe,#f5f3ff);border:1.5px solid #a78bfa;border-radius:var(--radius);padding:13px 14px;">
+    <div style="font-size:13px;font-weight:800;color:#4c1d95;margin-bottom:6px;">📦 기타 품목을 한 번에 등록할까요?</div>
+    <div style="font-size:11px;color:#5b21b6;margin-bottom:10px;">이른아침·유정란·구운란·메추리알 21종을 자동으로 등록합니다</div>
+    <div style="display:flex;gap:8px;">
+      <button class="btn btn-sm" style="flex:1;background:#7c3aed;color:#fff;border:none;" onclick="initEtcItems()">✅ 기타 21종 등록</button>
+      <button class="btn btn-ghost btn-sm" onclick="document.getElementById('etcInitBanner').style.display='none'">나중에</button>
+    </div>
+  </div>
   <div style="display:flex;gap:8px;margin-bottom:10px;">
     <input type="text" class="form-input" id="stockSearch" placeholder="🔍 품목 검색…" oninput="renderStock()" autocomplete="off" style="flex:1;">
     <button class="btn btn-ghost btn-sm" onclick="refreshStockCarryover()" style="white-space:nowrap;flex-shrink:0;" title="전일 마감 재고 이월 및 변동 반영">🔄</button>
@@ -607,7 +616,7 @@
     <div class="card">
         <div class="card-title">앱 정보</div>
         <div style="font-size:13px;color:var(--text2);line-height:2;margin-bottom:12px;">
-            버전: <strong style="color:var(--accent);">v104</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
+            버전: <strong style="color:var(--accent);">v105</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
             거래처: <span id="infoClients">0</span>개 &nbsp;·&nbsp;
             납품내역: <span id="infoOrders">0</span>건
         </div>
@@ -621,7 +630,7 @@
             <div id="changelogList" style="display:flex;flex-direction:column;gap:6px;">
                 <!-- 현재 버전 -->
                 <div class="changelog-item">
-                    <span class="changelog-ver" style="color:var(--green);">v104</span>
+                    <span class="changelog-ver" style="color:var(--green);">v105</span>
                     <span class="changelog-desc">반품/회수 처리 기능 추가 — 납품등록 확정 팝업에 "↩ 반품/회수" 토글 신설(타인거래 토글과 상호배타). ON 상태로 확정하면 수량·금액이 음수로 저장된 별도 전표가 생성되어, 재고는 자동으로 입고(복원) 처리되고 금액은 해당 거래처의 미수금에서 자동 차감(상쇄)됨 — 기존 정산·대시보드·거래명세서 수식에 그대로 흘러들어가 별도 작업 없이 합계가 맞춰짐. 미수금 집계 중 주문별로 0 이상으로 자르고 합산하던 2곳(대시보드 미수금 위젯, 미수금 탭)을 순합산 후 클램프로 수정해 반품이 정확히 상쇄되도록 함(겸사겸사 대시보드 미수 거래처 위젯의 금액이 누락되어 항상 0으로 표시되던 기존 버그도 함께 수정). 반품/회수 전표는 내역·상세·거래명세서에 전용 배지로 표시되고 수금 액션은 비활성화됨(차감만 발생하므로 수금 대상이 아님). 전표 수정 모달에서도 반품 전표는 수량을 양수로 입력하도록 UI 처리하고 저장 시 자동으로 부호를 반영.</span>
                 </div>
                 <div class="changelog-item">
