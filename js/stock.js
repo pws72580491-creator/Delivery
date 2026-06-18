@@ -415,6 +415,16 @@ function renderStock() {
         return;
     }
     const EGG_ORDER = ['왕란','특란','대란','중란'];
+    const ETC_ORDER = [
+        '이른아침 왕란 30입','이른아침 특란 30입','이른아침 대란 30입','이른아침 초란 30입',
+        '이른아침 왕란 10입','이른아침 PURE특란 10입','이른아침 대란 10입',
+        '이른아침 PURE왕란 15입','이른아침 영양왕란 15입','이른아침 영양특란 10입',
+        '명품영양란 특란 30입',
+        '유정란 1번 10입','유정란 1번 30입',
+        '유정란 2번 10입','유정란 2번 15입','유정란 2번 30입',
+        '구운란 10입','구운란 벌크 30입','구운란 망 30입',
+        '메추리알 24알','깐메추리알 1kg'
+    ];
     const eggItems  = [];
     const etcItems  = [];
     if (!q && stockSortMode === 'name') {
@@ -423,6 +433,14 @@ function renderStock() {
             else etcItems.push(si);
         });
         eggItems.sort((a,b) => EGG_ORDER.indexOf(a.name) - EGG_ORDER.indexOf(b.name));
+        etcItems.sort((a, b) => {
+            const ai = ETC_ORDER.indexOf(a.name);
+            const bi = ETC_ORDER.indexOf(b.name);
+            if (ai === -1 && bi === -1) return a.name.localeCompare(b.name, 'ko');
+            if (ai === -1) return 1;
+            if (bi === -1) return -1;
+            return ai - bi;
+        });
     }
     const parts = [];
     if (!q && stockSortMode === 'name' && eggItems.length > 0) {
@@ -1043,5 +1061,37 @@ function checkEggInitBanner() {
     );
     // 달걀 품목이 하나도 없을 때만 배너 표시
     banner.style.display = hasAnyEgg ? 'none' : 'block';
+    checkEtcInitBanner();
+}
+
+function checkEtcInitBanner() {
+    const banner = document.getElementById('etcInitBanner');
+    if (!banner) return;
+    const hasAnyEtc = ETC_ITEMS_DEFAULT.some(etc =>
+        stockItems.some(s => normItemName(s.name) === normItemName(etc.name))
+    );
+    banner.style.display = hasAnyEtc ? 'none' : 'block';
+}
+
+function initEtcItems() {
+    let added = 0;
+    ETC_ITEMS_DEFAULT.forEach(etc => {
+        const exists = stockItems.some(s => normItemName(s.name) === normItemName(etc.name));
+        if (!exists) {
+            stockItems.push(normStock({
+                id: _uid(), name: etc.name, qty: 0,
+                unit: etc.unit, low: etc.low, danger: etc.danger, note: etc.note || '',
+                log: []
+            }));
+            added++;
+        }
+    });
+    if (added > 0) {
+        saveData(); _markDirty('stock'); renderStock();
+        toast(`📦 기타 품목 ${added}종 등록 완료`, 'var(--accent)');
+    } else {
+        toast('이미 모든 기타 품목이 등록되어 있습니다');
+    }
+    document.getElementById('etcInitBanner').style.display = 'none';
 }
 

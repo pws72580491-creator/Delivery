@@ -58,6 +58,30 @@ const EGG_ITEMS_DEFAULT = [
     { name:'중란', unit:'판', low:5, danger:2, note:'중란' },
 ];
 
+const ETC_ITEMS_DEFAULT = [
+    { name:'이른아침 왕란 30입',   unit:'박스', low:3, danger:1 },
+    { name:'이른아침 특란 30입',   unit:'박스', low:3, danger:1 },
+    { name:'이른아침 대란 30입',   unit:'박스', low:3, danger:1 },
+    { name:'이른아침 초란 30입',   unit:'박스', low:3, danger:1 },
+    { name:'이른아침 왕란 10입',   unit:'박스', low:3, danger:1 },
+    { name:'이른아침 PURE특란 10입', unit:'박스', low:3, danger:1 },
+    { name:'이른아침 대란 10입',   unit:'박스', low:3, danger:1 },
+    { name:'이른아침 PURE왕란 15입', unit:'박스', low:3, danger:1 },
+    { name:'이른아침 영양왕란 15입', unit:'박스', low:3, danger:1 },
+    { name:'이른아침 영양특란 10입', unit:'박스', low:3, danger:1 },
+    { name:'명품영양란 특란 30입',  unit:'박스', low:3, danger:1 },
+    { name:'유정란 1번 10입',      unit:'박스', low:3, danger:1 },
+    { name:'유정란 1번 30입',      unit:'박스', low:3, danger:1 },
+    { name:'유정란 2번 10입',      unit:'박스', low:3, danger:1 },
+    { name:'유정란 2번 15입',      unit:'박스', low:3, danger:1 },
+    { name:'유정란 2번 30입',      unit:'박스', low:3, danger:1 },
+    { name:'구운란 10입',          unit:'박스', low:3, danger:1 },
+    { name:'구운란 벌크 30입',     unit:'박스', low:3, danger:1 },
+    { name:'구운란 망 30입',       unit:'박스', low:3, danger:1 },
+    { name:'메추리알 24알',        unit:'박스', low:3, danger:1 },
+    { name:'깐메추리알 1kg',       unit:'박스', low:3, danger:1 },
+];
+
 // ─── 초기화 ───
 
 // ─── 스와이프 제스처 ───
