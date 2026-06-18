@@ -125,12 +125,12 @@ function exportHistoryExcel() {
     if (!orders.length) return toast('❗ 내보낼 데이터가 없습니다');
     const rows = [...orders].sort((a,b)=>(a.date||"").localeCompare(b.date||"")).flatMap(o => {
         if ((o.items||[]).length === 0) {
-            return [{ 날짜: o.date, 거래처: o.clientName, 품목: '(오프라인 저장 — 품목 상세 없음)', 수량: '-', 단가: '-', 금액: o.total, 합계: o.total, 납품상태: o.isPaid?'완납':'미수', 타인거래: o.isVoid?'Y':'', 메모: o.note||'' }];
+            return [{ 날짜: o.date, 거래처: o.clientName, 품목: '(오프라인 저장 — 품목 상세 없음)', 수량: '-', 단가: '-', 금액: o.total, 합계: o.total, 납품상태: o.isPaid?'완납':'미수', 타인거래: o.isVoid?'Y':'', 반품회수: o.isReturn?'Y':'', 메모: o.note||'' }];
         }
         return (o.items||[]).map(it => ({
             날짜: o.date, 거래처: o.clientName, 품목: it.name,
             수량: it.qty, 단가: it.price, 금액: it.qty*it.price,
-            합계: o.total, 납품상태: o.isPaid?'완납':'미수', 타인거래: o.isVoid?'Y':'',
+            합계: o.total, 납품상태: o.isPaid?'완납':'미수', 타인거래: o.isVoid?'Y':'', 반품회수: o.isReturn?'Y':'',
             수금방법: o.paidMethod==='transfer'?'계좌이체':o.paidMethod==='other'?'기타':o.paidAmount>0?'현금':'',
             메모: o.note||''
         }));
@@ -148,7 +148,7 @@ function exportSettlementExcel() {
         if (!date) return toast('❗ 날짜를 선택하세요');
         const filtered = applyPayFilter(orders.filter(o=>o.date===date));
         if (!filtered.length) return toast('❗ 해당 날짜 데이터가 없습니다');
-        const rows = filtered.map(o=>({ 날짜:o.date, 거래처:o.clientName, 품목:(o.items||[]).map(i=>`${i.name}(${i.qty})`).join(','), 금액:o.total, 수금상태:o.isPaid?'완납':'미수', 수금방법:o.paidMethod==='transfer'?'계좌이체':o.paidMethod==='other'?'기타':'현금', 메모:o.note||'' }));
+        const rows = filtered.map(o=>({ 날짜:o.date, 거래처:o.clientName, 품목:(o.items||[]).map(i=>`${i.name}(${Math.abs(i.qty)})`).join(','), 금액:o.total, 수금상태:o.isReturn?'반품/회수':(o.isPaid?'완납':'미수'), 수금방법:o.paidMethod==='transfer'?'계좌이체':o.paidMethod==='other'?'기타':'현금', 메모:o.note||'' }));
         const ws = XLSX.utils.json_to_sheet(rows);
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, '일별정산');
@@ -180,7 +180,7 @@ function exportSettlementExcel() {
     if (!month) return toast('❗ 정산 월을 선택하세요');
     const filtered = applyPayFilter(orders.filter(o=>o.date?.startsWith(month)));
     if (!filtered.length) return toast('❗ 해당 월 데이터가 없습니다');
-    const rows = filtered.map(o=>({ 날짜:o.date, 거래처:o.clientName, 품목:(o.items||[]).map(i=>`${i.name}(${i.qty})`).join(','), 금액:o.total, 수금상태:o.isPaid?'완납':'미수', 수금방법:o.paidMethod==='transfer'?'계좌이체':o.paidMethod==='other'?'기타':'현금', 메모:o.note||'' }));
+    const rows = filtered.map(o=>({ 날짜:o.date, 거래처:o.clientName, 품목:(o.items||[]).map(i=>`${i.name}(${Math.abs(i.qty)})`).join(','), 금액:o.total, 수금상태:o.isReturn?'반품/회수':(o.isPaid?'완납':'미수'), 수금방법:o.paidMethod==='transfer'?'계좌이체':o.paidMethod==='other'?'기타':'현금', 메모:o.note||'' }));
     const ws = XLSX.utils.json_to_sheet(rows);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, '정산');

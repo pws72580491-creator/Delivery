@@ -184,11 +184,11 @@ function renderSettlementDaily() {
                 ${list.map(o => `
                     <div style="border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:7px;background:var(--surf3);">
                         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-                            <span style="font-size:13px;font-weight:700;">${fmt(o.total)}원</span>
-                            <span class="pay-badge ${o.isPaid?'paid':'unpaid'}" style="cursor:default;font-size:10px;">${o.isPaid?'완납':'미수'}</span>
+                            <span style="font-size:13px;font-weight:700;${o.isReturn?'color:var(--red);':''}">${fmt(o.total)}원</span>
+                            <span class="pay-badge ${o.isReturn?'unpaid':(o.isPaid?'paid':'unpaid')}" style="cursor:default;font-size:10px;">${o.isReturn?'↩반품/회수':(o.isPaid?'완납':'미수')}</span>
                         </div>
                         <div style="font-size:12px;color:var(--text2);">
-                            ${(o.items||[]).map(i=>`${i.name} ${i.qty}개 × ${fmt(i.price||0)}원`).join(' / ')}
+                            ${(o.items||[]).map(i=>`${i.name} ${Math.abs(i.qty)}개 × ${fmt(i.price||0)}원`).join(' / ')}
                         </div>
                         ${o.note?`<div style="font-size:11px;color:var(--text3);margin-top:4px;">📝 ${o.note}</div>`:''}
                     </div>`).join('')}
@@ -387,8 +387,8 @@ async function shareStatement() {
 function _buildStatShareText(clientName, month, { filt, carryAmt, monthTotal, monthPaid, grandUnpaid }) {
     const _monthLabel = (() => { const p = month.split('-'); return p.length >= 2 ? `${parseInt(p[1])}월` : month; })();
     const orderLines = filt.map(o => {
-        const itemStr = (o.items||[]).length ? (o.items||[]).map(i=>`${i.name} ${i.qty}개`).join(', ') : '(품목 정보 없음)';
-        const stateStr = o.isPaid ? '✅완납' : (o.paidAmount ? `💳부분(${fmt(o.paidAmount)}원)` : '🔴미수');
+        const itemStr = (o.items||[]).length ? (o.items||[]).map(i=>`${i.name} ${Math.abs(i.qty)}개`).join(', ') : '(품목 정보 없음)';
+        const stateStr = o.isReturn ? '↩반품/회수' : o.isPaid ? '✅완납' : (o.paidAmount ? `💳부분(${fmt(o.paidAmount)}원)` : '🔴미수');
         return `  ${o.date}  ${itemStr}  ${fmt(o.total)}원 ${stateStr}`;
     }).join('\n');
     return [
@@ -497,7 +497,10 @@ async function showClientStatement(clientName, month) {
             ? `<br><span style="font-size:9px;background:#e0e7ff;color:#4f46e5;border-radius:4px;padding:1px 5px;font-weight:700;">📦${escapeHtml(o._sharedWsId)}</span>` : '';
         // 공유 내역도 편집 가능 — 배지만 표시
         const voidBadge = o.isVoid ? `<br><span style="font-size:9px;background:rgba(245,166,35,.15);color:var(--orange);border-radius:4px;padding:1px 4px;font-weight:700;">👤타인</span>` : '';
-        const statBadge = o.isPaid
+        const returnBadge = o.isReturn ? `<br><span style="font-size:9px;background:var(--red-dim);color:var(--red);border-radius:4px;padding:1px 4px;font-weight:700;">↩반품/회수</span>` : '';
+        const statBadge = o.isReturn
+            ? `<span class="pay-badge" style="cursor:default;font-size:9px;background:var(--red-dim);color:var(--red);">↩조정</span>`
+            : o.isPaid
             ? (o.discount>0
                 ? `<span class="pay-badge paid" style="cursor:default;font-size:9px;">✂️할인완납</span>${voidBadge}`
                 : `<span class="pay-badge paid" style="cursor:default;font-size:9px;">완납</span>${voidBadge}`)
@@ -519,17 +522,19 @@ async function showClientStatement(clientName, month) {
                 </div>
             </td>
         </tr>` : '';
-        // 공유 내역도 클릭 가능 (수정/결제 가능)
-        const rowClick = o.isPaid
+        // 공유 내역도 클릭 가능 (수정/결제 가능) / 반품·회수는 결제 대상이 아니므로 상세보기로
+        const rowClick = o.isReturn
             ? `showOrderDetail('${o.id||''}')`
-            : `openQuickPayFromStatement('${o.id||''}','${escapeAttr(clientName)}','${escapeAttr(month)}')`;
-        const rowTitle  = o._sharedWsId ? `📦 공유 내역 (${o._sharedWsId}) — 탭하여 처리` : o.isPaid ? '탭하여 상세 보기' : '탭하여 결제 처리';
-        const rowAccent = o._sharedWsId ? 'background:rgba(99,102,241,0.05);' : !o.isPaid ? 'background:rgba(239,68,68,0.04);' : '';
+            : o.isPaid
+                ? `showOrderDetail('${o.id||''}')`
+                : `openQuickPayFromStatement('${o.id||''}','${escapeAttr(clientName)}','${escapeAttr(month)}')`;
+        const rowTitle  = o._sharedWsId ? `📦 공유 내역 (${o._sharedWsId}) — 탭하여 처리` : o.isReturn ? '탭하여 상세 보기' : o.isPaid ? '탭하여 상세 보기' : '탭하여 결제 처리';
+        const rowAccent = o._sharedWsId ? 'background:rgba(99,102,241,0.05);' : o.isReturn ? 'background:rgba(229,68,68,0.04);' : !o.isPaid ? 'background:rgba(239,68,68,0.04);' : '';
         const rowOnclick = rowClick ? `onclick="${rowClick}"` : '';
         const rowCursor  = rowClick ? 'cursor:pointer;' : 'cursor:default;';
         return `<tr style="${rowCursor}${rowAccent}" ${rowOnclick} title="${rowTitle}">
             <td>${o.date}</td>
-            <td style="font-size:11px;">${_fmtItems(o)}${sharedBadge}</td>
+            <td style="font-size:11px;">${_fmtItems(o)}${sharedBadge}${returnBadge}</td>
             <td class="text-right">${fmt(o.total)}원</td>
             <td class="text-center">${statBadge}</td>
         </tr>${partialDetailRow}`;
@@ -627,22 +632,24 @@ function saveStatementPNG(clientName, month) {
     const carryRows = carryOrders.map(o => `
         <tr class="carry-row">
             <td>${o.date}</td>
-            <td>${(o.items || []).map(i => `${i.name}(${i.qty})`).join(', ')}</td>
+            <td>${(o.items || []).map(i => `${i.name}(${Math.abs(i.qty)})`).join(', ')}</td>
             <td class="num">${fmt(o.total)}원</td>
-            <td class="center"><span class="badge carry">이월</span></td>
+            <td class="center">${o.isReturn ? '<span class="badge unpaid">↩반품/회수</span>' : '<span class="badge carry">이월</span>'}</td>
         </tr>`).join('');
 
     const monthRows = filt.map(o => {
         const partial = !o.isPaid && (o.paidAmount || 0) > 0;
         const remain  = partial ? o.total - (o.paidAmount || 0) : 0;
-        const badge   = o.isPaid
+        const badge   = o.isReturn
+            ? '<span class="badge unpaid">↩반품/회수</span>'
+            : o.isPaid
             ? '<span class="badge paid">완납</span>'
             : partial
             ? `<span class="badge part">부분<br><small>${fmt(o.paidAmount)}원</small></span>`
             : '<span class="badge unpaid">미수</span>';
         return `<tr>
             <td>${o.date}</td>
-            <td>${(o.items || []).map(i => `${i.name}(${i.qty})`).join(', ')}</td>
+            <td>${(o.items || []).map(i => `${i.name}(${Math.abs(i.qty)})`).join(', ')}</td>
             <td class="num">${fmt(o.total)}원${partial ? `<br><small class="remain">잔여 ${fmt(remain)}원</small>` : ''}</td>
             <td class="center">${badge}</td>
         </tr>`;
@@ -1355,7 +1362,7 @@ function openPayEdit(orderId, clientName, month) {
     document.getElementById('peClientName').value = clientName;
     document.getElementById('peMonth').value      = month;
 
-    const itemNames = (o.items||[]).map(i=>`${i.name}(${i.qty})`).join(', ');
+    const itemNames = (o.items||[]).map(i=>`${i.name}(${Math.abs(i.qty)})`).join(', ');
     document.getElementById('peOrderInfo').textContent  = `${o.date} · ${itemNames}`;
     document.getElementById('peOrderTotal').textContent = fmt(o.total) + '원';
     _setMoneyVal('peAmount', o.paidAmount || 0);

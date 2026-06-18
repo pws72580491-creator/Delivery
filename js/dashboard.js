@@ -9,10 +9,10 @@ function renderDashboard() {
     const sales  = curr.reduce((s,o)=>s+_et(o),0);
     // 미수금: 전체 기간 누적 미수금
     // delegatedBy: 대납 거래는 미수금 집계에서도 제외
-    const totalUnpaid = orders.filter(o => !o.delegatedBy).reduce((s, o) => {
-        const remain = Math.max(0, o.total - _actualPaid(o));
-        return s + (o.isPaid ? 0 : remain);
-    }, 0);
+    // ★ 주문별로 먼저 0 이상으로 자르지 않고 그대로 합산 → 반품/회수(음수 total)가
+    //   같은 거래처의 다른 미수금과 정확히 상쇄된 뒤, 최종 합계만 0 이상으로 표시
+    const totalUnpaid = Math.max(0, orders.filter(o => !o.delegatedBy && !o.isPaid)
+        .reduce((s, o) => s + (o.total - _actualPaid(o)), 0));
     document.getElementById('dashSales').textContent  = fmt(sales);
     document.getElementById('dashUnpaid').textContent = fmt(totalUnpaid);
 
@@ -35,13 +35,13 @@ function renderDashboard() {
         </div>
         ${recent.map(o => {
             const isToday = o.date === today;
-            const isUnpaid = !o.isPaid;
+            const isUnpaid = !o.isPaid && !o.isReturn;
             return `<div class="recent-card" onclick="showOrderDetail('${escapeAttr(o.id)}')">
                 <div>
                     <div class="recent-client">${escapeHtml(o.clientName||'(없음)')}${isToday?'<span style="margin-left:5px;font-size:9px;background:var(--accent);color:#fff;padding:1px 5px;border-radius:4px;font-weight:700;">오늘</span>':''}</div>
-                    <div class="recent-date">${escapeHtml(o.date)} · ${(o.items||[]).length}품목${isUnpaid?'<span style="margin-left:5px;color:var(--red);font-weight:700;">미수</span>':''}</div>
+                    <div class="recent-date">${escapeHtml(o.date)} · ${(o.items||[]).length}품목${o.isReturn?'<span style="margin-left:5px;color:var(--red);font-weight:700;">↩반품/회수</span>':''}${isUnpaid?'<span style="margin-left:5px;color:var(--red);font-weight:700;">미수</span>':''}</div>
                 </div>
-                <div class="recent-amount">${fmt(o.total)}원</div>
+                <div class="recent-amount" style="${o.isReturn?'color:var(--red);':''}">${fmt(o.total)}원</div>
             </div>`;
         }).join('')}`;
 
@@ -53,6 +53,8 @@ function renderDashboard() {
         if (o.isPaid) return;
         const key = o.clientId || o.clientName;
         if (!clientUnpaidMap[key]) clientUnpaidMap[key] = { name: o.clientName||'(없음)', amt: 0, oldestDate: o.date, phone: '' };
+        // ★ 반품/회수(음수 total)도 그대로 합산해 같은 거래처 미수금과 상쇄
+        clientUnpaidMap[key].amt += (o.total - (o.paidAmount||0));
         if (o.date < clientUnpaidMap[key].oldestDate) clientUnpaidMap[key].oldestDate = o.date;
     });
     // 연락처 보충
@@ -152,8 +154,10 @@ function renderUnpaid() {
     const clientMap = {};
     orders.forEach(o => {
         if (o.isPaid) return;
-        const remain = Math.max(0, o.total - (o.paidAmount || 0));
-        if (remain <= 0) return;
+        // ★ 주문별로 0 이상 자르지 않고 그대로(음수 가능) 합산 → 반품/회수가 같은
+        //   거래처의 다른 미수금을 정확히 상쇄. 최종 amt는 아래에서 0 이상만 노출.
+        const remain = o.total - (o.paidAmount || 0);
+        if (remain === 0) return;
         const key = o.clientId || o.clientName;
         if (!clientMap[key]) clientMap[key] = {
             name: o.clientName || '(없음)', amt: 0, orders: [], oldestDate: o.date, phone: '', clientId: o.clientId
@@ -215,9 +219,13 @@ function renderUnpaid() {
         const orderRows = sortedOrders.slice(0, 4).map(o => {
             const d = Math.floor((new Date(today) - new Date(o.date)) / 86400000);
             const dCls = d >= 90 ? 'severe' : d >= 60 ? 'danger' : d >= 30 ? 'warn' : '';
+            const isCredit = o._remain < 0;
+            const amtColor = isCredit ? 'var(--green)' : 'var(--red)';
+            const tag = isCredit ? '<small style="color:var(--green);font-size:9px;"> ↩반품/회수</small>'
+                : (o.paidAmount>0 ? '<small style="color:#60a5fa;font-size:9px;"> 부분수금</small>' : '');
             return `<div class="unpaid-card-order-row">
                 <span style="font-size:11px;color:var(--text2);">${o.date} <span class="dash-unpaid-days ${dCls}">(${d}일)</span></span>
-                <span style="font-size:12px;font-weight:700;color:var(--red);">${fmt(o._remain)}원${o.paidAmount>0?'<small style="color:#60a5fa;font-size:9px;"> 부분수금</small>':''}</span>
+                <span style="font-size:12px;font-weight:700;color:${amtColor};">${fmt(o._remain)}원${tag}</span>
             </div>`;
         }).join('');
         const moreCount = sortedOrders.length - 4;

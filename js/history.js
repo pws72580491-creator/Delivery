@@ -222,9 +222,10 @@ function renderOrders() {
         const cId   = escapeAttr(o.clientId   || '');
         const oId   = escapeAttr(o.id         || '');
         const voided   = !!o.isVoid;
+        const isReturn = !!o.isReturn;
         const readOnly  = false; // 공유 내역도 수정/결제/삭제 가능
-        // 타인거래도 미수/완납 상태 반영한 카드 색상
-        const cardClass = `order-card ${voided ? ('voided ' + (o.isPaid ? 'paid' : 'unpaid')) : (o.isPaid ? 'paid' : 'unpaid')}`;
+        // 타인거래도 미수/완납 상태 반영한 카드 색상 / 반품·회수는 별도 색상
+        const cardClass = `order-card ${isReturn ? 'return ' : ''}${voided ? ('voided ' + (o.isPaid ? 'paid' : 'unpaid')) : (o.isPaid ? 'paid' : 'unpaid')}`;
         // 타인거래: 👤배지 + 수금 상태 배지 같이 표시 (수금 처리 가능)
         const payBadge = `<span class="pay-badge ${o.isPaid?'paid':((o.paidAmount||0)>0?'':'unpaid')}" style="${(o.paidAmount||0)>0&&!o.isPaid?'background:#3b82f625;color:#60a5fa;':''}" onclick="${o.isPaid ? `togglePaid('${oId}')` : `openQuickPay('${oId}')` }">${o.isPaid?(o.discount>0?`✂️ 할인완납`:'✅ 완납'):(o.paidAmount||0)>0?'💳 부분':'⚠ 미수'}</span>`;
         // ★ 대납 뱃지: A 화면(내 orders, delegatedBy 있음)에선 "매출제외", B 화면(_mySharedEntry)에선 "내 매출"로 구분 표시
@@ -233,11 +234,14 @@ function renderOrders() {
                 ? `<span style=\"font-size:10px;background:#dbeafe;color:#1d4ed8;border-radius:4px;padding:1px 5px;display:inline-block;margin-bottom:2px;\">🔄 대납(내 매출)</span>`
                 : `<span style=\"font-size:10px;background:#fef3c7;color:#92400e;border-radius:4px;padding:1px 5px;display:inline-block;margin-bottom:2px;\">🔄 대납(매출제외)</span>`)
             : '';
-        const badgeHtml = voided
-            ? `<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">${delegatedBadge}<span class="void-badge">👤 타인거래</span>${payBadge}</div>`
-            : delegatedBadge
-                ? `<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">${delegatedBadge}${payBadge}</div>`
-                : payBadge;
+        // 반품/회수 전표: 수금 배지 대신 전용 배지(클릭 동작 없음 — 정산에는 음수로 자동 반영됨)
+        const badgeHtml = isReturn
+            ? `<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">${delegatedBadge}<span class="return-badge">↩ 반품/회수</span></div>`
+            : voided
+                ? `<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">${delegatedBadge}<span class="void-badge">👤 타인거래</span>${payBadge}</div>`
+                : delegatedBadge
+                    ? `<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">${delegatedBadge}${payBadge}</div>`
+                    : payBadge;
         const memoLabel = o.note ? '📝 메모수정' : '📝 메모';
         const memoClass = o.note ? 'memo-btn has-memo' : 'memo-btn';
 
@@ -269,7 +273,7 @@ function renderOrders() {
                 </div>
                 ${badgeHtml}
             </div>
-            <div class="order-items">${(o.items||[]).map(i=>`${highlight(i.name,q)} ${escapeHtml(i.qty)}개 × ${fmt(i.price)}원`).join('<br>')}</div>
+            <div class="order-items">${(o.items||[]).map(i=>`${highlight(i.name,q)} ${escapeHtml(Math.abs(i.qty))}개 × ${fmt(i.price)}원`).join('<br>')}</div>
             ${memoBodyHtml}
             <div class="order-bottom"><div class="order-total">${fmt(o.total)}원</div></div>
             <div class="order-actions">
@@ -574,32 +578,37 @@ async function deleteOrder(id) {
     const o = orders.find(o=>o.id===id);
     if (!o) return;
 
-    // ── 자동 재고 복구 (stockAutoDeduct ON이고 타인거래가 아니고 재고에 등록된 품목이 있을 때) ──
+    // ── 자동 재고 보정 (stockAutoDeduct ON이고 타인거래가 아니고 재고에 등록된 품목이 있을 때) ──
+    // 일반 납품 삭제 → 차감했던 재고를 복구(+) / 반품·회수 삭제 → 입고했던 재고를 다시 차감(-)
     if (stockAutoDeduct && !o.isVoid) {
         const matchedItems = (o.items||[]).filter(it => findStockByName(it.name));
         if (matchedItems.length > 0) {
+            const isReturn = !!o.isReturn;
             const doRestore = await customConfirm(
                 `자동 재고 차감이 켜져 있습니다.\n\n` +
-                `이 납품 전표(${o.clientName} · ${o.date})의\n` +
-                `재고를 복구할까요?\n\n` +
-                matchedItems.map(it => `· ${it.name} +${it.qty}${findStockByName(it.name)?.unit||''}`).join('\n'),
-                '재고 복구', 'btn-primary'
+                `이 ${isReturn ? '반품/회수' : '납품'} 전표(${o.clientName} · ${o.date})의\n` +
+                `재고를 ${isReturn ? '다시 차감' : '복구'}할까요?\n\n` +
+                matchedItems.map(it => {
+                    const q = Number(it.qty)||0;
+                    return `· ${it.name} ${q>0?'+':''}${q}${findStockByName(it.name)?.unit||''}`;
+                }).join('\n'),
+                isReturn ? '재고 차감' : '재고 복구', 'btn-primary'
             );
             if (doRestore) {
                 matchedItems.forEach(it => {
                     const si = findStockByName(it.name);
                     if (!si) return;
                     const before = si.qty;
-                    si.qty = before + (Number(it.qty)||0);
+                    si.qty = Math.max(0, before + (Number(it.qty)||0));
                     (si.log = si.log||[]).unshift({
                         type:'restore', qty: si.qty-before, before, after:si.qty,
-                        reason:`납품삭제복구(${o.clientName}·${o.date})`,
+                        reason:(isReturn ? '반품전표삭제차감(' : '납품삭제복구(')+o.clientName+'·'+o.date+')',
                         date: todayKST(), originalDate: o.date, at: new Date().toISOString()
                     });
                     si.log = _trimLogByDate(si.log);
                 });
                 // 재고 갱신은 아래 공통 처리에서
-                toast('↩ 재고가 복구되었습니다', 'var(--green)');
+                toast(isReturn ? '↩ 재고가 다시 차감되었습니다' : '↩ 재고가 복구되었습니다', 'var(--green)');
             }
         }
     }
@@ -695,6 +704,7 @@ function saveClientEditFromHistory() {
 
 // ─── 전표 수정 ───
 let _oeditItems = [];   // 현재 편집 중인 품목 배열
+let _oeditIsReturn = false; // 현재 편집 중인 전표가 반품/회수 전표인지 (수량 입력 UI 부호 처리용)
 
 function openOrderEdit(id) {
     // 공유 내역 포함 탐색
@@ -703,14 +713,17 @@ function openOrderEdit(id) {
     const o = found.order;
     // 공유 내역이면 모달에 표시
     const editTitle = document.getElementById('orderEditTitle') || document.getElementById('orderEditModal')?.querySelector('.card-title');
-    if (editTitle) editTitle.textContent = found.isShared ? `📦 공유 납품 수정 (${found.sharedWsId})` : '납품 수정';
+    if (editTitle) editTitle.textContent = found.isShared ? `📦 공유 납품 수정 (${found.sharedWsId})` : (o.isReturn ? '↩ 반품/회수 수정' : '납품 수정');
     document.getElementById('oeditOrderId').value    = id;
     document.getElementById('oeditClientName').value = o.clientName || '';
     document.getElementById('oeditDate').value       = o.date || '';
     document.getElementById('oeditNote').value       = o.note || '';
     _oeditItems = (o.items || []).map(it => ({ ...it }));  // 깊은 복사
-    // ③ 타인거래 토글 초기화
-    _applyOeditVoidUI(!!o.isVoid);
+    _oeditIsReturn = !!o.isReturn; // 반품/회수 전표면 수량 입력 UI를 양수로 보여주고 저장 시 부호 반전
+    // ③ 타인거래 토글 초기화 — 반품/회수 전표는 타인거래와 동시에 적용될 수 없으므로 토글 자체를 숨기고 OFF로 고정
+    const voidWrap = document.getElementById('oeditVoidToggleWrap');
+    if (voidWrap) voidWrap.style.display = o.isReturn ? 'none' : 'flex';
+    _applyOeditVoidUI(o.isReturn ? false : !!o.isVoid);
     renderOeditItems();
     openModal('orderEditModal');
 }
@@ -768,9 +781,9 @@ function renderOeditItems() {
                         style="width:100%;font-weight:700;">
                 </div>
                 <div class="oedit-qty-wrap">
-                    <input class="oedit-item-input" type="number" value="${it.qty||0}" min="1"
+                    <input class="oedit-item-input" type="number" value="${Math.abs(it.qty||0)}" min="1"
                         enterkeyhint="next"
-                        oninput="_oeditItems[${i}].qty=parseInt(this.value)||0;_oeditItems[${i}].total=_oeditItems[${i}].qty*_oeditItems[${i}].price;_oeditRecalc()"
+                        oninput="_oeditItems[${i}].qty=(parseInt(this.value)||0)*(_oeditIsReturn?-1:1);_oeditItems[${i}].total=_oeditItems[${i}].qty*_oeditItems[${i}].price;_oeditRecalc()"
                         onkeydown="if(event.key==='Enter'){event.preventDefault();this.closest('.oedit-item-row').querySelectorAll('.oedit-item-input')[2].focus();}">
                 </div>
                 <div class="oedit-price-wrap">
@@ -790,7 +803,7 @@ function renderOeditItems() {
 function _oeditRecalc() {
     const total = _oeditItems.reduce((s, it) => s + (Number(it.qty)||0) * (Number(it.price)||0), 0);
     const el = document.getElementById('oeditTotal');
-    if (el) el.textContent = fmt(total) + '원';
+    if (el) { el.textContent = fmt(total) + '원'; el.style.color = total < 0 ? 'var(--red)' : ''; }
 }
 
 function oeditAddItem() {
@@ -799,7 +812,8 @@ function oeditAddItem() {
     const price = _moneyVal('oeditNewPrice');
     if (!name)  return toast('❗ 품목명을 입력하세요');
     if (qty <= 0) return toast('❗ 수량을 1 이상 입력하세요');
-    _oeditItems.push({ name, qty, price, total: qty * price });
+    const signedQty = _oeditIsReturn ? -qty : qty;
+    _oeditItems.push({ name, qty: signedQty, price, total: signedQty * price });
     document.getElementById('oeditNewName').value  = '';
     document.getElementById('oeditNewQty').value   = '';
     document.getElementById('oeditNewPrice').value = '';
@@ -978,9 +992,11 @@ function showOrderDetail(id) {
     const o = foundDetail.order;
     const sharedBadgeDetail = foundDetail.isShared
         ? `<span style="font-size:10px;background:#e0e7ff;color:#4f46e5;border-radius:4px;padding:2px 6px;margin-left:6px;font-weight:700;">📦 ${escapeHtml(o._sharedWsId)}</span>` : '';
+    const returnBadgeDetail = o.isReturn
+        ? `<span class="return-badge" style="margin-left:6px;">↩ 반품/회수</span>` : '';
     document.getElementById('detailContent').innerHTML = `
         <div style="margin-bottom:14px;">
-            <div style="font-size:18px;font-weight:700;margin-bottom:4px;">${escapeHtml(o.clientName||'(없음)')}${sharedBadgeDetail}</div>
+            <div style="font-size:18px;font-weight:700;margin-bottom:4px;">${escapeHtml(o.clientName||'(없음)')}${sharedBadgeDetail}${returnBadgeDetail}</div>
             <div style="font-size:13px;color:var(--text2);">납품일: ${escapeHtml(o.date)}</div>
         </div>
         <div style="overflow-x:auto;">
@@ -989,7 +1005,7 @@ function showOrderDetail(id) {
             <tbody>
                 ${o._noItems
                     ? `<tr><td colspan="4" style="text-align:center;color:var(--text2);padding:12px;font-size:12px;">📡 품목 상세는 온라인 연결 후 Firebase에서 조회됩니다</td></tr>`
-                    : (o.items||[]).map(it=>`<tr><td>${escapeHtml(it.name)}</td><td class="text-center">${escapeHtml(it.qty)}</td><td class="text-right">${fmt(it.price)}원</td><td class="text-right">${fmt(it.qty*it.price)}원</td></tr>`).join('')
+                    : (o.items||[]).map(it=>`<tr><td>${escapeHtml(it.name)}</td><td class="text-center">${escapeHtml(Math.abs(it.qty))}</td><td class="text-right">${fmt(it.price)}원</td><td class="text-right">${fmt(it.qty*it.price)}원</td></tr>`).join('')
                 }
             </tbody>
             <tfoot>
@@ -1001,7 +1017,7 @@ function showOrderDetail(id) {
         <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end;">
             <button class="btn btn-ghost btn-sm" onclick="closeModal('detailModal');openOrderEdit('${escapeAttr(o.id)}')">✏️ 수정</button>
             <button class="btn btn-ghost btn-sm" onclick="closeModal('detailModal');openMemoPopup('${escapeAttr(o.id)}')">📝 메모</button>
-            ${o.isPaid ? `<button class="btn btn-ghost btn-sm" onclick="closeModal('detailModal');togglePaid('${escapeAttr(o.id)}')">↩️ 미수 복귀</button>` : `<button class="btn btn-accent btn-sm" onclick="closeModal('detailModal');openQuickPay('${escapeAttr(o.id)}')">💳 수금</button>`}
+            ${o.isReturn ? '' : (o.isPaid ? `<button class="btn btn-ghost btn-sm" onclick="closeModal('detailModal');togglePaid('${escapeAttr(o.id)}')">↩️ 미수 복귀</button>` : `<button class="btn btn-accent btn-sm" onclick="closeModal('detailModal');openQuickPay('${escapeAttr(o.id)}')">💳 수금</button>`)}
         </div>`;
     openModal('detailModal');
 }

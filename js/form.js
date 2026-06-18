@@ -27,18 +27,24 @@ function recalcStockFromOrders(silent = false) {
         o.items.forEach(it => {
             const si = findStockByName(it.name);
             if (!si) return;
+            const qtyNum = Number(it.qty) || 0;
+            const deltaQty = -qtyNum; // 실제 적용될 재고 변화량 (일반 납품: 음수 차감 / 반품·회수: 양수 입고)
+            // ★ 반품/회수 품목은 qty가 음수로 저장되므로, 이미 반영됐는지 확인할 때도
+            //   부호를 그대로 비교해야 한다 (Math.abs로 비교하면 항상 불일치 → 매번 재적용되는 버그였음).
+            //   type도 'auto'(일반 차감)뿐 아니라 'in'(반품/회수 입고 — 등록 시점에 기록됨)도 함께 인정해야
+            //   정상 등록된 반품 전표를 재계산 버튼으로 또 적용해 중복 반영하는 것을 막을 수 있다.
             const alreadyLogged = (si.log || []).some(l =>
-                l.type === 'auto' &&
+                (l.type === 'auto' || l.type === 'in') &&
                 l.date === o.date &&
                 l.reason && l.reason.includes(o.clientName) &&
-                Math.abs(l.qty) === Number(it.qty)
+                l.qty === deltaQty
             );
             if (alreadyLogged) return;
             const before = si.qty;
-            si.qty = Math.max(0, si.qty - (Number(it.qty) || 0));
+            si.qty = Math.max(0, si.qty + deltaQty);
             (si.log = si.log || []).push({
-                type: 'auto', qty: si.qty - before, before, after: si.qty,
-                reason: '납품차감(' + o.clientName + ') [재계산]',
+                type: deltaQty >= 0 ? 'in' : 'auto', qty: si.qty - before, before, after: si.qty,
+                reason: (deltaQty >= 0 ? '반품/회수 입고(' : '납품차감(') + o.clientName + ') [재계산]',
                 date: o.date, at: new Date().toISOString()
             });
             si.log = _trimLogByDate(si.log);
@@ -385,36 +391,48 @@ async function openDeliveryConfirm() {
     }
 
     // 요약 정보 구성
-    const totalAmt = tempGroups.reduce((s, g) => s + g.items.reduce((a, i) => a + i.total, 0), 0);
     const dateCount = tempGroups.length;
     const itemCount = tempGroups.reduce((s, g) => s + g.items.length, 0);
 
     document.getElementById('deliveryConfirmSub').textContent =
         `${client.name} · ${dateCount}일 · 품목 ${itemCount}개`;
 
-    // 날짜별 품목 요약
+    document.getElementById('deliveryConfirmOverlay').classList.add('open');
+    document.getElementById('deliveryConfirmPopup').classList.add('open');
+    // 타인거래 · 반품/회수 토글 초기화
+    _deliveryIsVoid = false;
+    _deliveryIsReturn = false;
+    _updateDeliveryVoidToggle();
+    _updateDeliveryReturnToggle();
+    _renderDeliveryConfirmSummary();
+}
+
+// 납품확정 팝업의 품목 요약 + 합계를 그린다. 반품/회수 토글 ON이면 모든 금액을 음수·빨간색으로 표시.
+// 토글 핸들러에서도 재호출되어 실시간으로 부호를 갱신한다.
+function _renderDeliveryConfirmSummary() {
+    const sign = _deliveryIsReturn ? -1 : 1;
+    let rawTotal = 0;
     let html = '';
     tempGroups.forEach(g => {
         html += `<div style="font-weight:700;color:var(--accent);margin-bottom:4px;">📅 ${g.date}</div>`;
         g.items.forEach(it => {
-            const si = stockAutoDeduct && !_deliveryIsVoid ? findStockByName(it.name) : null;
+            rawTotal += it.total;
+            // 재고 부족 힌트는 실제로 차감이 일어나는 일반 납품(타인거래·반품 아님)에서만 표시
+            const si = stockAutoDeduct && !_deliveryIsVoid && !_deliveryIsReturn ? findStockByName(it.name) : null;
             const isShort = si && it.qty > si.qty;
             const stockHint = si ? `<span style="font-size:10px;color:${isShort?'var(--red)':'var(--green)'};margin-left:4px;">(재고 ${si.qty}${si.unit||'개'}${isShort?' ⚠부족':''})</span>` : '';
-            html += `<div style="display:flex;justify-content:space-between;align-items:baseline;color:${isShort?'var(--red)':'var(--text2)'};padding-left:8px;margin-bottom:3px;gap:8px;">
+            const lineColor = _deliveryIsReturn ? 'var(--red)' : (isShort?'var(--red)':'var(--text)');
+            html += `<div style="display:flex;justify-content:space-between;align-items:baseline;color:${isShort&&!_deliveryIsReturn?'var(--red)':'var(--text2)'};padding-left:8px;margin-bottom:3px;gap:8px;">
                 <span style="flex:1;min-width:0;">${it.name}${stockHint}</span>
                 <span style="font-size:11px;white-space:nowrap;color:var(--text3);">${it.qty}개 × ${fmt(it.price)}원</span>
-                <span style="font-family:'DM Mono',monospace;font-weight:700;color:${isShort?'var(--red)':'var(--text)'};white-space:nowrap;">= ${fmt(it.total)}원</span>
+                <span style="font-family:'DM Mono',monospace;font-weight:700;color:${lineColor};white-space:nowrap;">= ${fmt(it.total*sign)}원</span>
             </div>`;
         });
     });
     document.getElementById('deliveryConfirmSummary').innerHTML = html;
-    document.getElementById('deliveryConfirmTotal').textContent = fmt(totalAmt) + '원';
-
-    document.getElementById('deliveryConfirmOverlay').classList.add('open');
-    document.getElementById('deliveryConfirmPopup').classList.add('open');
-    // 타인거래 토글 초기화
-    _deliveryIsVoid = false;
-    _updateDeliveryVoidToggle();
+    const totalEl = document.getElementById('deliveryConfirmTotal');
+    totalEl.textContent = fmt(rawTotal*sign) + '원';
+    totalEl.style.color = _deliveryIsReturn ? 'var(--red)' : 'var(--accent)';
 }
 
 function closeDeliveryConfirm() {
@@ -424,10 +442,21 @@ function closeDeliveryConfirm() {
 
 // ── 타인거래 토글 ──
 let _deliveryIsVoid = false;
+// ── 반품/회수 토글 (재고 입고 + 금액 차감, 타인거래와 동시 적용 불가) ──
+let _deliveryIsReturn = false;
 
 function toggleDeliveryVoid() {
     _deliveryIsVoid = !_deliveryIsVoid;
+    if (_deliveryIsVoid && _deliveryIsReturn) { _deliveryIsReturn = false; _updateDeliveryReturnToggle(); }
     _updateDeliveryVoidToggle();
+    _renderDeliveryConfirmSummary();
+}
+
+function toggleDeliveryReturn() {
+    _deliveryIsReturn = !_deliveryIsReturn;
+    if (_deliveryIsReturn && _deliveryIsVoid) { _deliveryIsVoid = false; _updateDeliveryVoidToggle(); }
+    _updateDeliveryReturnToggle();
+    _renderDeliveryConfirmSummary();
 }
 
 function _updateDeliveryVoidToggle() {
@@ -446,6 +475,24 @@ function _updateDeliveryVoidToggle() {
     }
 }
 
+function _updateDeliveryReturnToggle() {
+    const btn = document.getElementById('deliveryReturnToggle');
+    if (!btn) return;
+    if (_deliveryIsReturn) {
+        btn.style.background = 'rgba(229,57,53,.12)';
+        btn.style.borderColor = 'var(--red)';
+        btn.style.color = 'var(--red)';
+        btn.textContent = '↩ 반품/회수 ON — 재고 입고 · 금액 차감';
+    } else {
+        btn.style.background = 'var(--surf2)';
+        btn.style.borderColor = 'var(--border)';
+        btn.style.color = 'var(--text2)';
+        btn.textContent = '↩ 반품/회수 (재고 입고 + 금액 차감)';
+    }
+}
+
+// (합계 표시는 _renderDeliveryConfirmSummary()에 통합됨)
+
 async function submitOrder() {
     const clientIdRaw = document.getElementById('selectedClientId').value;
     // 가상 ID(__shared__:wsId:name) 또는 일반 ID 처리
@@ -460,20 +507,21 @@ async function submitOrder() {
     }
     if (!clientIdRaw || !client || !tempGroups.length) return;
     const isVoid = !!_deliveryIsVoid;
+    const isReturn = !!_deliveryIsReturn;
     const isSharedVirtual = !!client._isSharedVirtual;
     const sharedTargetWsId = client._sharedWsId || null;
 
-    // ── 자동 재고 차감 (타인거래 또는 공유거래처면 스킵) ──
+    // ── 자동 재고 처리 (타인거래 또는 공유거래처면 스킵) — 일반 납품은 차감, 반품/회수는 입고 ──
     if (stockAutoDeduct && !isVoid && !isSharedVirtual) {
-        const today = todayKST();
         tempGroups.forEach(group => {
             (group.items||[]).forEach(it => {
                 const si = findStockByName(it.name);
                 if (!si) return;
                 const before = si.qty;
-                si.qty = Math.max(0, si.qty - (Number(it.qty)||0));
-                (si.log = si.log||[]).unshift({ type:'auto', qty:si.qty-before, before, after:si.qty,
-                    reason:'납품차감('+client.name+')', date:group.date, at:new Date().toISOString() });
+                const qtyNum = Number(it.qty)||0;
+                si.qty = Math.max(0, si.qty + (isReturn ? qtyNum : -qtyNum));
+                (si.log = si.log||[]).unshift({ type: isReturn ? 'in' : 'auto', qty:si.qty-before, before, after:si.qty,
+                    reason: (isReturn ? '반품/회수 입고(' : '납품차감(') + client.name + ')', date:group.date, at:new Date().toISOString() });
                 si.log = _trimLogByDate(si.log);
             });
         });
@@ -481,19 +529,24 @@ async function submitOrder() {
 
     const newOrders = [];
     tempGroups.forEach(group => {
-        const total = group.items.reduce((s,i)=>s+i.total,0);
+        // 반품/회수: 수량·금액을 음수로 저장 → 재고(입고)·정산(차감) 전반에서 기존 수식이 그대로 상쇄 처리함
+        const itemsForOrder = isReturn
+            ? group.items.map(i => ({ ...i, qty: -i.qty, total: -i.total }))
+            : [...group.items];
+        const total = itemsForOrder.reduce((s,i)=>s+i.total,0);
         const order = {
             id: _uid(), clientId: isSharedVirtual ? '' : clientIdRaw, clientName: client.name,
-            date:group.date, items:[...group.items],
+            date:group.date, items:itemsForOrder,
             total, note:'', isPaid:false,
             createdAt:new Date().toISOString()
         };
         if (isVoid) order.isVoid = true;
+        if (isReturn) order.isReturn = true;
         // ★ 공유 거래처 대납 표시: A의 Firebase에 저장되지만 B(SESSION_ID)가 납품한 거래
         // → A 앱에서 총매출 집계 시 제외, B 앱에서만 매출로 인식
         if (isSharedVirtual) order.delegatedBy = ((localStorage.getItem('workspaceId') || SESSION_ID) + '').toLowerCase(); // ★ wsId로 저장 (재시작 후에도 동일 식별, sync.js 비교 로직과 대소문자 일치)
         newOrders.push(order);
-        // 단가 캐시 갱신
+        // 단가 캐시 갱신 (원래 양수 단가 기준으로 저장)
         (group.items||[]).forEach(it => { if (it.price > 0) prices[it.name] = it.price; });
     });
 
@@ -562,6 +615,7 @@ async function submitOrder() {
     const _savedClientName = client.name;
     const _savedMonth = (tempGroups[0]?.date || todayKST()).slice(0, 7);
     _deliveryIsVoid = false;
+    _deliveryIsReturn = false;
     tempGroups = [];
     closeDeliveryConfirm();
     // 거래처 입력창 완전 초기화 → 새 거래처 바로 입력 가능
@@ -591,7 +645,7 @@ async function submitOrder() {
         showTab('history');
         setHistPeriod('today', document.querySelector('.chip.hist-period[data-p="today"]'));
         if (!isSharedVirtual) {
-            toast(isVoid ? '👤 타인거래로 등록 완료 (재고 차감 제외)' : '✅ 납품 등록 완료!', 'var(--green)');
+            toast(isReturn ? '↩ 반품/회수 등록 완료! (재고 입고 처리됨)' : isVoid ? '👤 타인거래로 등록 완료 (재고 차감 제외)' : '✅ 납품 등록 완료!', 'var(--green)');
         }
         setTimeout(() => showClientStatement(_savedClientName, _savedMonth), 200);
     }, 80);

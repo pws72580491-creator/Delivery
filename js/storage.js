@@ -65,7 +65,7 @@ function saveToLocal() {
 // ── 품목 목록 표시용 헬퍼 (오프라인 _noItems 전표 안내 포함) ──
 function _fmtItems(o) {
     if (!(o.items||[]).length) return '<span style="color:var(--text3);font-size:10px;">📡 온라인 시 표시</span>';
-    return (o.items||[]).map(i=>`${i.name}(${i.qty})`).join(', ');
+    return (o.items||[]).map(i=>`${i.name}(${Math.abs(i.qty)})`).join(', ');
 }
 
 // ② createdAt/updatedAt 단축: "YYYY-MM-DDTHH:MM:SS.mmmZ" → "YYYY-MM-DDTHH:MM" (16자, ~8자 절감)
@@ -218,7 +218,7 @@ function normalizeBackupData(data) {
         // totalAmount=0이지만 items 합계가 있으면 items 기준으로 복원
         const itemsSum = (o.items||[]).reduce((s,i) => s + Number(i.total ?? (i.qty*i.price) ?? 0), 0);
         o.total = Number(o.total ?? o.totalAmount ?? 0);
-        if (o.total === 0 && itemsSum > 0) o.total = itemsSum;
+        if (o.total === 0 && itemsSum !== 0) o.total = itemsSum; // 0이 아닌 합계(반품/회수의 음수 포함)는 items 기준으로 복원
         // totalAmount는 읽기 호환만 유지 — 신규 저장 시 생성 안 함
         if (!Array.isArray(o.items)) o.items = [];  // items 누락 방어
         // it.total 복원 (v41 이후 백업은 total 필드 없음 → qty×price로 복원)
