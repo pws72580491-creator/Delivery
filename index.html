@@ -201,17 +201,20 @@
         </div>
         <div class="form-group">
             <label class="form-label">품목명</label>
-            <input type="text" class="form-input" id="itemName" placeholder="품목명" autocomplete="new-password" autocorrect="off" autocapitalize="off" spellcheck="false" oninput="onItemNameInput(this.value)">
+            <input type="text" class="form-input" id="itemName" placeholder="품목명" autocomplete="new-password" autocorrect="off" autocapitalize="off" spellcheck="false" oninput="onItemNameInput(this.value)"
+                   enterkeyhint="next">
             <div class="price-hint" id="priceHint"></div>
         </div>
         <div class="input-row" style="margin-bottom:12px;">
             <div class="form-group">
                 <label class="form-label">수량</label>
-                <input type="number" class="form-input" id="itemQty" placeholder="0">
+                <input type="number" class="form-input" id="itemQty" placeholder="0"
+                       enterkeyhint="next">
             </div>
             <div class="form-group">
                 <label class="form-label">단가</label>
-                <input type="text" class="form-input" id="itemPrice" placeholder="0" inputmode="numeric" data-money onfocus="autoFillPrice(this)">
+                <input type="text" class="form-input" id="itemPrice" placeholder="0" inputmode="numeric" data-money onfocus="autoFillPrice(this)"
+                       enterkeyhint="done">
             </div>
             <button class="btn btn-primary" onclick="addItemToGroup()" style="align-self:flex-end;height:44px;padding:0 14px;">+</button>
         </div>
