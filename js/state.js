@@ -189,6 +189,21 @@ function debounce(fn, ms) {
     return f;
 }
 
+// ★ v106 fix: Firebase Promise 타임아웃 래퍼
+// 백그라운드 복귀 직후 소켓이 죽어있는 상태에서 .once()/.update() 호출 시
+// 응답이 영원히 오지 않아 Promise가 멈추는 경우가 있음 → 일정 시간 후 강제로 reject
+function _withTimeout(promise, ms, label) {
+    return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => {
+            reject(new Error(`[timeout] ${label || 'firebase op'} (${ms}ms)`));
+        }, ms);
+        promise.then(
+            v => { clearTimeout(timer); resolve(v); },
+            e => { clearTimeout(timer); reject(e); }
+        );
+    });
+}
+
 // ─── HTML 이스케이프 (XSS 방지) ───
 
 function escapeHtml(str) {
@@ -361,6 +376,7 @@ function _clearOrderDelta()    { _dirtyOrders.clear(); _deletedOrders.clear(); }
 // _syncGuard: debouncedSync 업로드가 진행 중일 때 true
 //   → 리스너가 업로드 응답 echo를 받아 로컬 데이터를 덮어쓰는 것을 차단
 let _syncGuard = false;
+let _syncGuardSetAt = 0;     // ★ v106 fix: _syncGuard=true로 전환된 시각 (워치독이 박제 감지에 사용)
 let _pendingFbSnap = null;   // _syncGuard 중 도착한 타기기 변경 스냅샷 (처리 보류)
 let _rtPollTimer   = null;   // 실시간 폴링 백업 타이머
 // _connectGuard: _doConnect의 초기 .get() 처리가 완료되기 전 true

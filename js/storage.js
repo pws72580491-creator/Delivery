@@ -279,7 +279,10 @@ const debouncedSync = debounce(async () => {
             // ★ CRM 우선권: 서버의 결제 필드를 읽어 merge 후 업로드
             // ★ v99 fix: _syncGuard 세팅 후 await — 이 사이에 다른 debouncedSync 진입 차단
             _syncGuard = true;
-            const serverSnap = await workspaceRef.child('orders').once('value').catch(() => null);
+            _syncGuardSetAt = Date.now();
+            const serverSnap = await _withTimeout(
+                workspaceRef.child('orders').once('value'), 12000, 'orders.once(delta)'
+            ).catch(() => null);
             const serverOrders = serverSnap ? serverSnap.val() : {};
             for (const id of _dirtyOrders) {
                 const o = orders.find(x => x.id === id);
@@ -295,7 +298,10 @@ const debouncedSync = debounce(async () => {
             // ★ CRM 우선권: 서버 결제 필드를 먼저 읽어 merge
             // ★ v99 fix: 동일하게 _syncGuard 선점 후 await
             _syncGuard = true;
-            const serverSnap2 = await workspaceRef.child('orders').once('value').catch(() => null);
+            _syncGuardSetAt = Date.now();
+            const serverSnap2 = await _withTimeout(
+                workspaceRef.child('orders').once('value'), 12000, 'orders.once(full)'
+            ).catch(() => null);
             const serverOrders2 = serverSnap2 ? serverSnap2.val() : {};
             const ordersMap = {};
             orders.forEach(o => {
@@ -324,13 +330,14 @@ const debouncedSync = debounce(async () => {
     const deletedSnap = new Set(_deletedOrders);
     // ★ Problem 2 수정: 업로드 진행 중에는 리스너가 echo를 덮어쓰지 못하도록 가드 설정
     _syncGuard = true;
+    _syncGuardSetAt = Date.now();
     // ★ 업로드 직전 lastHash 선점 갱신 → 리스너 echo 수신 시 hash 일치로 무시
     if (updates.clients)    lastHash.clients = ch;
     if (updates.orders)     lastHash.orders  = oh;
     if (updates.prices)     lastHash.prices  = ph;
     if (updates.stockItems) lastHash.stock   = sh;
     setSyncStatus('syncing');
-    workspaceRef.update(updates)
+    _withTimeout(workspaceRef.update(updates), 12000, 'orders.update')
         .then(() => {
             _clearOrderDelta(); // 성공 시 delta 추적 초기화
             _syncGuard = false;

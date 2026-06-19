@@ -878,7 +878,7 @@ function _flushSync() {
     if (updates.prices)     lastHash.prices  = ph;
     if (updates.stockItems) lastHash.stock   = sh;
     debouncedSync.cancel(); // 대기 중인 debounce 취소 (중복 방지)
-    workspaceRef.update(updates).then(() => {
+    _withTimeout(workspaceRef.update(updates), 12000, 'flushSync.update').then(() => {
         localStorage.setItem('lastLocalUpdated', nowIso);
     }).catch(() => {
         // 롤백 — 다음 실행 시 재시도
@@ -890,10 +890,42 @@ function _flushSync() {
 }
 
 // 화면 꺼짐 / 다른 앱으로 전환 시
+let _bgHiddenAt = 0; // ★ v106 fix: 백그라운드 진입 시각 (장시간 백그라운드 판단용)
+
+// ★ v106 fix: Firebase 소켓 강제 새로고침
+// 백그라운드 중 OS가 웹소켓을 조용히 끊어버려도 JS는 isConnected=true로 착각하는
+// "좀비 연결" 상태를 해소하기 위해 의도적으로 끊었다 재연결시킴
+function _refreshSocket() {
+    if (typeof firebase === 'undefined' || !firebase.apps || !firebase.apps.length || !workspaceRef) return;
+    try {
+        firebase.database().goOffline();
+        setTimeout(() => {
+            firebase.database().goOnline();
+            // 소켓 복구 후 보류 중이던 변경사항 재전송
+            setTimeout(() => { if (isConnected) debouncedSync(); }, 600);
+        }, 300);
+    } catch(e) { /* 무시 */ }
+}
+
 document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') {
+        _bgHiddenAt = Date.now();
         _flushSync();
     } else {
+        const wasHiddenMs = _bgHiddenAt ? (Date.now() - _bgHiddenAt) : 0;
+        _bgHiddenAt = 0;
+        // ★ v106 fix: 백그라운드 중 죽은 소켓 때문에 _syncGuard가 박제된 경우 강제 해제
+        const guardStuck = _syncGuard && _syncGuardSetAt && (Date.now() - _syncGuardSetAt > 15000);
+        if (guardStuck) {
+            console.warn('[동기화 워치독] _syncGuard 박제 감지 → 강제 해제');
+            _syncGuard = false;
+            setSyncStatus(isConnected ? 'online' : 'error');
+        }
+        // ★ v106 fix: 10초 이상 백그라운드에 있었거나 가드가 박제됐던 경우
+        // isConnected 상태와 무관하게 선제적으로 소켓을 새로고침 (좀비 연결 대비)
+        if (wasHiddenMs > 10000 || guardStuck) {
+            _refreshSocket();
+        }
         // 탭 복귀 시: 실시간 리스너가 살아 있으면 자동 갱신됨 (별도 작업 불필요)
         // 리스너가 없는 경우(오프라인 복귀, 첫 연결 전 등)에만 수동 갱신
         try {
