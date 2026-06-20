@@ -11,7 +11,7 @@
     <meta name="apple-mobile-web-app-title" content="납품관리">
     <link rel="apple-touch-icon" href="./icon-192.png">
     <link rel="manifest" href="./manifest.json">
-    <title>납품 관리 Pro v108</title>
+    <title>납품 관리 Pro v109</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js" defer></script>
@@ -38,7 +38,7 @@
             <div class="logo-icon">📦</div>
             <div>
                 <div class="logo-text">납품 관리 Pro</div>
-                <div class="logo-sub">v108 · PWA 앱 설치 지원</div>
+                <div class="logo-sub">v109 · PWA 앱 설치 지원</div>
             </div>
         </div>
         <div class="header-btns">
@@ -619,7 +619,7 @@
     <div class="card">
         <div class="card-title">앱 정보</div>
         <div style="font-size:13px;color:var(--text2);line-height:2;margin-bottom:12px;">
-            버전: <strong style="color:var(--accent);">v108</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
+            버전: <strong style="color:var(--accent);">v109</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
             거래처: <span id="infoClients">0</span>개 &nbsp;·&nbsp;
             납품내역: <span id="infoOrders">0</span>건
         </div>
@@ -633,7 +633,11 @@
             <div id="changelogList" style="display:flex;flex-direction:column;gap:6px;">
                 <!-- 현재 버전 -->
                 <div class="changelog-item">
-                    <span class="changelog-ver" style="color:var(--green);">v108</span>
+                    <span class="changelog-ver" style="color:var(--green);">v109</span>
+                    <span class="changelog-desc">화면 확대(핀치줌) 간헐적 새어나가는 문제 수정 — CSS touch-action을 전역(*)과 버튼·입력창·카드류에서 manipulation으로 설정해왔는데, manipulation은 명세상 더블탭줌만 막고 핀치줌(연속 확대)은 허용하는 값이라 JS의 핀치줌 차단 로직과 어긋나 있었음(브라우저가 네이티브 줌 제스처를 먼저 처리하면 간헐적으로 확대가 새어나감). touch-action을 pan-x pan-y로 변경해 핀치줌·더블탭줌 모두 CSS 레벨에서 1차 차단하고, 기존 JS 차단은 보조 안전장치로 유지. 탭 반응속도(300ms 지연 제거) 효과는 동일하게 유지됨.</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v108</span>
                     <span class="changelog-desc">동기화 진단 로그 추가 — 설정 → Firebase 동기화 → "동기화 진단 로그 보기"에서 확인 가능. 백그라운드 복귀, 소켓 연결/끊김(.info/connected), 동기화 시작/성공/실패/타임아웃, 워치독 발동, 소켓 강제 새로고침 등 핵심 동기화 이벤트를 시각과 함께 최대 300건 기록(거래처명·금액 등 개인정보는 저장하지 않음). 동기화 오류가 반복될 때 전체 복사해서 원인 진단에 활용 가능.</span>
                 </div>
                 <div class="changelog-item">

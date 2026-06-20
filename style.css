@@ -56,7 +56,7 @@ body.light {
 /* ═══════════════════════════════════════
    기초
 ═══════════════════════════════════════ */
-* { margin:0; padding:0; box-sizing:border-box; touch-action:manipulation; }
+* { margin:0; padding:0; box-sizing:border-box; touch-action:pan-x pan-y; }
 body {
     font-family:'Noto Sans KR',sans-serif;
     background:var(--bg);
@@ -1351,8 +1351,11 @@ button, a, input, select, textarea,
 .client-card, .order-card, .recent-card,
 .eg-card, .settle-table tbody tr,
 .dropdown-item, .cis-chip, .adj-btn {
-    touch-action: manipulation;
-    -ms-touch-action: manipulation;
+    /* ★ v109 fix: manipulation은 더블탭줌만 막고 핀치줌은 허용하는 값이라
+       전역 핀치줌 차단(JS)과 충돌해 간헐적으로 확대가 새어나가는 원인이 됨.
+       pan-x pan-y로 변경해도 300ms 탭 지연 제거 효과는 동일하게 유지됨. */
+    touch-action: pan-x pan-y;
+    -ms-touch-action: pan-x pan-y;
 }
 /* 스크롤 컨테이너 가속 */
 .content, .modal-sheet, #settlementTable {
