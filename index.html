@@ -11,7 +11,7 @@
     <meta name="apple-mobile-web-app-title" content="납품관리">
     <link rel="apple-touch-icon" href="./icon-192.png">
     <link rel="manifest" href="./manifest.json">
-    <title>납품 관리 Pro v106</title>
+    <title>납품 관리 Pro v107</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js" defer></script>
@@ -38,7 +38,7 @@
             <div class="logo-icon">📦</div>
             <div>
                 <div class="logo-text">납품 관리 Pro</div>
-                <div class="logo-sub">v106 · PWA 앱 설치 지원</div>
+                <div class="logo-sub">v107 · PWA 앱 설치 지원</div>
             </div>
         </div>
         <div class="header-btns">
@@ -619,7 +619,7 @@
     <div class="card">
         <div class="card-title">앱 정보</div>
         <div style="font-size:13px;color:var(--text2);line-height:2;margin-bottom:12px;">
-            버전: <strong style="color:var(--accent);">v106</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
+            버전: <strong style="color:var(--accent);">v107</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
             거래처: <span id="infoClients">0</span>개 &nbsp;·&nbsp;
             납품내역: <span id="infoOrders">0</span>건
         </div>
@@ -633,7 +633,11 @@
             <div id="changelogList" style="display:flex;flex-direction:column;gap:6px;">
                 <!-- 현재 버전 -->
                 <div class="changelog-item">
-                    <span class="changelog-ver" style="color:var(--green);">v106</span>
+                    <span class="changelog-ver" style="color:var(--green);">v107</span>
+                    <span class="changelog-desc">전일 마감재고 계산 버그 수정 — 재고 이력에서 "어제 마감 재고"를 찾을 때, 납품차감(auto) 로그를 항상 "해당 날짜 23:59:59"로 취급해 정렬하던 방식 때문에, 같은 날 그보다 늦게 발생한 수정보정(edit_adj)·입고·출고 등 실제시각 기반 항목이 있어도 더 이른 납품차감 시점이 "더 최근"으로 잘못 채택되는 문제가 있었음(예: 하루 입출고 합계가 0으로 맞아떨어지는데도 다음날 이월에는 중간 시점의 재고값이 잘못 이월됨). 정렬을 ① 소속 날짜 ② 같은 날짜 안에서는 실제 저장시각(at) 2단계로 비교하도록 수정해 정확한 마감재고가 이월되도록 함.</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v106</span>
                     <span class="changelog-desc">동기화 안정성 개선 — ① 백그라운드 복귀 후 납품 등록 시 "동기화 중"에서 멈추던 버그 수정: 백그라운드 중 OS가 Firebase 소켓을 조용히 끊어도 JS는 연결된 것으로 착각해 .once()/.update() Promise가 무한 대기하며 동기화 가드(_syncGuard)가 영구 고정되던 문제 → 모든 Firebase 읽기/쓰기 호출에 12초 타임아웃 추가, 타임아웃 시 자동으로 실패 처리하고 가드 해제 ② 10초 이상 백그라운드에 있었거나 가드가 박제된 것이 감지되면 화면 복귀 시 Firebase 소켓을 선제적으로 강제 재연결(goOffline→goOnline)하여 좀비 연결 해소 ③ 납품 입력 Enter 키 이동 시 화면이 따라가지 않던 버그 수정(스크롤 추가), 거래처 검색창의 Enter 핸들러 중복 등록 문제 수정, 품목명·수량·단가 입력란의 HTML 인라인 Enter 처리와 JS 공통 처리 간 충돌 제거</span>
                 </div>
                 <div class="changelog-item">
