@@ -11,7 +11,7 @@
     <meta name="apple-mobile-web-app-title" content="납품관리">
     <link rel="apple-touch-icon" href="./icon-192.png">
     <link rel="manifest" href="./manifest.json">
-    <title>납품 관리 Pro v107</title>
+    <title>납품 관리 Pro v108</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js" defer></script>
@@ -38,7 +38,7 @@
             <div class="logo-icon">📦</div>
             <div>
                 <div class="logo-text">납품 관리 Pro</div>
-                <div class="logo-sub">v107 · PWA 앱 설치 지원</div>
+                <div class="logo-sub">v108 · PWA 앱 설치 지원</div>
             </div>
         </div>
         <div class="header-btns">
@@ -619,7 +619,7 @@
     <div class="card">
         <div class="card-title">앱 정보</div>
         <div style="font-size:13px;color:var(--text2);line-height:2;margin-bottom:12px;">
-            버전: <strong style="color:var(--accent);">v107</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
+            버전: <strong style="color:var(--accent);">v108</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
             거래처: <span id="infoClients">0</span>개 &nbsp;·&nbsp;
             납품내역: <span id="infoOrders">0</span>건
         </div>
@@ -633,7 +633,11 @@
             <div id="changelogList" style="display:flex;flex-direction:column;gap:6px;">
                 <!-- 현재 버전 -->
                 <div class="changelog-item">
-                    <span class="changelog-ver" style="color:var(--green);">v107</span>
+                    <span class="changelog-ver" style="color:var(--green);">v108</span>
+                    <span class="changelog-desc">동기화 진단 로그 추가 — 설정 → Firebase 동기화 → "동기화 진단 로그 보기"에서 확인 가능. 백그라운드 복귀, 소켓 연결/끊김(.info/connected), 동기화 시작/성공/실패/타임아웃, 워치독 발동, 소켓 강제 새로고침 등 핵심 동기화 이벤트를 시각과 함께 최대 300건 기록(거래처명·금액 등 개인정보는 저장하지 않음). 동기화 오류가 반복될 때 전체 복사해서 원인 진단에 활용 가능.</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v107</span>
                     <span class="changelog-desc">전일 마감재고 계산 버그 수정 — 재고 이력에서 "어제 마감 재고"를 찾을 때, 납품차감(auto) 로그를 항상 "해당 날짜 23:59:59"로 취급해 정렬하던 방식 때문에, 같은 날 그보다 늦게 발생한 수정보정(edit_adj)·입고·출고 등 실제시각 기반 항목이 있어도 더 이른 납품차감 시점이 "더 최근"으로 잘못 채택되는 문제가 있었음(예: 하루 입출고 합계가 0으로 맞아떨어지는데도 다음날 이월에는 중간 시점의 재고값이 잘못 이월됨). 정렬을 ① 소속 날짜 ② 같은 날짜 안에서는 실제 저장시각(at) 2단계로 비교하도록 수정해 정확한 마감재고가 이월되도록 함.</span>
                 </div>
                 <div class="changelog-item">
@@ -1097,6 +1101,16 @@
             </p>
         </div>
 
+        <!-- 동기화 진단 로그 -->
+        <div style="margin-top:10px;">
+            <button class="btn btn-ghost btn-full" style="font-size:13px;" onclick="openDiagLogModal()">
+                🩺 동기화 진단 로그 보기
+            </button>
+            <p style="font-size:11px;color:var(--text2);margin:6px 2px 0;line-height:1.6;">
+                "동기화 오류"가 반복될 때 원인을 확인하기 위한 기록입니다 (거래처명·금액 등은 저장하지 않음).
+            </p>
+        </div>
+
         <!-- 구분선 -->
         <div style="margin:16px 0 12px;border-top:1px solid var(--border);"></div>
 
@@ -1127,6 +1141,24 @@
         </div>
 
         <button class="btn btn-ghost btn-full" style="margin-top:12px;" onclick="closeModal('firebaseModal')">닫기</button>
+    </div>
+</div>
+
+<!-- 동기화 진단 로그 -->
+<div class="modal-overlay" id="diagLogModal">
+    <div class="modal-sheet">
+        <div class="modal-handle"></div>
+        <div class="modal-title">🩺 동기화 진단 로그</div>
+        <p style="font-size:12px;color:var(--text2);margin-bottom:10px;line-height:1.6;">
+            최근 동기화 관련 이벤트 기록입니다 (최대 300건, 이 기기에만 저장됨).<br>
+            동기화 오류가 반복되면 <strong style="color:var(--accent);">전체 복사</strong> 후 붙여넣어 문의해주세요.
+        </p>
+        <pre id="diagLogText" style="background:var(--surf3);border:1px solid var(--border);border-radius:var(--radius-s);padding:10px;font-size:10.5px;line-height:1.6;white-space:pre-wrap;word-break:break-all;max-height:50vh;overflow-y:auto;font-family:'DM Mono',monospace;color:var(--text2);">(불러오는 중...)</pre>
+        <div style="display:flex;gap:8px;margin-top:12px;">
+            <button class="btn btn-ghost" style="flex:1;" onclick="copyDiagLog()">📋 전체 복사</button>
+            <button class="btn btn-ghost" style="flex:1;color:#ef4444;border-color:#ef444450;" onclick="confirmClearDiagLog()">🗑️ 기록 지우기</button>
+        </div>
+        <button class="btn btn-ghost btn-full" style="margin-top:8px;" onclick="closeModal('diagLogModal')">닫기</button>
     </div>
 </div>
 
