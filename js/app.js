@@ -807,7 +807,9 @@ function toggleClientTooltip(e, card) {
 
 // ─── 핀치줌 / 더블탭 줌 완전 차단 ───
 // (Android Chrome은 viewport user-scalable=no를 무시하므로 JS로 강제 차단)
-// ※ 더블탭 줌은 CSS touch-action:manipulation으로 처리 (touchend preventDefault는 버튼 클릭을 막으므로 제거)
+// ★ v109 fix: CSS touch-action을 manipulation → pan-x pan-y로 변경(style.css)해
+//   더블탭줌·핀치줌 모두 1차로 CSS 레벨에서 차단. 아래 JS는 보조 안전장치.
+//   (manipulation은 핀치줌을 허용하는 값이라 단독으로는 간헐적 확대가 새어나갈 수 있었음)
 (function preventZoom() {
     // 핀치줌 차단 (멀티터치)
     document.addEventListener('touchstart', e => {
