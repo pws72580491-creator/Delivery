@@ -271,3 +271,37 @@ async function resetAllData() {
     toast('🗑️ 초기화 완료');
 }
 
+// ─── 동기화 진단 로그 (v108) ───
+
+function openDiagLogModal() {
+    const el = document.getElementById('diagLogText');
+    if (el) el.textContent = diagLogText();
+    openModal('diagLogModal');
+}
+
+async function copyDiagLog() {
+    const text = diagLogText();
+    try {
+        await navigator.clipboard.writeText(text);
+        toast('📋 진단 로그가 복사됐습니다', 'var(--accent)', 2500);
+    } catch(e) {
+        // 구형 브라우저 폴백
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.cssText = 'position:fixed;opacity:0;pointer-events:none;';
+        document.body.appendChild(ta);
+        ta.select();
+        try { document.execCommand('copy'); toast('📋 진단 로그가 복사됐습니다', 'var(--accent)', 2500); }
+        catch(e2) { toast('❗ 복사 실패 — 직접 길게 눌러 선택해주세요', 'var(--red)'); }
+        document.body.removeChild(ta);
+    }
+}
+
+async function confirmClearDiagLog() {
+    if (!await customConfirm('진단 로그 기록을 모두 지웁니다. 계속하시겠습니까?')) return;
+    diagLogClear();
+    const el = document.getElementById('diagLogText');
+    if (el) el.textContent = diagLogText();
+    toast('🗑️ 진단 로그를 지웠습니다');
+}
+

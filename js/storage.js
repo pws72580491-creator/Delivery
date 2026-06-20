@@ -262,9 +262,10 @@ function normalizeBackupData(data) {
 }
 
 const debouncedSync = debounce(async () => {
-    if (!workspaceRef || !isConnected) return;  // 오프라인이거나 미연결 시 즉시 중단
+    if (!workspaceRef || !isConnected) { diagLog('⏭ 동기화 스킵', `workspaceRef=${!!workspaceRef}, isConnected=${isConnected}`); return; }  // 오프라인이거나 미연결 시 즉시 중단
     // ★ v99 fix: 이미 업로드 진행 중이면 중복 실행 차단 (이후 호출은 debounce 재예약으로 처리)
-    if (_syncGuard) return;
+    if (_syncGuard) { diagLog('⏭ 동기화 스킵', `이미 진행 중 (_syncGuard, ${Math.round((Date.now()-_syncGuardSetAt)/1000)}초째)`); return; }
+    diagLog('🔵 동기화 시작');
     const ch = dataHash(clients);
     const oh = dataHash(orders);
     const ph = dataHash(prices);
@@ -282,7 +283,7 @@ const debouncedSync = debounce(async () => {
             _syncGuardSetAt = Date.now();
             const serverSnap = await _withTimeout(
                 workspaceRef.child('orders').once('value'), 12000, 'orders.once(delta)'
-            ).catch(() => null);
+            ).catch(e => { diagLog('⚠️ 서버 조회 타임아웃(delta)', String(e && e.message || e)); return null; });
             const serverOrders = serverSnap ? serverSnap.val() : {};
             for (const id of _dirtyOrders) {
                 const o = orders.find(x => x.id === id);
@@ -301,7 +302,7 @@ const debouncedSync = debounce(async () => {
             _syncGuardSetAt = Date.now();
             const serverSnap2 = await _withTimeout(
                 workspaceRef.child('orders').once('value'), 12000, 'orders.once(full)'
-            ).catch(() => null);
+            ).catch(e => { diagLog('⚠️ 서버 조회 타임아웃(full)', String(e && e.message || e)); return null; });
             const serverOrders2 = serverSnap2 ? serverSnap2.val() : {};
             const ordersMap = {};
             orders.forEach(o => {
@@ -339,6 +340,7 @@ const debouncedSync = debounce(async () => {
     setSyncStatus('syncing');
     _withTimeout(workspaceRef.update(updates), 12000, 'orders.update')
         .then(() => {
+            diagLog('✅ 동기화 성공');
             _clearOrderDelta(); // 성공 시 delta 추적 초기화
             _syncGuard = false;
             setSyncStatus('online');
@@ -346,6 +348,7 @@ const debouncedSync = debounce(async () => {
             if (_pendingFbSnap) { const s = _pendingFbSnap; _pendingFbSnap = null; _fbValueHandler(s); }
         })
         .catch(e => {
+            diagLog('❌ 동기화 실패', String(e && e.message || e));
             // 실패 시 lastHash 롤백 → 다음 saveData() 때 재시도
             if (updates.clients)    lastHash.clients = '';
             if (updates.orders)     lastHash.orders  = '';

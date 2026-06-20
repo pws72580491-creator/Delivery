@@ -511,7 +511,12 @@ async function removeSharedWs(idx) {
 
 // ─── Firebase ───
 
+let _lastDiagSyncState = null;
 function setSyncStatus(state) {
+    if (state !== _lastDiagSyncState) {
+        diagLog('🔘 상태 표시 변경', `${_lastDiagSyncState || '(초기)'} → ${state}`);
+        _lastDiagSyncState = state;
+    }
     const el = document.getElementById('syncStatus');
     const id = localStorage.getItem('workspaceId')||'';
     el.className = ''; // reset
@@ -614,6 +619,7 @@ function _doConnect(id, auto=false) {
             const fbConnected = snap.val() === true;
             if (fbConnected) {
                 if (!isConnected) {
+                    diagLog('🟢 Firebase 소켓 연결됨', '.info/connected → true');
                     // ★ Problem 4 수정: 소켓 재연결 시 서버 최신 상태 먼저 확인 후 플러시
                     // (직접 debouncedSync 호출 시 서버에서 변경된 내용을 놓칠 수 있음)
                     isConnected = true;
@@ -654,6 +660,7 @@ function _doConnect(id, auto=false) {
                 }
             } else {
                 if (isConnected) {
+                    diagLog('🔴 Firebase 소켓 끊김', '.info/connected → false');
                     isConnected = false;
                     debouncedSync.cancel();
                     setSyncStatus('error');

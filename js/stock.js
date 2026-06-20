@@ -528,8 +528,8 @@ function getYesterdayClosingQty(si) {
     const log = (si.log || []);
 
     // 오늘 이전(어제 이하) 이력 중 가장 최근 것
-    // ※ auto(납품차감) 타입은 at=저장시각(오늘)이지만 date=납품날짜이므로
-    //    date 기준으로 오늘 여부를 판단해야 함
+    // ※ auto(납품차감) 타입은 at=저장시각(오늘 동기화될 수도 있음)이지만 date=납품날짜이므로
+    //    "어느 날짜에 속하는지" 판단은 date 기준으로 해야 함
     const prevLog = log
         .filter(l => {
             if (l.type === 'auto') {
@@ -540,11 +540,19 @@ function getYesterdayClosingQty(si) {
             return t > 0 && t < todayStartUTC;
         })
         .sort((a, b) => {
-            // auto 로그는 at 대신 date+'T23:59:59+09:00' 기준으로 정렬
-            const getTs = l => l.type === 'auto'
-                ? new Date((l.date || '1970-01-01') + 'T23:59:59+09:00').getTime()
-                : new Date(l.at).getTime();
-            return getTs(b) - getTs(a);
+            // ★ v107 fix: 정렬은 2단계로 — ① 소속 날짜(버킷) ② 같은 날짜 안에서는 실제 저장시각(at)
+            // (이전 버전은 auto 타입을 무조건 "해당일 23:59:59"로 취급해, 같은 날 더 늦게 발생한
+            //  수정보정(edit_adj) 등 실제시각 기반 항목보다 항상 "더 최근"으로 잘못 판정되는 버그가 있었음
+            //  → 합계상 마감재고가 0인데도 더 이른 납품차감 시점의 값이 마감으로 잘못 채택되는 문제 발생)
+            const dateOf = l => l.type === 'auto'
+                ? (l.date || '1970-01-01')
+                : ((l.at || '').slice(0, 10) || l.date || '1970-01-01');
+            const da = dateOf(a), db = dateOf(b);
+            if (da !== db) return da < db ? 1 : -1; // 날짜가 다르면 최신 날짜 먼저
+            // 같은 날짜면 실제 저장시각(at) 기준 — auto 타입도 실제 at으로 비교
+            const ta = a.at ? new Date(a.at).getTime() : 0;
+            const tb = b.at ? new Date(b.at).getTime() : 0;
+            return tb - ta;
         });
 
     if (prevLog.length > 0) {

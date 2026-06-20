@@ -204,6 +204,44 @@ function _withTimeout(promise, ms, label) {
     });
 }
 
+// ★ v108: 동기화 진단 로그
+// 백그라운드 복귀 후 동기화 오류 등이 발생하는 원인을 사용자가 직접 들여다볼 수 있도록
+// 핵심 동기화 이벤트(연결 상태 전환, 가드 설정/해제, 타임아웃 등)를 시각과 함께 남김.
+// 개인정보(거래처명·금액 등)는 절대 기록하지 않고 상태 전환 이벤트만 기록.
+const _DIAG_LOG_KEY = 'syncDiagLog';
+const _DIAG_LOG_MAX = 300;
+let _diagLog = [];
+(function _loadDiagLog() {
+    try {
+        const raw = localStorage.getItem(_DIAG_LOG_KEY);
+        if (raw) _diagLog = JSON.parse(raw) || [];
+    } catch (e) { _diagLog = []; }
+})();
+let _diagLogSaveTimer = null;
+function _diagLogPersist() {
+    clearTimeout(_diagLogSaveTimer);
+    _diagLogSaveTimer = setTimeout(() => {
+        try { localStorage.setItem(_DIAG_LOG_KEY, JSON.stringify(_diagLog)); } catch (e) { /* 용량 초과 시 무시 */ }
+    }, 500);
+}
+function diagLog(event, detail) {
+    const t = new Date();
+    const hh = String(t.getHours()).padStart(2,'0');
+    const mm = String(t.getMinutes()).padStart(2,'0');
+    const ss = String(t.getSeconds()).padStart(2,'0');
+    _diagLog.push({ t: `${t.getMonth()+1}/${t.getDate()} ${hh}:${mm}:${ss}`, event, detail: detail || '' });
+    if (_diagLog.length > _DIAG_LOG_MAX) _diagLog.splice(0, _diagLog.length - _DIAG_LOG_MAX);
+    _diagLogPersist();
+}
+function diagLogText() {
+    if (!_diagLog.length) return '(기록된 로그가 없습니다)';
+    return _diagLog.map(l => `[${l.t}] ${l.event}${l.detail ? ' — ' + l.detail : ''}`).join('\n');
+}
+function diagLogClear() {
+    _diagLog = [];
+    try { localStorage.removeItem(_DIAG_LOG_KEY); } catch(e) {}
+}
+
 // ─── HTML 이스케이프 (XSS 방지) ───
 
 function escapeHtml(str) {
