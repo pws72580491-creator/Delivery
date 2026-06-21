@@ -620,6 +620,7 @@ function _doConnect(id, auto=false) {
             if (fbConnected) {
                 if (!isConnected) {
                     diagLog('🟢 Firebase 소켓 연결됨', '.info/connected → true');
+                    _intentionalDisconnect = false; // ★ v110: 재연결 성공했으니 자가진단 플래그도 즉시 해제
                     // ★ Problem 4 수정: 소켓 재연결 시 서버 최신 상태 먼저 확인 후 플러시
                     // (직접 debouncedSync 호출 시 서버에서 변경된 내용을 놓칠 수 있음)
                     isConnected = true;
@@ -630,7 +631,7 @@ function _doConnect(id, auto=false) {
                         // ★ v99 fix: 서버 상태 확인 완료 후 큐 flush — 순서 보장
                         // 큐 flush를 먼저 하면 flush 직전 .get() 스냅샷이 flush 이전 상태를
                         // 찍어서 로컬이 오래된 것처럼 판단하는 false-stale 문제 차단
-                        workspaceRef.get().then(async snap => {
+                        _withTimeout(workspaceRef.get(), 10000, 'reconnect.get').then(async snap => {
                             const d = snap.val();
                             if (!d) {
                                 await _flushSharedOrderQueue().catch(() => {});
@@ -649,7 +650,8 @@ function _doConnect(id, auto=false) {
                                 // 서버가 최신 → 리스너가 받아서 처리 (강제 트리거)
                                 _fbValueHandler(snap);
                             }
-                        }).catch(async () => {
+                        }).catch(async e => {
+                            diagLog('⚠️ 재연결 직후 서버조회 타임아웃', String(e && e.message || e));
                             await _flushSharedOrderQueue().catch(() => {});
                             debouncedSync(); // 실패 시 일단 올리기
                         });
@@ -660,16 +662,21 @@ function _doConnect(id, auto=false) {
                 }
             } else {
                 if (isConnected) {
-                    diagLog('🔴 Firebase 소켓 끊김', '.info/connected → false');
+                    // ★ v110: 우리가 직접 goOffline()을 호출해서 생긴 끊김이면 "오류"가 아니라 정상 과정
+                    if (_intentionalDisconnect) {
+                        diagLog('🔄 소켓 자체 재연결 중', '의도된 새로고침으로 인한 일시 끊김 (정상)');
+                    } else {
+                        diagLog('🔴 Firebase 소켓 끊김', '.info/connected → false');
+                    }
                     isConnected = false;
                     debouncedSync.cancel();
-                    setSyncStatus('error');
+                    setSyncStatus(_intentionalDisconnect ? 'syncing' : 'error');
                 }
             }
         });
 
         // ── 최초 1회 스냅샷: 서버↔로컬 병합 판단 ──
-        workspaceRef.get().then(async snap => {
+        _withTimeout(workspaceRef.get(), 15000, 'initialConnect.get').then(async snap => {
             const data = snap.val();
             // 연결 성공 확인 시점에 isConnected=true 설정
             isConnected = true;
@@ -805,7 +812,7 @@ function _doConnect(id, auto=false) {
             _rtPollTimer = setInterval(() => {
                 // ★ v99 fix: _connectGuard 중(초기 연결 처리 중)에는 폴링 생략
                 if (!workspaceRef || !isConnected || _syncGuard || _connectGuard) return;
-                workspaceRef.get().then(snap => {
+                _withTimeout(workspaceRef.get(), 8000, 'poll.get').then(snap => {
                     const d = snap.val();
                     if (!d) return;
                     // 서버 데이터가 로컬과 동일하면 핸들러 호출 생략 (불필요한 렌더링 방지)
@@ -814,12 +821,13 @@ function _doConnect(id, auto=false) {
                     if (serverOrdersHash === lastHash.orders &&
                         serverClientsHash === lastHash.clients) return;
                     _fbValueHandler(snap);
-                }).catch(() => {});
+                }).catch(() => {}); // 폴링 실패는 다음 30초 주기에 재시도되므로 별도 로그 생략
             }, 30000);
 
             if (!auto) closeModal('firebaseModal');
 
         }).catch(err => {
+            diagLog('⚠️ 최초 연결 실패/타임아웃', String(err && err.message || err));
             _connectGuard    = false; // 실패해도 리스너 차단 해제
             _initialLoadDone = true; // 실패해도 리스너는 활성화
             console.error('Firebase 연결 실패:', err);
@@ -829,9 +837,12 @@ function _doConnect(id, auto=false) {
             setSyncStatus('error');
             document.getElementById('connectBtn').style.display    = 'block';
             document.getElementById('disconnectBtn').style.display = 'none';
+            const isTimeout = String(err && err.message || '').startsWith('[timeout]');
             const msg = err.code === 'PERMISSION_DENIED'
                 ? '❗ 권한 오류: Firebase 보안 규칙을 확인하세요'
-                : '❗ 연결 실패: ' + (err.message || '네트워크 오류');
+                : isTimeout
+                    ? '❗ 연결 시간 초과 — 네트워크 상태를 확인 후 다시 시도해주세요'
+                    : '❗ 연결 실패: ' + (err.message || '네트워크 오류');
             toast(msg);
         });
 

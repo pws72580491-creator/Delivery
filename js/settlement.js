@@ -188,9 +188,9 @@ function renderSettlementDaily() {
                             <span class="pay-badge ${o.isReturn?'unpaid':(o.isPaid?'paid':'unpaid')}" style="cursor:default;font-size:10px;">${o.isReturn?'↩반품/회수':(o.isPaid?'완납':'미수')}</span>
                         </div>
                         <div style="font-size:12px;color:var(--text2);">
-                            ${(o.items||[]).map(i=>`${i.name} ${Math.abs(i.qty)}개 × ${fmt(i.price||0)}원`).join(' / ')}
+                            ${(o.items||[]).map(i=>`${escapeHtml(i.name)} ${Math.abs(i.qty)}개 × ${fmt(i.price||0)}원`).join(' / ')}
                         </div>
-                        ${o.note?`<div style="font-size:11px;color:var(--text3);margin-top:4px;">📝 ${o.note}</div>`:''}
+                        ${o.note?`<div style="font-size:11px;color:var(--text3);margin-top:4px;">📝 ${escapeHtml(o.note)}</div>`:''}
                     </div>`).join('')}
                 <div style="display:flex;justify-content:space-between;font-size:12px;font-weight:700;padding-top:6px;border-top:1px solid var(--border);">
                     <span>소계</span>
@@ -541,7 +541,7 @@ async function showClientStatement(clientName, month) {
     }).join('');
     document.getElementById('statementContent').innerHTML = `
         <div style="margin-bottom:14px;display:flex;align-items:baseline;justify-content:space-between;gap:8px;">
-            <div style="font-size:19px;font-weight:900;">${clientName}</div>
+            <div style="font-size:19px;font-weight:900;">${escapeHtml(clientName)}</div>
             <div style="font-size:19px;font-weight:900;white-space:nowrap;">${month} 거래명세표</div>
         </div>
         ${hasShared ? `<div style="background:#eef2ff;border:1px solid #c7d2fe;border-radius:8px;padding:8px 12px;margin-bottom:12px;font-size:12px;color:#4f46e5;display:flex;align-items:center;gap:6px;">
@@ -632,7 +632,7 @@ function saveStatementPNG(clientName, month) {
     const carryRows = carryOrders.map(o => `
         <tr class="carry-row">
             <td>${o.date}</td>
-            <td>${(o.items || []).map(i => `${i.name}(${Math.abs(i.qty)})`).join(', ')}</td>
+            <td>${(o.items || []).map(i => `${escapeHtml(i.name)}(${Math.abs(i.qty)})`).join(', ')}</td>
             <td class="num">${fmt(o.total)}원</td>
             <td class="center">${o.isReturn ? '<span class="badge unpaid">↩반품/회수</span>' : '<span class="badge carry">이월</span>'}</td>
         </tr>`).join('');
@@ -649,7 +649,7 @@ function saveStatementPNG(clientName, month) {
             : '<span class="badge unpaid">미수</span>';
         return `<tr>
             <td>${o.date}</td>
-            <td>${(o.items || []).map(i => `${i.name}(${Math.abs(i.qty)})`).join(', ')}</td>
+            <td>${(o.items || []).map(i => `${escapeHtml(i.name)}(${Math.abs(i.qty)})`).join(', ')}</td>
             <td class="num">${fmt(o.total)}원${partial ? `<br><small class="remain">잔여 ${fmt(remain)}원</small>` : ''}</td>
             <td class="center">${badge}</td>
         </tr>`;
@@ -883,7 +883,7 @@ function saveStatementPNG(clientName, month) {
 <body>
   <div class="header">
     <div style="display:flex;justify-content:space-between;align-items:baseline;width:100%;">
-      <div class="doc-title">${clientName}</div>
+      <div class="doc-title">${escapeHtml(clientName)}</div>
       <div class="doc-title">${month} 거래명세표</div>
     </div>
   </div>
@@ -907,7 +907,7 @@ function saveStatementPNG(clientName, month) {
       </tbody>
     </table>
   </div>
-  <div class="footer">DeliveryPro · ${clientName} · ${month}<br>${new Date().toLocaleString('ko-KR')} 출력</div>
+  <div class="footer">DeliveryPro · ${escapeHtml(clientName)} · ${month}<br>${new Date().toLocaleString('ko-KR')} 출력</div>
 </body>
 </html>`;
 

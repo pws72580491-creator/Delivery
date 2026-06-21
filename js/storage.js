@@ -65,7 +65,7 @@ function saveToLocal() {
 // ── 품목 목록 표시용 헬퍼 (오프라인 _noItems 전표 안내 포함) ──
 function _fmtItems(o) {
     if (!(o.items||[]).length) return '<span style="color:var(--text3);font-size:10px;">📡 온라인 시 표시</span>';
-    return (o.items||[]).map(i=>`${i.name}(${Math.abs(i.qty)})`).join(', ');
+    return (o.items||[]).map(i=>`${escapeHtml(i.name)}(${Math.abs(i.qty)})`).join(', ');
 }
 
 // ② createdAt/updatedAt 단축: "YYYY-MM-DDTHH:MM:SS.mmmZ" → "YYYY-MM-DDTHH:MM" (16자, ~8자 절감)
@@ -316,7 +316,7 @@ const debouncedSync = debounce(async () => {
     }
     if (ph !== lastHash.prices)  { updates.prices     = prices;     changed = true; }
     if (sh !== lastHash.stock)   { updates.stockItems = _getLightStock(); changed = true; }
-    if (!changed) { _syncGuard = false; return; }
+    if (!changed) { diagLog('⏭ 동기화 종료', '변경사항 없음 (업로드 불필요)'); _syncGuard = false; return; }
     // writtenBy / version 필드: 리스너 echo 식별 + 충돌 감지
     const nowIso = new Date().toISOString();
     updates.lastUpdated = nowIso;

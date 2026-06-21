@@ -420,10 +420,10 @@ function _renderDeliveryConfirmSummary() {
             // 재고 부족 힌트는 실제로 차감이 일어나는 일반 납품(타인거래·반품 아님)에서만 표시
             const si = stockAutoDeduct && !_deliveryIsVoid && !_deliveryIsReturn ? findStockByName(it.name) : null;
             const isShort = si && it.qty > si.qty;
-            const stockHint = si ? `<span style="font-size:10px;color:${isShort?'var(--red)':'var(--green)'};margin-left:4px;">(재고 ${si.qty}${si.unit||'개'}${isShort?' ⚠부족':''})</span>` : '';
+            const stockHint = si ? `<span style="font-size:10px;color:${isShort?'var(--red)':'var(--green)'};margin-left:4px;">(재고 ${si.qty}${escapeHtml(si.unit||'개')}${isShort?' ⚠부족':''})</span>` : '';
             const lineColor = _deliveryIsReturn ? 'var(--red)' : (isShort?'var(--red)':'var(--text)');
             html += `<div style="display:flex;justify-content:space-between;align-items:baseline;color:${isShort&&!_deliveryIsReturn?'var(--red)':'var(--text2)'};padding-left:8px;margin-bottom:3px;gap:8px;">
-                <span style="flex:1;min-width:0;">${it.name}${stockHint}</span>
+                <span style="flex:1;min-width:0;">${escapeHtml(it.name)}${stockHint}</span>
                 <span style="font-size:11px;white-space:nowrap;color:var(--text3);">${it.qty}개 × ${fmt(it.price)}원</span>
                 <span style="font-family:'DM Mono',monospace;font-weight:700;color:${lineColor};white-space:nowrap;">= ${fmt(it.total*sign)}원</span>
             </div>`;
