@@ -11,7 +11,7 @@
     <meta name="apple-mobile-web-app-title" content="납품관리">
     <link rel="apple-touch-icon" href="./icon-192.png">
     <link rel="manifest" href="./manifest.json">
-    <title>납품 관리 Pro v109</title>
+    <title>납품 관리 Pro v111</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js" defer></script>
@@ -38,7 +38,7 @@
             <div class="logo-icon">📦</div>
             <div>
                 <div class="logo-text">납품 관리 Pro</div>
-                <div class="logo-sub">v109 · PWA 앱 설치 지원</div>
+                <div class="logo-sub">v111 · PWA 앱 설치 지원</div>
             </div>
         </div>
         <div class="header-btns">
@@ -619,7 +619,7 @@
     <div class="card">
         <div class="card-title">앱 정보</div>
         <div style="font-size:13px;color:var(--text2);line-height:2;margin-bottom:12px;">
-            버전: <strong style="color:var(--accent);">v109</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
+            버전: <strong style="color:var(--accent);">v111</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
             거래처: <span id="infoClients">0</span>개 &nbsp;·&nbsp;
             납품내역: <span id="infoOrders">0</span>건
         </div>
@@ -633,7 +633,15 @@
             <div id="changelogList" style="display:flex;flex-direction:column;gap:6px;">
                 <!-- 현재 버전 -->
                 <div class="changelog-item">
-                    <span class="changelog-ver" style="color:var(--green);">v109</span>
+                    <span class="changelog-ver" style="color:var(--green);">v111</span>
+                    <span class="changelog-desc">XSS 방어 보강 — 외부 코드 리뷰에서 지적된 innerHTML 직접 보간 문제를 점검, 실제로 사용자 입력값(품목명·메모·거래처명)이 escapeHtml() 없이 화면 HTML에 들어가는 지점 9곳을 찾아 수정함(정산서 모달 2곳, 거래명세표 헤더·footer 3곳, 거래명세표 표 2곳, 납품확정 팝업 1곳, 품목 요약 헬퍼함수 1곳 — 이 헬퍼는 2곳에서 재사용되어 총 9곳 보호). 메인 납품내역 카드는 이미 잘 보호되어 있었음을 확인. toast·확인창은 textContent를 사용해 원래부터 안전했음. 저장은 원본 그대로, 화면에 그릴 때만 이스케이프하는 기존 패턴과 동일하게 적용해 데이터·기능 변경 없음.</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v110</span>
+                    <span class="changelog-desc">동기화 진단 로그 분석 기반 개선 4건 — ① 변경사항 없어 업로드를 건너뛰는 경우 로그가 끊겨 보이던 문제 수정(종료 로그 추가) ② 자체 소켓 재새로고침(goOffline→goOnline) 중 발생하는 일시적 끊김을 "🔴 오류"로 잘못 표시하던 문제 수정 — 의도된 새로고침은 별도로 구분 표시하고, 3초 내 재연결 안 되면 그제서야 정상적으로 오류 표시 ③ 재연결 직후·최초 연결 시·30초 주기 폴링·당겨서새로고침에서 타임아웃 없이 호출되던 workspaceRef.get() 4곳 모두에 타임아웃 적용(특히 최초 연결과 재연결 직후 조회가 멈추면 연결 자체가 막힐 수 있었던 위험 제거) ④ online 이벤트 핸들러의 서버조회에도 동일하게 타임아웃 적용.</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v109</span>
                     <span class="changelog-desc">화면 확대(핀치줌) 간헐적 새어나가는 문제 수정 — CSS touch-action을 전역(*)과 버튼·입력창·카드류에서 manipulation으로 설정해왔는데, manipulation은 명세상 더블탭줌만 막고 핀치줌(연속 확대)은 허용하는 값이라 JS의 핀치줌 차단 로직과 어긋나 있었음(브라우저가 네이티브 줌 제스처를 먼저 처리하면 간헐적으로 확대가 새어나감). touch-action을 pan-x pan-y로 변경해 핀치줌·더블탭줌 모두 CSS 레벨에서 1차 차단하고, 기존 JS 차단은 보조 안전장치로 유지. 탭 반응속도(300ms 지연 제거) 효과는 동일하게 유지됨.</span>
                 </div>
                 <div class="changelog-item">
