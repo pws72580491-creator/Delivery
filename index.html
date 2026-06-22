@@ -11,7 +11,7 @@
     <meta name="apple-mobile-web-app-title" content="납품관리">
     <link rel="apple-touch-icon" href="./icon-192.png">
     <link rel="manifest" href="./manifest.json">
-    <title>납품 관리 Pro v111</title>
+    <title>납품 관리 Pro v112</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js" defer></script>
@@ -38,7 +38,7 @@
             <div class="logo-icon">📦</div>
             <div>
                 <div class="logo-text">납품 관리 Pro</div>
-                <div class="logo-sub">v111 · PWA 앱 설치 지원</div>
+                <div class="logo-sub">v112 · PWA 앱 설치 지원</div>
             </div>
         </div>
         <div class="header-btns">
@@ -619,7 +619,7 @@
     <div class="card">
         <div class="card-title">앱 정보</div>
         <div style="font-size:13px;color:var(--text2);line-height:2;margin-bottom:12px;">
-            버전: <strong style="color:var(--accent);">v111</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
+            버전: <strong style="color:var(--accent);">v112</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
             거래처: <span id="infoClients">0</span>개 &nbsp;·&nbsp;
             납품내역: <span id="infoOrders">0</span>건
         </div>
@@ -633,7 +633,11 @@
             <div id="changelogList" style="display:flex;flex-direction:column;gap:6px;">
                 <!-- 현재 버전 -->
                 <div class="changelog-item">
-                    <span class="changelog-ver" style="color:var(--green);">v111</span>
+                    <span class="changelog-ver" style="color:var(--green);">v112</span>
+                    <span class="changelog-desc">거래명세표에서 날짜 탭 → 납품 상세 보기 — 이월 행·당월 행 모두 날짜 셀(🔍)을 탭하면 납품 상세 모달이 열림. 날짜 외 나머지 셀 탭 동작(미수: 수금 처리, 완납/반품: 상세 보기)은 그대로 유지.</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v111</span>
                     <span class="changelog-desc">XSS 방어 보강 — 외부 코드 리뷰에서 지적된 innerHTML 직접 보간 문제를 점검, 실제로 사용자 입력값(품목명·메모·거래처명)이 escapeHtml() 없이 화면 HTML에 들어가는 지점 9곳을 찾아 수정함(정산서 모달 2곳, 거래명세표 헤더·footer 3곳, 거래명세표 표 2곳, 납품확정 팝업 1곳, 품목 요약 헬퍼함수 1곳 — 이 헬퍼는 2곳에서 재사용되어 총 9곳 보호). 메인 납품내역 카드는 이미 잘 보호되어 있었음을 확인. toast·확인창은 textContent를 사용해 원래부터 안전했음. 저장은 원본 그대로, 화면에 그릴 때만 이스케이프하는 기존 패턴과 동일하게 적용해 데이터·기능 변경 없음.</span>
                 </div>
                 <div class="changelog-item">
