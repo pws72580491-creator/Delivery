@@ -93,12 +93,61 @@ async function _patchCrmTransaction(orderId, order) {
     }
 }
 
+// ─── CRM 영구 재시도 큐 (P4: 앱 종료 후에도 재시도 보장) ──────────────────
+const _CRM_QUEUE_KEY = '_crmSyncQueue';
+
+function _enqueueCrmSync(orderId, order) {
+    try {
+        const q = JSON.parse(localStorage.getItem(_CRM_QUEUE_KEY) || '[]');
+        // 동일 orderId가 이미 있으면 교체(upsert)
+        const idx = q.findIndex(item => item.orderId === orderId);
+        const entry = { orderId, order, createdAt: Date.now(), attempt: 0 };
+        if (idx >= 0) { q[idx] = entry; } else { q.push(entry); }
+        localStorage.setItem(_CRM_QUEUE_KEY, JSON.stringify(q));
+    } catch(e) { console.warn('[CRM큐] 저장 실패:', e); }
+}
+
+function _dequeueCrmSync(orderId) {
+    try {
+        const q = JSON.parse(localStorage.getItem(_CRM_QUEUE_KEY) || '[]');
+        const filtered = q.filter(item => item.orderId !== orderId);
+        localStorage.setItem(_CRM_QUEUE_KEY, JSON.stringify(filtered));
+    } catch(e) {}
+}
+
+/** 앱 시작·온라인 복귀 시 미전송 CRM 큐 일괄 재시도 */
+async function flushCrmSyncQueue() {
+    if (!CRM_SYNC_ENABLED) return;
+    let q;
+    try { q = JSON.parse(localStorage.getItem(_CRM_QUEUE_KEY) || '[]'); } catch { return; }
+    if (!q.length) return;
+
+    console.info(`[CRM큐] flush 시작 — ${q.length}건`);
+    for (const item of [...q]) {
+        try {
+            const ok = await _patchCrmTransaction(item.orderId, item.order);
+            if (ok) {
+                _dequeueCrmSync(item.orderId);
+                console.info('[CRM큐] 재시도 성공:', item.orderId);
+            }
+        } catch(e) {
+            console.warn('[CRM큐] 재시도 실패:', item.orderId, e.message);
+        }
+        await new Promise(r => setTimeout(r, 200)); // RTDB 과다 호출 방지
+    }
+}
+
+// 온라인 복귀 시 자동 flush
+window.addEventListener('online', () => flushCrmSyncQueue().catch(() => {}));
+
 /**
  * 결제 처리 후 CRM 역방향 패치 공통 헬퍼.
  * toast는 호출부에서 이미 표시하므로 여기선 추가 toast만 띄움.
  */
 function _afterDlPayPatch(orderId, order) {
     if (!CRM_SYNC_ENABLED) return;
+    // ★ P4: 먼저 큐에 영구 저장 후 즉시 패치 시도 — 실패해도 앱 재시작 시 재처리됨
+    _enqueueCrmSync(orderId, order);
     _patchCrmWithRetry(orderId, order, 0);
 }
 
@@ -108,9 +157,12 @@ function _patchCrmWithRetry(orderId, order, attempt) {
     _patchCrmTransaction(orderId, order)
         .then(ok => {
             if (ok) {
+                // ★ P4: 성공 시 영구 큐에서 제거
+                _dequeueCrmSync(orderId);
                 toast('📊 CRM에도 반영됨', 'var(--green)', 2500);
             } else {
                 // CRM에 거래 없음 — 재시도 불필요 (연동 전 주문)
+                _dequeueCrmSync(orderId);
                 console.info('[CRM패치] 미연동 주문 (CRM에 거래 없음):', orderId);
             }
         })
@@ -151,7 +203,16 @@ async function _patchSharedOrder(wsId, orderId, patch) {
         if (patch === null) {
             await ref.remove();
         } else {
-            await ref.update({ ...patch, updatedAt: new Date().toISOString() });
+            // ★ P1: transaction으로 충돌 방지 + revision 증가 + ServerValue.TIMESTAMP
+            await ref.transaction(current => {
+                if (!current) return current; // 삭제된 전표면 중단
+                return {
+                    ...current,
+                    ...patch,
+                    revision: (current.revision || 0) + 1,
+                    updatedAt: firebase.database.ServerValue.TIMESTAMP,
+                };
+            });
         }
         // _sharedOrdersCache 즉시 갱신
         if (patch === null) {

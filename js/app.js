@@ -429,6 +429,8 @@ window.addEventListener('DOMContentLoaded', () => {
             if (myShared.length) localStorage.setItem('mySharedClients', JSON.stringify(myShared));
             firebase.database().ref(`workspaces/${savedWs}/sharedClients`)
                 .set(myShared.length ? myShared : []).catch(() => {});
+            // ★ P4: 앱 시작 시 미전송 CRM 큐 일괄 재시도
+            setTimeout(() => flushCrmSyncQueue().catch(() => {}), 3000);
         });
     }
     // 자동 백업 체크

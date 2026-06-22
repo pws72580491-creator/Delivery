@@ -17,13 +17,20 @@ function _saveSharedOrderQueue(queue) {
 function _enqueueSharedOrder(wsId, ordersToQueue) {
     const queue = _getSharedOrderQueue();
     ordersToQueue.forEach(order => {
-        queue.push({
+        const newItem = {
             wsId,
             order,
             queuedAt:   new Date().toISOString(),
-            failCount:  0,  // ★ retry 정책: 실패 횟수 추적
-            retryAfter: null, // 다음 재시도 가능 시각
-        });
+            failCount:  0,
+            retryAfter: null,
+        };
+        // ★ P2: 동일 전표(wsId + order.id) 가 이미 큐에 있으면 교체(upsert)
+        const idx = queue.findIndex(q => q.wsId === wsId && q.order?.id === order.id);
+        if (idx >= 0) {
+            queue[idx] = newItem;
+        } else {
+            queue.push(newItem);
+        }
     });
     _saveSharedOrderQueue(queue);
     _updateSharedQueueBadge();
@@ -41,7 +48,6 @@ async function _flushSharedOrderQueue() {
     const now    = Date.now();
     const db     = firebase.database();
     const failed = [];
-    const dead   = []; // 최대 재시도 초과 항목
     let successCnt = 0;
 
     for (const item of queue) {
@@ -75,9 +81,15 @@ async function _flushSharedOrderQueue() {
         } catch(e) {
             const fc = (item.failCount || 0) + 1;
             if (fc >= _QUEUE_MAX_RETRIES) {
-                // 최대 재시도 초과 → 영구 제거 후 사용자에게 알림
-                dead.push(item);
-                console.error(`[공유큐] ${_QUEUE_MAX_RETRIES}회 실패 — 항목 폐기:`, item.order?.id || item.orderId);
+                // ★ P3: 최대 재시도 초과 — 데이터 유실 방지를 위해 status:'failed'로 보존
+                // 사용자가 배지를 탭해 수동 재전송 가능
+                failed.push({
+                    ...item,
+                    failCount: fc,
+                    status:    'failed',
+                    lastError: e.message || String(e),
+                });
+                console.error(`[공유큐] ${_QUEUE_MAX_RETRIES}회 실패 — 수동 재전송 대기:`, item.order?.id || item.orderId);
             } else {
                 const delayMs  = _QUEUE_RETRY_DELAYS[fc - 1] || 60000;
                 failed.push({
@@ -96,11 +108,13 @@ async function _flushSharedOrderQueue() {
         renderOrders(); updateInfoCounts(); updateNavBadges(); renderDashboard();
         toast(`📤 오프라인 중 작성한 공유 납품 ${successCnt}건이 업로드되었습니다`, 'var(--green)', 4000);
     }
-    if (dead.length > 0) {
-        toast(`⚠️ 공유 납품 ${dead.length}건 업로드 영구 실패 — 직접 재입력 필요`, 'var(--red)', 6000);
-        console.error('[공유큐] 폐기된 항목:', dead);
+    // ★ P3: status:'failed' 항목(수동 재전송 필요) 사용자 안내
+    const deadItems = failed.filter(f => f.status === 'failed');
+    if (deadItems.length > 0) {
+        toast(`⚠️ 공유 납품 ${deadItems.length}건 업로드 실패 — 배지를 탭해 재전송하세요`, 'var(--red)', 6000);
+        console.error('[공유큐] 수동 재전송 대기 항목:', deadItems);
     }
-    if (failed.length > 0) {
+    if (failed.filter(f => f.status !== 'failed').length > 0) {
         const retrying = failed.filter(f => f.retryAfter);
         console.warn(`[공유큐] ${retrying.length}건 대기 중 — 다음 연결 시 재시도`);
     }
@@ -112,8 +126,17 @@ function _updateSharedQueueBadge() {
     const el = document.getElementById('sharedQueueBadge');
     if (!el) return;
     const q = _getSharedOrderQueue();
+    const failedItems  = q.filter(f => f.status === 'failed');
+    const pendingItems = q.filter(f => f.status !== 'failed');
     if (q.length > 0) {
-        el.textContent = `📤 공유 ${q.length}건 대기 중 (탭하여 재시도)`;
+        // ★ P3: failed 항목은 별도 강조 표시
+        if (failedItems.length > 0) {
+            el.textContent = `⚠️ 공유 ${failedItems.length}건 실패 / ${pendingItems.length}건 대기 (탭하여 재전송)`;
+            el.style.color = 'var(--red)';
+        } else {
+            el.textContent = `📤 공유 ${pendingItems.length}건 대기 중 (탭하여 재시도)`;
+            el.style.color = '';
+        }
         el.style.display = '';
     } else {
         el.style.display = 'none';
