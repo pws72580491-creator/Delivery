@@ -848,11 +848,15 @@ function toggleClientTooltip(e, card) {
     }, { passive: true });
 })();
 // 자주 껐다 켜는 환경에서 debounce 대기 중 종료로 인한 데이터 유실 방지
+let _flushSyncInProgress = false; // ★ v113: 중복 실행 방지
+
 function _flushSync() {
     if (!workspaceRef || !isConnected) { diagLog('⏭ flushSync 스킵', `workspaceRef=${!!workspaceRef}, isConnected=${isConnected}`); return; }
     // ★ v99 fix: debouncedSync 업로드 진행 중이면 충돌 방지를 위해 건너뜀
     // (visibilitychange hidden 시 debouncedSync와 동시 실행 race condition 차단)
     if (_syncGuard) { diagLog('⏭ flushSync 스킵', '_syncGuard 진행 중'); return; }
+    // ★ v113 fix: flushSync 이미 진행 중이면 중복 실행 방지
+    if (_flushSyncInProgress) { diagLog('⏭ flushSync 스킵', '이미 진행 중'); return; }
     const ch = dataHash(clients);
     const oh = dataHash(orders);
     const ph = dataHash(prices);
@@ -882,11 +886,16 @@ function _flushSync() {
     if (updates.prices)     lastHash.prices  = ph;
     if (updates.stockItems) lastHash.stock   = sh;
     debouncedSync.cancel(); // 대기 중인 debounce 취소 (중복 방지)
+    _flushSyncInProgress = true;
     diagLog('🔵 flushSync 시작', '백그라운드 진입 직전 비상 저장');
-    _withTimeout(workspaceRef.update(updates), 12000, 'flushSync.update').then(() => {
+    // ★ v113 fix: 타임아웃을 5초로 단축 (소켓 끊김 후 12초 대기하던 문제 해소)
+    // 소켓이 끊기면 어차피 실패하므로 짧게 끊고 hash를 롤백해 재시도를 보장함
+    _withTimeout(workspaceRef.update(updates), 5000, 'flushSync.update').then(() => {
+        _flushSyncInProgress = false;
         diagLog('✅ flushSync 성공');
         localStorage.setItem('lastLocalUpdated', nowIso);
     }).catch(e => {
+        _flushSyncInProgress = false;
         diagLog('❌ flushSync 실패', String(e && e.message || e));
         // 롤백 — 다음 실행 시 재시도
         if (updates.clients)    lastHash.clients = '';
@@ -964,3 +973,30 @@ document.addEventListener('visibilitychange', () => {
 
 // 브라우저 탭 닫기 / PWA 종료 시
 window.addEventListener('pagehide', _flushSync);
+
+// ★ v113 fix: 모바일 키보드 올라올 때 포커스된 입력 필드가 가려지는 문제 수정
+// visualViewport API를 이용해 키보드가 올라오면 active element를 화면에 보이도록 스크롤
+(function() {
+    if (!window.visualViewport) return;
+    let _vvResizeTimer = null;
+    window.visualViewport.addEventListener('resize', () => {
+        clearTimeout(_vvResizeTimer);
+        _vvResizeTimer = setTimeout(() => {
+            const el = document.activeElement;
+            if (!el) return;
+            const tag = el.tagName;
+            if (tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'SELECT') return;
+            // 모달 내 필드: 모달 시트 스크롤
+            const sheet = el.closest('.modal-sheet');
+            if (sheet) {
+                el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                return;
+            }
+            // 일반 컨텐츠 영역
+            const content = el.closest('.content') || el.closest('.pane');
+            if (content) {
+                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        }, 80);
+    });
+})();

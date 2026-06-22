@@ -282,7 +282,7 @@ const debouncedSync = debounce(async () => {
             _syncGuard = true;
             _syncGuardSetAt = Date.now();
             const serverSnap = await _withTimeout(
-                workspaceRef.child('orders').once('value'), 12000, 'orders.once(delta)'
+                workspaceRef.child('orders').once('value'), 8000, 'orders.once(delta)'
             ).catch(e => { diagLog('⚠️ 서버 조회 타임아웃(delta)', String(e && e.message || e)); return null; });
             const serverOrders = serverSnap ? serverSnap.val() : {};
             for (const id of _dirtyOrders) {
@@ -301,7 +301,7 @@ const debouncedSync = debounce(async () => {
             _syncGuard = true;
             _syncGuardSetAt = Date.now();
             const serverSnap2 = await _withTimeout(
-                workspaceRef.child('orders').once('value'), 12000, 'orders.once(full)'
+                workspaceRef.child('orders').once('value'), 8000, 'orders.once(full)'
             ).catch(e => { diagLog('⚠️ 서버 조회 타임아웃(full)', String(e && e.message || e)); return null; });
             const serverOrders2 = serverSnap2 ? serverSnap2.val() : {};
             const ordersMap = {};
@@ -338,7 +338,8 @@ const debouncedSync = debounce(async () => {
     if (updates.prices)     lastHash.prices  = ph;
     if (updates.stockItems) lastHash.stock   = sh;
     setSyncStatus('syncing');
-    _withTimeout(workspaceRef.update(updates), 12000, 'orders.update')
+    // ★ v113 fix: 타임아웃 12→8초로 단축 (소켓 끊김 후 12초 대기하던 문제 해소)
+    _withTimeout(workspaceRef.update(updates), 8000, 'orders.update')
         .then(() => {
             diagLog('✅ 동기화 성공');
             _clearOrderDelta(); // 성공 시 delta 추적 초기화

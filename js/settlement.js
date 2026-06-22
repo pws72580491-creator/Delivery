@@ -1425,6 +1425,9 @@ function confirmPayEdit() {
     Object.assign(o, patch);
     toast(toastMsg, amount > 0 ? 'var(--green)' : undefined);
 
+    // ★ v113 fix: isShared 여부와 무관하게 payEditModal 먼저 닫기 (공유 전표도 모달 즉시 닫혀야 UI 갱신됨)
+    closeModal('payEditModal');
+
     if (foundPeConfirm.isShared) {
         _patchSharedOrder(foundPeConfirm.sharedWsId, orderId, patch)
             .then(ok => {
@@ -1439,14 +1442,12 @@ function confirmPayEdit() {
     } else {
         _markDirtyOrder(orderId);
         _saveAndFlush();
-        closeModal('payEditModal');
         showClientStatement(clientName, month);
         renderOrders(); renderDashboard(); updateInfoCounts(); updateNavBadges();
         _afterDlPayPatch(o.id, o);
         _refreshUnpaidIfActive();
         _refreshSettlementIfActive();
     }
-    // ★ fix: closeModal 중복 호출 제거 (else 분기에서 이미 호출됨)
 }
 
 async function confirmPayEditCancel() {

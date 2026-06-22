@@ -365,11 +365,19 @@ async function togglePaid(id) {
         const patch = { isPaid: false, paidAmount: 0, paidAt: null, paidNote: null,
                         paidMethod: null, discount: null, paidMethodDetail: null,
                         crmControlled: null, dlControlled: null };
+        // ★ v113 fix: 완납→미수 복귀 후 statementModal이 열려있으면 즉시 갱신
+        const _refreshStatement = () => {
+            if (document.getElementById('statementModal')?.classList.contains('open')) {
+                const month = (o.date || '').slice(0, 7);
+                showClientStatement(o.clientName, month);
+            }
+        };
         if (foundToggle.isShared) {
             const ok = await _patchSharedOrder(foundToggle.sharedWsId, id, patch);
             if (ok) {
                 renderOrders(); renderDashboard(); updateInfoCounts(); updateNavBadges();
                 _refreshUnpaidIfActive(); _refreshSettlementIfActive();
+                _refreshStatement();
                 toast('🔴 미수로 변경');
                 // 공유 전표도 CRM 역방향 패치 (미수금 상태로 반영)
                 _afterDlPayPatch(id, { ...o, ...patch });
@@ -380,6 +388,7 @@ async function togglePaid(id) {
             _saveAndFlush(); renderOrders(); renderDashboard(); updateInfoCounts(); updateNavBadges();
             _refreshUnpaidIfActive();
             _refreshSettlementIfActive();
+            _refreshStatement();
             toast('🔴 미수로 변경');
             _afterDlPayPatch(id, o);
         }
@@ -516,10 +525,11 @@ async function confirmQuickPay(method) {
     };
     const icon = method === 'transfer' ? '🏦' : '💵';
     const label = icon + ' ' + (method === 'transfer' ? '계좌이체' : '현금') + ' 완납 처리';
-    closeQuickPay(true);
     if (foundCqp.isShared) {
+        // ★ v113 fix: _patchSharedOrder 성공 확인 후 팝업 닫기 (구버전 데이터로 statement 갱신 방지)
         const ok = await _patchSharedOrder(foundCqp.sharedWsId, orderId, patch);
         if (ok) {
+            closeQuickPay(true);
             renderOrders(); renderDashboard(); updateInfoCounts(); updateNavBadges();
             _refreshUnpaidIfActive(); _refreshSettlementIfActive();
             toast(label, 'var(--green)');
@@ -527,6 +537,7 @@ async function confirmQuickPay(method) {
             _afterDlPayPatch(orderId, o);
         }
     } else {
+        closeQuickPay(true);
         Object.assign(o, patch);
         _markDirtyOrder(orderId);
         _saveAndFlush(); renderOrders(); renderDashboard(); updateInfoCounts(); updateNavBadges();
