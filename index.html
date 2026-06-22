@@ -634,7 +634,7 @@
                 <!-- 현재 버전 -->
                 <div class="changelog-item">
                     <span class="changelog-ver" style="color:var(--green);">v113</span>
-                    <span class="changelog-desc">버그 4건 수정 — ① 완납→미수 복귀 후 명세표 즉시 미반영(핵심 원인): detailModal의 "↩️ 미수 복귀" 버튼이 togglePaid()를 실행한 후 statementModal이 열려있어도 명세표를 재렌더링하지 않아, 앱 재시작 전까지 완납 상태로 보이던 문제 수정(togglePaid에 statementModal 갱신 로직 추가). 아울러 수금 수정 모달(payEditModal)의 closeModal 위치를 isShared 분기 바깥으로 이동해 공유 전표 경로에서도 모달이 즉시 닫히도록 수정. ② confirmQuickPay isShared 경로: _patchSharedOrder 완료 전에 closeQuickPay(true)가 불려 구버전 데이터로 명세표가 갱신되던 순서 오류 수정. ③ 모바일 키보드 올라올 때 입력 필드 가려짐: visualViewport resize 이벤트 감지해 포커스된 필드 자동 스크롤(모달·일반 영역 모두 처리). ④ Firebase 타임아웃 단축: flushSync.update 12→5초, orders.update·orders.once 12→8초로 단축해 소켓 끊김 후 최대 12초 대기하던 문제 해소. flushSync 중복 실행 방지 플래그 추가.</span>
+                    <span class="changelog-desc">버그 5건 수정 — ① 완납→미수 복귀 후 명세표 즉시 미반영: togglePaid()에 statementModal 갱신 추가, payEditModal closeModal 위치 수정(isShared 공통화). ② 완납 처리 후 명세표에 여전히 미수로 표시: confirmQuickPay·confirmQuickPayDiscount에서 closeQuickPay(true) 호출이 Object.assign(o, patch) 전에 일어나 o.isPaid=false 상태로 showClientStatement가 실행됐던 문제 수정 — Object.assign으로 로컬 상태 먼저 반영 후 closeQuickPay 호출하도록 순서 변경. ③ confirmQuickPay isShared 경로: _patchSharedOrder 완료 전 closeQuickPay 호출 순서 오류 수정. ④ 모바일 키보드 올라올 때 입력 필드 가려짐: visualViewport resize 이벤트 감지해 포커스된 필드 자동 스크롤. ⑤ Firebase 타임아웃 단축: flushSync.update 12→5초, orders.update·orders.once 12→8초, flushSync 중복 실행 방지 플래그 추가.</span>
                 </div>
                 <div class="changelog-item">
                     <span class="changelog-ver" style="color:var(--green);">v112</span>
