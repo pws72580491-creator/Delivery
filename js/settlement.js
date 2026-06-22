@@ -484,7 +484,7 @@ async function showClientStatement(clientName, month) {
         </tr>` : '';
         return `
         <tr style="background:var(--surf3);cursor:pointer;" onclick="openQuickPayFromStatement('${o.id||''}','${escapeAttr(clientName)}','${escapeAttr(month)}')" title="탭하여 결제 처리">
-            <td style="color:var(--orange);font-size:12px;">${o.date}</td>
+            <td style="color:var(--orange);font-size:12px;" onclick="event.stopPropagation();showOrderDetail('${o.id||''}')" title="탭하여 상세 보기">${o.date} <span style="font-size:9px;color:var(--text3);">🔍</span></td>
             <td style="font-size:11px;">${_fmtItems(o)}</td>
             <td class="text-right" style="color:var(--orange);">${fmt(o.total)}원${carryPartial?`<br><small style="color:#60a5fa;">수금 ${fmt(o.paidAmount)}원</small>`:''}</td>
             <td class="text-center"><span class="pay-badge unpaid" style="cursor:default;font-size:9px;">이월</span></td>
@@ -532,8 +532,10 @@ async function showClientStatement(clientName, month) {
         const rowAccent = o._sharedWsId ? 'background:rgba(99,102,241,0.05);' : o.isReturn ? 'background:rgba(229,68,68,0.04);' : !o.isPaid ? 'background:rgba(239,68,68,0.04);' : '';
         const rowOnclick = rowClick ? `onclick="${rowClick}"` : '';
         const rowCursor  = rowClick ? 'cursor:pointer;' : 'cursor:default;';
+        // ★ v112: 날짜 셀 탭 → 항상 상세보기 (전체 행 클릭은 기존 수금 처리 유지)
+        const dateCellClick = o.id ? `onclick="event.stopPropagation();showOrderDetail('${o.id||''}')"` : '';
         return `<tr style="${rowCursor}${rowAccent}" ${rowOnclick} title="${rowTitle}">
-            <td>${o.date}</td>
+            <td ${dateCellClick} title="탭하여 상세 보기" style="cursor:pointer;">${o.date} <span style="font-size:9px;color:var(--text3);">🔍</span></td>
             <td style="font-size:11px;">${_fmtItems(o)}${sharedBadge}${returnBadge}</td>
             <td class="text-right">${fmt(o.total)}원</td>
             <td class="text-center">${statBadge}</td>
