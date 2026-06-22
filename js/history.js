@@ -466,14 +466,14 @@ async function confirmQuickPayDiscount(method) {
     if (discount > 0) patch.discount = (o.discount || 0) + discount;
     const icon = method === 'transfer' ? '🏦' : '💵';
     const msg  = discount > 0 ? `${icon} 할인 완납 (할인 ${fmt(discount)}원)` : `${icon} 완납 처리`;
-    closeQuickPay(true);
+    // ★ v113 fix: patch 적용 후 closeQuickPay 호출 — 순서가 바뀌면 showClientStatement 시점에 o.isPaid가 false라 미수로 보임
     if (foundDisc.isShared) {
         const ok = await _patchSharedOrder(foundDisc.sharedWsId, orderId, patch);
         if (ok) {
+            closeQuickPay(true);
             renderOrders(); renderDashboard(); updateInfoCounts(); updateNavBadges();
             _refreshUnpaidIfActive(); _refreshSettlementIfActive();
             toast(msg, 'var(--green)');
-            // 공유 전표도 CRM 역방향 패치 (wsId는 crm-sync가 _sharedWsId로 판단)
             _afterDlPayPatch(orderId, o);
         }
     } else {
@@ -537,9 +537,11 @@ async function confirmQuickPay(method) {
             _afterDlPayPatch(orderId, o);
         }
     } else {
-        closeQuickPay(true);
+        // ★ v113 fix: Object.assign 먼저 실행해 o.isPaid=true 반영 후 closeQuickPay 호출
+        // (closeQuickPay 내부에서 showClientStatement를 바로 호출하므로 patch가 적용된 상태여야 함)
         Object.assign(o, patch);
         _markDirtyOrder(orderId);
+        closeQuickPay(true);
         _saveAndFlush(); renderOrders(); renderDashboard(); updateInfoCounts(); updateNavBadges();
         _refreshUnpaidIfActive();
         _refreshSettlementIfActive();
