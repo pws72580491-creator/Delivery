@@ -11,7 +11,7 @@
     <meta name="apple-mobile-web-app-title" content="납품관리">
     <link rel="apple-touch-icon" href="./icon-192.png">
     <link rel="manifest" href="./manifest.json">
-    <title>납품 관리 Pro v113</title>
+    <title>납품 관리 Pro v114</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js" defer></script>
@@ -38,7 +38,7 @@
             <div class="logo-icon">📦</div>
             <div>
                 <div class="logo-text">납품 관리 Pro</div>
-                <div class="logo-sub">v113 · PWA 앱 설치 지원</div>
+                <div class="logo-sub">v114 · PWA 앱 설치 지원</div>
             </div>
         </div>
         <div class="header-btns">
@@ -619,7 +619,7 @@
     <div class="card">
         <div class="card-title">앱 정보</div>
         <div style="font-size:13px;color:var(--text2);line-height:2;margin-bottom:12px;">
-            버전: <strong style="color:var(--accent);">v113</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
+            버전: <strong style="color:var(--accent);">v114</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
             거래처: <span id="infoClients">0</span>개 &nbsp;·&nbsp;
             납품내역: <span id="infoOrders">0</span>건
         </div>
@@ -633,7 +633,7 @@
             <div id="changelogList" style="display:flex;flex-direction:column;gap:6px;">
                 <!-- 현재 버전 -->
                 <div class="changelog-item">
-                    <span class="changelog-ver" style="color:var(--green);">v113</span>
+                    <span class="changelog-ver" style="color:var(--green);">v114</span>
                     <span class="changelog-desc">버그 5건 수정 — ① 완납→미수 복귀 후 명세표 즉시 미반영: togglePaid()에 statementModal 갱신 추가, payEditModal closeModal 위치 수정(isShared 공통화). ② 완납 처리 후 명세표에 여전히 미수로 표시: confirmQuickPay·confirmQuickPayDiscount에서 closeQuickPay(true) 호출이 Object.assign(o, patch) 전에 일어나 o.isPaid=false 상태로 showClientStatement가 실행됐던 문제 수정 — Object.assign으로 로컬 상태 먼저 반영 후 closeQuickPay 호출하도록 순서 변경. ③ confirmQuickPay isShared 경로: _patchSharedOrder 완료 전 closeQuickPay 호출 순서 오류 수정. ④ 모바일 키보드 올라올 때 입력 필드 가려짐: visualViewport resize 이벤트 감지해 포커스된 필드 자동 스크롤. ⑤ Firebase 타임아웃 단축: flushSync.update 12→5초, orders.update·orders.once 12→8초, flushSync 중복 실행 방지 플래그 추가.</span>
                 </div>
                 <div class="changelog-item">
