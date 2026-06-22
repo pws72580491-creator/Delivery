@@ -11,7 +11,7 @@
     <meta name="apple-mobile-web-app-title" content="납품관리">
     <link rel="apple-touch-icon" href="./icon-192.png">
     <link rel="manifest" href="./manifest.json">
-    <title>납품 관리 Pro v112</title>
+    <title>납품 관리 Pro v113</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js" defer></script>
@@ -38,7 +38,7 @@
             <div class="logo-icon">📦</div>
             <div>
                 <div class="logo-text">납품 관리 Pro</div>
-                <div class="logo-sub">v112 · PWA 앱 설치 지원</div>
+                <div class="logo-sub">v113 · PWA 앱 설치 지원</div>
             </div>
         </div>
         <div class="header-btns">
@@ -619,7 +619,7 @@
     <div class="card">
         <div class="card-title">앱 정보</div>
         <div style="font-size:13px;color:var(--text2);line-height:2;margin-bottom:12px;">
-            버전: <strong style="color:var(--accent);">v112</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
+            버전: <strong style="color:var(--accent);">v113</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
             거래처: <span id="infoClients">0</span>개 &nbsp;·&nbsp;
             납품내역: <span id="infoOrders">0</span>건
         </div>
@@ -632,6 +632,10 @@
             <div style="font-size:11px;font-weight:700;color:var(--text2);letter-spacing:.7px;text-transform:uppercase;margin-bottom:8px;">변경 이력</div>
             <div id="changelogList" style="display:flex;flex-direction:column;gap:6px;">
                 <!-- 현재 버전 -->
+                <div class="changelog-item">
+                    <span class="changelog-ver" style="color:var(--green);">v113</span>
+                    <span class="changelog-desc">버그 4건 수정 — ① 완납→미수 복귀 후 명세표 즉시 미반영(핵심 원인): detailModal의 "↩️ 미수 복귀" 버튼이 togglePaid()를 실행한 후 statementModal이 열려있어도 명세표를 재렌더링하지 않아, 앱 재시작 전까지 완납 상태로 보이던 문제 수정(togglePaid에 statementModal 갱신 로직 추가). 아울러 수금 수정 모달(payEditModal)의 closeModal 위치를 isShared 분기 바깥으로 이동해 공유 전표 경로에서도 모달이 즉시 닫히도록 수정. ② confirmQuickPay isShared 경로: _patchSharedOrder 완료 전에 closeQuickPay(true)가 불려 구버전 데이터로 명세표가 갱신되던 순서 오류 수정. ③ 모바일 키보드 올라올 때 입력 필드 가려짐: visualViewport resize 이벤트 감지해 포커스된 필드 자동 스크롤(모달·일반 영역 모두 처리). ④ Firebase 타임아웃 단축: flushSync.update 12→5초, orders.update·orders.once 12→8초로 단축해 소켓 끊김 후 최대 12초 대기하던 문제 해소. flushSync 중복 실행 방지 플래그 추가.</span>
+                </div>
                 <div class="changelog-item">
                     <span class="changelog-ver" style="color:var(--green);">v112</span>
                     <span class="changelog-desc">거래명세표에서 날짜 탭 → 납품 상세 보기 — 이월 행·당월 행 모두 날짜 셀(🔍)을 탭하면 납품 상세 모달이 열림. 날짜 외 나머지 셀 탭 동작(미수: 수금 처리, 완납/반품: 상세 보기)은 그대로 유지.</span>
