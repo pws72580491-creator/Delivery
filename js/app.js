@@ -429,12 +429,13 @@ window.addEventListener('DOMContentLoaded', () => {
             if (myShared.length) localStorage.setItem('mySharedClients', JSON.stringify(myShared));
             firebase.database().ref(`workspaces/${savedWs}/sharedClients`)
                 .set(myShared.length ? myShared : []).catch(() => {});
-            // ★ P4: 앱 시작 시 미전송 CRM 큐 일괄 재시도
-            setTimeout(() => flushCrmSyncQueue().catch(() => {}), 3000);
         });
     }
     // 자동 백업 체크
     setTimeout(checkAutoBackup, 2000);
+    // ★ v114: 앱 시작 시 오프라인 큐 배지 복원
+    if (typeof _updateSharedQueueBadge === 'function') _updateSharedQueueBadge();
+    if (typeof _updateDeadQueueBadge   === 'function') _updateDeadQueueBadge();
     // 백업 저장 위치 복원
     loadBackupDir();
     // 네트워크 끊김/복구 감지

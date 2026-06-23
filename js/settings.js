@@ -225,6 +225,10 @@ function importJSON(e) {
             if (data.prices)     prices     = data.prices;
             if (data.stockItems) stockItems = toArray(data.stockItems).map(normStock);
             lastHash = {clients:'',orders:'',prices:'',stock:''};
+            // ★ v114: 가져오기 시 오프라인 큐 초기화 (구 데이터 잔류 방지)
+            ['_sharedOrderQueue','_sharedOrderDeadQueue','_crmPatchFailQueue'].forEach(k => localStorage.removeItem(k));
+            if (typeof _updateSharedQueueBadge === 'function') _updateSharedQueueBadge();
+            if (typeof _updateDeadQueueBadge   === 'function') _updateDeadQueueBadge();
             saveData(); _fullRender();
             toast('✅ 가져오기 완료', 'var(--green)');
         } catch(err) { toast('❗ 가져오기 실패: '+err.message); }
@@ -266,6 +270,10 @@ async function resetAllData() {
     }
     clients=[]; orders=[]; prices={}; stockItems=[];
     localStorage.removeItem('p_stock');
+    // ★ v114: 초기화 시 오프라인 큐도 제거
+    ['_sharedOrderQueue','_sharedOrderDeadQueue','_crmPatchFailQueue'].forEach(k => localStorage.removeItem(k));
+    if (typeof _updateSharedQueueBadge === 'function') _updateSharedQueueBadge();
+    if (typeof _updateDeadQueueBadge   === 'function') _updateDeadQueueBadge();
     lastHash={clients:'',orders:'',prices:'',stock:''};
     saveData(); _fullRender();
     toast('🗑️ 초기화 완료');

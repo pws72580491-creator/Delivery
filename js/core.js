@@ -74,13 +74,30 @@ function _renderActiveIfDirty() {
     if (active in _dirty) _dirty[active] = false;
 }
 
+// ★ v114: toast 큐 시스템 — 동시에 여러 메시지가 와도 순서대로 표시
+const _toastQueue = [];
+let _toastBusy = false;
+
 function toast(msg, color, duration) {
+    _toastQueue.push({ msg, color, duration });
+    if (!_toastBusy) _toastNext();
+}
+
+function _toastNext() {
+    if (!_toastQueue.length) { _toastBusy = false; return; }
+    _toastBusy = true;
+    const { msg, color, duration } = _toastQueue.shift();
     const el = document.getElementById('toast');
     el.textContent = msg;
     el.style.borderColor = color || 'var(--border)';
     el.classList.add('show');
+    const showMs = duration || 2400;
     clearTimeout(el._t);
-    el._t = setTimeout(() => el.classList.remove('show'), duration || 2400);
+    el._t = setTimeout(() => {
+        el.classList.remove('show');
+        // 사라지는 애니메이션(280ms) 후 다음 항목 표시
+        setTimeout(_toastNext, 300);
+    }, showMs);
 }
 
 // ─── 테마 ───
@@ -176,7 +193,7 @@ const _MODAL_IDS = [
     'clientEditModal','orderEditModal',
     'stockEditModal','stockAdjModal','stockLogModal',
     'bulkPayPopup','deliveryConfirmPopup',
-    'customConfirmModal'
+    'customConfirmModal','deadQueueModal' // ★ v114
 ];
 
 function _anyModalOpen() {

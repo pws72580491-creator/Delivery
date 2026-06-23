@@ -278,6 +278,10 @@ async function restoreBackup(key) {
 
         // lastHash 초기화 후 Firebase에 복원 데이터 업로드
         lastHash={clients:'',orders:'',prices:'',stock:''};
+        // ★ v114: 복원 시 오프라인 큐 초기화 (구 데이터 잔류 방지)
+        ['_sharedOrderQueue','_sharedOrderDeadQueue','_crmPatchFailQueue'].forEach(k => localStorage.removeItem(k));
+        if (typeof _updateSharedQueueBadge === 'function') _updateSharedQueueBadge();
+        if (typeof _updateDeadQueueBadge   === 'function') _updateDeadQueueBadge();
         saveToLocal();
 
         // Firebase 즉시 업로드 (debounce 없이)

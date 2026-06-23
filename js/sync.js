@@ -3,8 +3,9 @@
 // ║  온라인 동기화 코드는 원본과 100% 동일합니다                                  ║
 // ╚══════════════════════════════════════════════════════════════╝
 
-// ─── 공유 납품 오프라인 큐 (v96 이식) ────────────────────────────────────────
-const _SHARED_QUEUE_KEY = '_sharedOrderQueue';
+// ─── 공유 납품 오프라인 큐 (v96 이식, v114 개선) ─────────────────────────────
+const _SHARED_QUEUE_KEY      = '_sharedOrderQueue';
+const _SHARED_DEAD_QUEUE_KEY = '_sharedOrderDeadQueue'; // ★ v114: 폐기 대신 별도 보관
 
 function _getSharedOrderQueue() {
     try { return JSON.parse(localStorage.getItem(_SHARED_QUEUE_KEY) || '[]'); } catch { return []; }
@@ -12,32 +13,39 @@ function _getSharedOrderQueue() {
 function _saveSharedOrderQueue(queue) {
     try { localStorage.setItem(_SHARED_QUEUE_KEY, JSON.stringify(queue)); } catch(e) {}
 }
+function _getDeadQueue() {
+    try { return JSON.parse(localStorage.getItem(_SHARED_DEAD_QUEUE_KEY) || '[]'); } catch { return []; }
+}
+function _saveDeadQueue(dead) {
+    try { localStorage.setItem(_SHARED_DEAD_QUEUE_KEY, JSON.stringify(dead)); } catch(e) {}
+}
 
-/** 오프라인 시 공유 납품을 큐에 저장 */
+/** 오프라인 시 공유 납품을 큐에 저장 (★ v114: order.id 기준 중복 방지) */
 function _enqueueSharedOrder(wsId, ordersToQueue) {
     const queue = _getSharedOrderQueue();
     ordersToQueue.forEach(order => {
-        const newItem = {
+        // ★ v114: 이미 같은 order.id가 큐에 있으면 덮어쓰기 (중복 방지)
+        const existIdx = queue.findIndex(item => item.order && item.order.id === order.id && item.wsId === wsId);
+        const entry = {
             wsId,
             order,
             queuedAt:   new Date().toISOString(),
             failCount:  0,
             retryAfter: null,
         };
-        // ★ P2: 동일 전표(wsId + order.id) 가 이미 큐에 있으면 교체(upsert)
-        const idx = queue.findIndex(q => q.wsId === wsId && q.order?.id === order.id);
-        if (idx >= 0) {
-            queue[idx] = newItem;
+        if (existIdx >= 0) {
+            queue[existIdx] = entry; // 덮어쓰기
         } else {
-            queue.push(newItem);
+            queue.push(entry);
         }
     });
     _saveSharedOrderQueue(queue);
     _updateSharedQueueBadge();
 }
 
-const _QUEUE_MAX_RETRIES = 3;          // 최대 재시도 횟수
-const _QUEUE_RETRY_DELAYS = [5000, 15000, 60000]; // 1·2·3차 실패 후 대기(ms)
+// ★ v114: 재시도 횟수 제한 제거 — 실패 항목은 dead 큐로 이동 후 사용자가 직접 재시도
+const _QUEUE_MAX_RETRIES = 5;          // 자동 재시도 최대 횟수 (초과 시 dead 큐로)
+const _QUEUE_RETRY_DELAYS = [5000, 15000, 60000, 300000, 600000]; // 5회 백오프
 
 /** Firebase 재연결 시 오프라인 큐 일괄 업로드 */
 async function _flushSharedOrderQueue() {
@@ -81,17 +89,20 @@ async function _flushSharedOrderQueue() {
         } catch(e) {
             const fc = (item.failCount || 0) + 1;
             if (fc >= _QUEUE_MAX_RETRIES) {
-                // ★ P3: 최대 재시도 초과 — 데이터 유실 방지를 위해 status:'failed'로 보존
-                // 사용자가 배지를 탭해 수동 재전송 가능
-                failed.push({
-                    ...item,
-                    failCount: fc,
-                    status:    'failed',
-                    lastError: e.message || String(e),
-                });
-                console.error(`[공유큐] ${_QUEUE_MAX_RETRIES}회 실패 — 수동 재전송 대기:`, item.order?.id || item.orderId);
+                // ★ v114: 폐기 대신 dead 큐에 보관 → 사용자가 직접 재시도 가능
+                const dead = _getDeadQueue();
+                // ★ v114: _delete 항목은 item.order가 없으므로 item.orderId로도 비교
+                const itemKey = item.order?.id || item.orderId || null;
+                const deadIdx = itemKey
+                    ? dead.findIndex(d => (d.order?.id || d.orderId) === itemKey && d.wsId === item.wsId)
+                    : -1;
+                const deadEntry = { ...item, failCount: fc, lastError: e.message || String(e), deadAt: new Date().toISOString() };
+                if (deadIdx >= 0) dead[deadIdx] = deadEntry;
+                else dead.push(deadEntry);
+                _saveDeadQueue(dead);
+                console.warn(`[공유큐] ${fc}회 실패 → dead 큐로 이동:`, itemKey);
             } else {
-                const delayMs  = _QUEUE_RETRY_DELAYS[fc - 1] || 60000;
+                const delayMs  = _QUEUE_RETRY_DELAYS[fc - 1] || 300000;
                 failed.push({
                     ...item,
                     failCount:  fc,
@@ -108,13 +119,11 @@ async function _flushSharedOrderQueue() {
         renderOrders(); updateInfoCounts(); updateNavBadges(); renderDashboard();
         toast(`📤 오프라인 중 작성한 공유 납품 ${successCnt}건이 업로드되었습니다`, 'var(--green)', 4000);
     }
-    // ★ P3: status:'failed' 항목(수동 재전송 필요) 사용자 안내
-    const deadItems = failed.filter(f => f.status === 'failed');
-    if (deadItems.length > 0) {
-        toast(`⚠️ 공유 납품 ${deadItems.length}건 업로드 실패 — 배지를 탭해 재전송하세요`, 'var(--red)', 6000);
-        console.error('[공유큐] 수동 재전송 대기 항목:', deadItems);
+    const deadAfter = _getDeadQueue();
+    if (deadAfter.length > 0) {
+        _updateDeadQueueBadge();
     }
-    if (failed.filter(f => f.status !== 'failed').length > 0) {
+    if (failed.length > 0) {
         const retrying = failed.filter(f => f.retryAfter);
         console.warn(`[공유큐] ${retrying.length}건 대기 중 — 다음 연결 시 재시도`);
     }
@@ -126,21 +135,96 @@ function _updateSharedQueueBadge() {
     const el = document.getElementById('sharedQueueBadge');
     if (!el) return;
     const q = _getSharedOrderQueue();
-    const failedItems  = q.filter(f => f.status === 'failed');
-    const pendingItems = q.filter(f => f.status !== 'failed');
     if (q.length > 0) {
-        // ★ P3: failed 항목은 별도 강조 표시
-        if (failedItems.length > 0) {
-            el.textContent = `⚠️ 공유 ${failedItems.length}건 실패 / ${pendingItems.length}건 대기 (탭하여 재전송)`;
-            el.style.color = 'var(--red)';
-        } else {
-            el.textContent = `📤 공유 ${pendingItems.length}건 대기 중 (탭하여 재시도)`;
-            el.style.color = '';
-        }
+        el.textContent = `📤 공유 납품 ${q.length}건 대기 중 — 탭하여 재시도`;
         el.style.display = '';
     } else {
         el.style.display = 'none';
     }
+}
+
+/** ★ v114: 폐기 큐(dead) 배지 UI 갱신 */
+function _updateDeadQueueBadge() {
+    const el = document.getElementById('sharedDeadBadge');
+    if (!el) return;
+    const dead = _getDeadQueue();
+    if (dead.length > 0) {
+        el.textContent = `⚠️ 업로드 실패 ${dead.length}건 — 탭하여 확인`;
+        el.style.display = '';
+    } else {
+        el.style.display = 'none';
+    }
+}
+
+/** ★ v114: dead 큐 확인 모달 표시 */
+function showDeadQueueModal() {
+    const dead = _getDeadQueue();
+    const listEl = document.getElementById('deadQueueList');
+    if (!listEl) return;
+    if (!dead.length) {
+        toast('✅ 실패한 항목이 없습니다', 'var(--green)');
+        return;
+    }
+    listEl.innerHTML = dead.map(item => {
+        const o = item.order || {};
+        const isDelete = !!item._delete;
+        const dateStr  = (o.date || item.queuedAt || '').slice(0, 10);
+        const clientNm = isDelete
+            ? `(삭제 요청 · ID: ${escapeHtml(item.orderId || '?')})`
+            : escapeHtml(o.clientName || '(거래처 미상)');
+        const total    = o.total ? fmt(o.total) + '원' : '';
+        const errTxt   = escapeHtml((item.lastError || '').slice(0, 60));
+        const wsId     = escapeHtml(item.wsId || '');
+        return `<div style="background:var(--surf2);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:6px;">
+            <div style="font-size:13px;font-weight:600;color:var(--text1);">${clientNm} ${total ? '· ' + total : ''}</div>
+            <div style="font-size:11px;color:var(--text3);margin-top:3px;">${dateStr} · 대상: ${wsId} · 실패 ${item.failCount}회</div>
+            ${errTxt ? `<div style="font-size:11px;color:var(--red);margin-top:3px;">오류: ${errTxt}</div>` : ''}
+        </div>`;
+    }).join('');
+    openModal('deadQueueModal');
+}
+
+/** ★ v114: dead 큐 전체 재시도 — dead → 일반 큐로 복원 후 flush */
+async function retryDeadQueue() {
+    const dead = _getDeadQueue();
+    if (!dead.length) return;
+    // failCount/retryAfter 초기화 후 일반 큐에 추가
+    const queue = _getSharedOrderQueue();
+    dead.forEach(item => {
+        const reset = { ...item, failCount: 0, retryAfter: null, lastError: null };
+        // ★ v114: _delete 항목은 orderId로, 일반 항목은 order.id로 비교
+        const itemKey = item.order?.id || item.orderId || null;
+        const existIdx = itemKey
+            ? queue.findIndex(q => (q.order?.id || q.orderId) === itemKey && q.wsId === item.wsId)
+            : -1;
+        if (existIdx >= 0) queue[existIdx] = reset;
+        else queue.push(reset);
+    });
+    _saveSharedOrderQueue(queue);
+    _saveDeadQueue([]);
+    closeModal('deadQueueModal');
+    _updateDeadQueueBadge();
+    _updateSharedQueueBadge();
+    toast('🔄 재시도 큐에 추가됨 — 연결 시 자동 업로드', 'var(--accent)', 3000);
+    if (isConnected) await _flushSharedOrderQueue().catch(() => {});
+}
+
+/** ★ v114: dead 큐 전체 삭제 */
+async function clearDeadQueue() {
+    const dead = _getDeadQueue();
+    if (!dead.length) return;
+    const ok = await customConfirm(
+        `실패한 전표 ${dead.length}건을 모두 삭제합니다.
+삭제하면 복구할 수 없습니다.
+
+정말 삭제하시겠습니까?`,
+        '삭제', 'btn-danger'
+    );
+    if (!ok) return;
+    _saveDeadQueue([]);
+    closeModal('deadQueueModal');
+    _updateDeadQueueBadge();
+    toast('🗑️ 실패 항목이 삭제됐습니다', 'var(--text3)');
 }
 
 
@@ -652,35 +736,34 @@ function _doConnect(id, auto=false) {
                     _loadSharedClientsFromWs().catch(() => {});
                     if (_initialLoadDone) {
                         // ★ v99 fix: 서버 상태 확인 완료 후 큐 flush — 순서 보장
-                        // 큐 flush를 먼저 하면 flush 직전 .get() 스냅샷이 flush 이전 상태를
-                        // 찍어서 로컬이 오래된 것처럼 판단하는 false-stale 문제 차단
                         _withTimeout(workspaceRef.get(), 10000, 'reconnect.get').then(async snap => {
                             const d = snap.val();
                             if (!d) {
                                 await _flushSharedOrderQueue().catch(() => {});
+                                if (typeof _flushCrmFailQueue === 'function') _flushCrmFailQueue().catch(() => {}); // ★ v114
                                 debouncedSync();
                                 return;
                             }
                             const serverTime = d.lastUpdated ? new Date(d.lastUpdated).getTime() : 0;
                             const lastLocalMs = (() => { const s = localStorage.getItem('lastLocalUpdated'); return s ? new Date(s).getTime() : 0; })();
                             const localWriteMs = Math.max(_localWriteTime, lastLocalMs);
-                            // 큐 flush 먼저 완료 후 로컬↔서버 판단
                             await _flushSharedOrderQueue().catch(() => {});
+                            if (typeof _flushCrmFailQueue === 'function') _flushCrmFailQueue().catch(() => {}); // ★ v114
                             if (localWriteMs > serverTime) {
-                                // 로컬이 최신 → 서버에 올리기
                                 debouncedSync();
                             } else {
-                                // 서버가 최신 → 리스너가 받아서 처리 (강제 트리거)
                                 _fbValueHandler(snap);
                             }
                         }).catch(async e => {
                             diagLog('⚠️ 재연결 직후 서버조회 타임아웃', String(e && e.message || e));
                             await _flushSharedOrderQueue().catch(() => {});
-                            debouncedSync(); // 실패 시 일단 올리기
+                            if (typeof _flushCrmFailQueue === 'function') _flushCrmFailQueue().catch(() => {}); // ★ v114
+                            debouncedSync();
                         });
                     } else {
                         // 초기 로드 전이면 큐만 flush
                         _flushSharedOrderQueue().catch(() => {});
+                        if (typeof _flushCrmFailQueue === 'function') _flushCrmFailQueue().catch(() => {}); // ★ v114
                     }
                 }
             } else {
@@ -706,6 +789,7 @@ function _doConnect(id, auto=false) {
             setTimeout(checkAutoBackup, 1500);
             // ── 첫 연결 시 오프라인 큐 플러시 ──
             _flushSharedOrderQueue().catch(() => {});
+            if (typeof _flushCrmFailQueue === 'function') _flushCrmFailQueue().catch(() => {}); // ★ v114
 
             // 서버에 데이터가 있는지 (어느 키 하나라도)
             const serverHasData = data && (
