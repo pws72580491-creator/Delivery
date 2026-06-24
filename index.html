@@ -1144,7 +1144,7 @@
         </p>
         <div id="sharedWsList" style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px;"></div>
         <div style="display:flex;gap:6px;">
-            <input type="text" class="form-input" id="sharedWsInput" placeholder="공유할 워크스페이스 ID 입력" style="flex:1;font-size:13px;">
+            <input type="text" class="form-input" id="sharedWsInput" placeholder="공유할 워크스페이스 ID 입력" enterkeyhint="done" style="flex:1;font-size:13px;">
             <button class="btn btn-ghost btn-sm" style="white-space:nowrap;flex-shrink:0;" onclick="addSharedWs()">➕ 추가</button>
         </div>
 
@@ -1329,7 +1329,7 @@
     <!-- 단일 입금액 (현금/이체/기타) -->
     <div class="form-group" id="ppSingleAmtGroup">
       <label class="form-label">입금액 *</label>
-      <input type="text" class="form-input" id="ppAmount" placeholder="0" inputmode="numeric" data-money
+      <input type="text" class="form-input" id="ppAmount" placeholder="0" inputmode="numeric" data-money enterkeyhint="next"
              oninput="previewPartialPay()"
              style="font-size:22px;font-weight:900;text-align:right;letter-spacing:1px;">
     </div>
@@ -1337,13 +1337,13 @@
     <div id="ppMixedGroup" style="display:none;">
       <div class="form-group">
         <label class="form-label">🏦 계좌이체 금액</label>
-        <input type="text" class="form-input" id="ppTransferAmt" placeholder="0" inputmode="numeric" data-money
+        <input type="text" class="form-input" id="ppTransferAmt" placeholder="0" inputmode="numeric" data-money enterkeyhint="next"
                oninput="previewMixedPay()"
                style="font-size:20px;font-weight:900;text-align:right;">
       </div>
       <div class="form-group">
         <label class="form-label">💵 현금 금액</label>
-        <input type="text" class="form-input" id="ppCashAmt" placeholder="0" inputmode="numeric" data-money
+        <input type="text" class="form-input" id="ppCashAmt" placeholder="0" inputmode="numeric" data-money enterkeyhint="next"
                oninput="previewMixedPay()"
                style="font-size:20px;font-weight:900;text-align:right;">
       </div>
@@ -1355,7 +1355,7 @@
          margin-bottom:12px;font-size:12px;line-height:2.1;"></div>
     <div class="form-group">
       <label class="form-label">메모 <span style="color:var(--text3);font-weight:400;">(선택)</span></label>
-      <input type="text" class="form-input" id="ppNote" placeholder="메모 (선택)">
+      <input type="text" class="form-input" id="ppNote" placeholder="메모 (선택)" enterkeyhint="done">
     </div>
     <div style="display:flex;gap:8px;">
       <button class="btn btn-primary" style="flex:2;" onclick="confirmPartialPay()">💳 입금 처리</button>
@@ -1392,7 +1392,7 @@
     </div>
     <div class="form-group">
       <label class="form-label">수정할 수금액 *</label>
-      <input type="text" class="form-input" id="peAmount" placeholder="0" inputmode="numeric" data-money
+      <input type="text" class="form-input" id="peAmount" placeholder="0" inputmode="numeric" data-money enterkeyhint="next"
              style="font-size:22px;font-weight:900;text-align:right;letter-spacing:1px;">
       <div style="font-size:11px;color:var(--text2);margin-top:5px;">0원 입력 시 수금 취소(미수로 되돌리기)</div>
     </div>
@@ -1407,7 +1407,7 @@
     </div>
     <div class="form-group">
       <label class="form-label">메모 <span style="color:var(--text3);font-weight:400;">(선택)</span></label>
-      <input type="text" class="form-input" id="peNote" placeholder="메모 (선택)">
+      <input type="text" class="form-input" id="peNote" placeholder="메모 (선택)" enterkeyhint="done">
     </div>
     <div style="display:flex;gap:8px;">
       <button class="btn btn-primary" style="flex:2;" onclick="confirmPayEdit()">✅ 수정 완료</button>
@@ -1442,7 +1442,7 @@
         <div id="qpDiscountBody" style="display:none;margin-top:10px;">
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
                 <label style="font-size:12px;color:var(--text2);white-space:nowrap;">실수령액</label>
-                <input type="text" id="qpDiscountAmt" class="form-input" inputmode="numeric" data-money
+                <input type="text" id="qpDiscountAmt" class="form-input" inputmode="numeric" data-money enterkeyhint="done"
                     placeholder="실제 받은 금액" min="0"
                     style="flex:1;font-size:16px;font-weight:900;text-align:right;"
                     oninput="updateQpDiscountPreview()">
