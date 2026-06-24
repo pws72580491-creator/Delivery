@@ -333,6 +333,19 @@ function initKeyHandlers() {
     // ── 백업 탭 ──
     bindEnter('schedDay1', 'schedDay2');
     bindEnter('schedDay2', null, saveBackupSchedule);
+
+    // ★ v114: 수금 모달 — Enter 키로 다음 필드 이동
+    bindEnter('ppAmount',      'ppNote');       // 단일결제: 금액 → 메모
+    bindEnter('ppTransferAmt', 'ppCashAmt');    // 혼합결제: 이체 → 현금
+    bindEnter('ppCashAmt',     'ppNote');       // 혼합결제: 현금 → 메모
+    bindEnter('ppNote',   null, () => { if (typeof confirmPartialPay === 'function') confirmPartialPay(); });
+
+    // ★ v114: 결제 수정 모달
+    bindEnter('peAmount', 'peNote');
+    bindEnter('peNote',   null, () => { if (typeof confirmPayEdit === 'function') confirmPayEdit(); });
+
+    // ★ v114: 공유 워크스페이스 입력
+    bindEnter('sharedWsInput', null, addSharedWs);
 }
 
 // ─── 달걀 품목 초기 등록 ───
