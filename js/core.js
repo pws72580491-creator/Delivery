@@ -141,6 +141,11 @@ function showTab(name) {
     if (name === 'delivery') {
         const dInput = document.getElementById('deliveryDate');
         if (!dInput.value || dInput.value < todayKST()) dInput.value = todayKST();
+        // ★ v115: 납품 탭 진입 시 거래처 검색창 자동 포커스 → 키보드 즉시 표시
+        setTimeout(() => {
+            const cl = document.getElementById('deliveryClient');
+            if (cl) cl.focus();
+        }, 150);
     }
     if (name === 'history') {
         initHistPeriod();
