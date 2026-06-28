@@ -142,9 +142,10 @@ function showTab(name) {
         const dInput = document.getElementById('deliveryDate');
         if (!dInput.value || dInput.value < todayKST()) dInput.value = todayKST();
         // ★ v115: 납품 탭 진입 시 거래처 검색창 자동 포커스 → 키보드 즉시 표시
+        // delivery 탭이 여전히 활성 상태일 때만 포커스 (submitOrder 후 history 탭 전환 시 오작동 방지)
         setTimeout(() => {
             const cl = document.getElementById('deliveryClient');
-            if (cl) cl.focus();
+            if (cl && document.getElementById('pane-delivery')?.classList.contains('active')) cl.focus();
         }, 150);
     }
     if (name === 'history') {

@@ -490,7 +490,14 @@ async function showClientStatement(clientName, month) {
             <td class="text-center"><span class="pay-badge unpaid" style="cursor:default;font-size:9px;">이월</span></td>
         </tr>${carryPartialRow}`;
     }).join('');
-    const monthRows = filt.map(o=>{
+    // ★ v116: 날짜/금액 셀 클릭 시 해당 날짜까지 누계 토글
+    const _runningTotals = [];
+    let _runAcc = 0;
+    for (const o of filt) {
+        _runAcc += _effectiveTotal(o);
+        _runningTotals.push(_runAcc);
+    }
+    const monthRows = filt.map((o, idx)=>{
         const partial = !o.isPaid && (o.paidAmount||0)>0;
         const remain  = partial ? o.total-(o.paidAmount||0) : 0;
         const sharedBadge = o._sharedWsId
@@ -532,12 +539,14 @@ async function showClientStatement(clientName, month) {
         const rowAccent = o._sharedWsId ? 'background:rgba(99,102,241,0.05);' : o.isReturn ? 'background:rgba(229,68,68,0.04);' : !o.isPaid ? 'background:rgba(239,68,68,0.04);' : '';
         const rowOnclick = rowClick ? `onclick="${rowClick}"` : '';
         const rowCursor  = rowClick ? 'cursor:pointer;' : 'cursor:default;';
-        // ★ v112: 날짜 셀 탭 → 항상 상세보기 (전체 행 클릭은 기존 수금 처리 유지)
-        const dateCellClick = o.id ? `onclick="event.stopPropagation();showOrderDetail('${o.id||''}')"` : '';
+        // ★ v116: 날짜·금액 셀 클릭 → 누계 토글 / 🔍 클릭 → 상세보기 분리
+        const runTotal = _runningTotals[idx];
+        const accumRowId = `accum-row-${idx}`;
+        const toggleAccum = `(function(e){e.stopPropagation();var r=document.getElementById('${accumRowId}');if(r){r.remove();}else{var tr=document.createElement('tr');tr.id='${accumRowId}';tr.style.cssText='background:rgba(99,102,241,0.08);';tr.innerHTML='<td colspan="4" style="padding:6px 12px;font-size:12px;color:#4f46e5;font-weight:700;">📊 ${o.date}까지 누계: ${fmt(runTotal)}원</td>';this.closest('tr').after(tr);}})`;
         return `<tr style="${rowCursor}${rowAccent}" ${rowOnclick} title="${rowTitle}">
-            <td ${dateCellClick} title="탭하여 상세 보기" style="cursor:pointer;">${o.date} <span style="font-size:9px;color:var(--text3);">🔍</span></td>
+            <td onclick="${toggleAccum}(event)" title="탭하여 누계 보기" style="cursor:pointer;">${o.date} <span style="font-size:9px;color:var(--text3);">📊</span> <span style="font-size:9px;color:var(--text3);" onclick="event.stopPropagation();showOrderDetail('${o.id||''}')" title="상세보기">🔍</span></td>
             <td style="font-size:11px;">${_fmtItems(o)}${sharedBadge}${returnBadge}</td>
-            <td class="text-right">${fmt(o.total)}원</td>
+            <td class="text-right" onclick="${toggleAccum}(event)" title="탭하여 누계 보기" style="cursor:pointer;">${fmt(o.total)}원</td>
             <td class="text-center">${statBadge}</td>
         </tr>${partialDetailRow}`;
     }).join('');
