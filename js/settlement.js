@@ -4,6 +4,21 @@
 
 // ─── 정산 ───
 
+// ★ v116: 거래명세서 누계 토글 전역 함수
+function _toggleAccum(idx, trEl) {
+    const rowId = 'accum-row-' + idx;
+    const existing = document.getElementById(rowId);
+    if (existing) { existing.remove(); return; }
+    const info = (window._accumMap || {})[idx];
+    if (!info) return;
+    const tr = document.createElement('tr');
+    tr.id = rowId;
+    tr.style.cssText = 'background:rgba(99,102,241,0.08);';
+    tr.innerHTML = '<td colspan="4" style="padding:6px 12px;font-size:12px;color:#4f46e5;font-weight:700;">📊 ' + info.date + '까지 누계: ' + fmt(info.total) + '원</td>';
+    trEl.after(tr);
+}
+
+
 function setSettleUnit(btn) {
     document.querySelectorAll('.settle-unit-tab').forEach(b=>b.classList.remove('active'));
     btn.classList.add('active');
@@ -490,13 +505,13 @@ async function showClientStatement(clientName, month) {
             <td class="text-center"><span class="pay-badge unpaid" style="cursor:default;font-size:9px;">이월</span></td>
         </tr>${carryPartialRow}`;
     }).join('');
-    // ★ v116: 날짜/금액 셀 클릭 시 해당 날짜까지 누계 토글
-    const _runningTotals = [];
+    // ★ v116: 날짜/금액 셀 클릭 시 해당 날짜까지 누계 토글 (전역 Map 사용)
+    window._accumMap = {};
     let _runAcc = 0;
-    for (const o of filt) {
+    filt.forEach((o, idx) => {
         _runAcc += _effectiveTotal(o);
-        _runningTotals.push(_runAcc);
-    }
+        window._accumMap[idx] = { date: o.date, total: _runAcc };
+    });
     const monthRows = filt.map((o, idx)=>{
         const partial = !o.isPaid && (o.paidAmount||0)>0;
         const remain  = partial ? o.total-(o.paidAmount||0) : 0;
@@ -539,14 +554,11 @@ async function showClientStatement(clientName, month) {
         const rowAccent = o._sharedWsId ? 'background:rgba(99,102,241,0.05);' : o.isReturn ? 'background:rgba(229,68,68,0.04);' : !o.isPaid ? 'background:rgba(239,68,68,0.04);' : '';
         const rowOnclick = rowClick ? `onclick="${rowClick}"` : '';
         const rowCursor  = rowClick ? 'cursor:pointer;' : 'cursor:default;';
-        // ★ v116: 날짜·금액 셀 클릭 → 누계 토글 / 🔍 클릭 → 상세보기 분리
-        const runTotal = _runningTotals[idx];
-        const accumRowId = `accum-row-${idx}`;
-        const toggleAccum = `(function(e){e.stopPropagation();var r=document.getElementById('${accumRowId}');if(r){r.remove();}else{var tr=document.createElement('tr');tr.id='${accumRowId}';tr.style.cssText='background:rgba(99,102,241,0.08);';tr.innerHTML='<td colspan="4" style="padding:6px 12px;font-size:12px;color:#4f46e5;font-weight:700;">📊 ${o.date}까지 누계: ${fmt(runTotal)}원</td>';this.closest('tr').after(tr);}})`;
+        // ★ v116: 날짜·금액 셀 클릭 → 전역 _toggleAccum(idx, tr) 호출
         return `<tr style="${rowCursor}${rowAccent}" ${rowOnclick} title="${rowTitle}">
-            <td onclick="${toggleAccum}(event)" title="탭하여 누계 보기" style="cursor:pointer;">${o.date} <span style="font-size:9px;color:var(--text3);">📊</span> <span style="font-size:9px;color:var(--text3);" onclick="event.stopPropagation();showOrderDetail('${o.id||''}')" title="상세보기">🔍</span></td>
+            <td onclick="event.stopPropagation();_toggleAccum(${idx},this.closest('tr'))" title="탭하여 누계 보기" style="cursor:pointer;">${o.date} <span style="font-size:9px;color:var(--text3);">📊</span> <span style="font-size:9px;color:var(--text3);" onclick="event.stopPropagation();showOrderDetail('${o.id||''}')" title="상세보기">🔍</span></td>
             <td style="font-size:11px;">${_fmtItems(o)}${sharedBadge}${returnBadge}</td>
-            <td class="text-right" onclick="${toggleAccum}(event)" title="탭하여 누계 보기" style="cursor:pointer;">${fmt(o.total)}원</td>
+            <td class="text-right" onclick="event.stopPropagation();_toggleAccum(${idx},this.closest('tr'))" title="탭하여 누계 보기" style="cursor:pointer;">${fmt(o.total)}원</td>
             <td class="text-center">${statBadge}</td>
         </tr>${partialDetailRow}`;
     }).join('');
