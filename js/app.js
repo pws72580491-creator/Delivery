@@ -904,13 +904,25 @@ function _flushSync() {
     debouncedSync.cancel(); // 대기 중인 debounce 취소 (중복 방지)
     _flushSyncInProgress = true;
     diagLog('🔵 flushSync 시작', '백그라운드 진입 직전 비상 저장');
-    // ★ v113 fix: 타임아웃을 5초로 단축 (소켓 끊김 후 12초 대기하던 문제 해소)
-    // 소켓이 끊기면 어차피 실패하므로 짧게 끊고 hash를 롤백해 재시도를 보장함
+    // ★ v117: isConnected 끊김 감지 시 즉시 abort — 5초 대기 없이 hash 롤백 후 복귀 시 재시도
+    const _flushAbortCheck = setInterval(() => {
+        if (!isConnected && _flushSyncInProgress) {
+            clearInterval(_flushAbortCheck);
+            _flushSyncInProgress = false;
+            diagLog('⚡ flushSync 조기 중단', 'isConnected=false 감지 → hash 롤백');
+            if (updates.clients)    lastHash.clients = '';
+            if (updates.orders)     lastHash.orders  = '';
+            if (updates.prices)     lastHash.prices  = '';
+            if (updates.stockItems) lastHash.stock   = '';
+        }
+    }, 300);
     _withTimeout(workspaceRef.update(updates), 5000, 'flushSync.update').then(() => {
+        clearInterval(_flushAbortCheck);
         _flushSyncInProgress = false;
         diagLog('✅ flushSync 성공');
         localStorage.setItem('lastLocalUpdated', nowIso);
     }).catch(e => {
+        clearInterval(_flushAbortCheck);
         _flushSyncInProgress = false;
         diagLog('❌ flushSync 실패', String(e && e.message || e));
         // 롤백 — 다음 실행 시 재시도
@@ -935,8 +947,8 @@ function _refreshSocket() {
         firebase.database().goOffline();
         setTimeout(() => {
             firebase.database().goOnline();
-            // 소켓 복구 후 보류 중이던 변경사항 재전송
-            setTimeout(() => { if (isConnected) debouncedSync(); }, 600);
+            // ★ v117: 소켓 복구 후 2초 대기 — 안정화 후 write (600ms는 너무 빨라 타임아웃 빈발)
+            setTimeout(() => { if (isConnected) debouncedSync(); }, 2000);
             // ★ v110: 일정 시간 후 플래그 해제. 그때까지도 재연결 안 됐다면 진짜 문제이므로
             // 정상적으로 오류 상태를 표시 (자가진단 뒤에 숨겨 영영 안 보이는 일 방지)
             setTimeout(() => {

@@ -283,7 +283,12 @@ const debouncedSync = debounce(async () => {
             _syncGuardSetAt = Date.now();
             const serverSnap = await _withTimeout(
                 workspaceRef.child('orders').once('value'), 8000, 'orders.once(delta)'
-            ).catch(e => { diagLog('⚠️ 서버 조회 타임아웃(delta)', String(e && e.message || e)); return null; });
+            ).catch(e => {
+                diagLog('⚠️ 서버 조회 타임아웃(delta)', String(e && e.message || e));
+                // ★ v118: once() 타임아웃 시 _syncGuard 즉시 해제 (최대 16초 잠금 방지)
+                _syncGuard = false; setSyncStatus('error'); return null;
+            });
+            if (!_syncGuard && serverSnap === null) return; // 타임아웃으로 해제된 경우 중단
             const serverOrders = serverSnap ? serverSnap.val() : {};
             for (const id of _dirtyOrders) {
                 const o = orders.find(x => x.id === id);
@@ -302,7 +307,12 @@ const debouncedSync = debounce(async () => {
             _syncGuardSetAt = Date.now();
             const serverSnap2 = await _withTimeout(
                 workspaceRef.child('orders').once('value'), 8000, 'orders.once(full)'
-            ).catch(e => { diagLog('⚠️ 서버 조회 타임아웃(full)', String(e && e.message || e)); return null; });
+            ).catch(e => {
+                diagLog('⚠️ 서버 조회 타임아웃(full)', String(e && e.message || e));
+                // ★ v118: once() 타임아웃 시 _syncGuard 즉시 해제 (최대 16초 잠금 방지)
+                _syncGuard = false; setSyncStatus('error'); return null;
+            });
+            if (!_syncGuard && serverSnap2 === null) return; // 타임아웃으로 해제된 경우 중단
             const serverOrders2 = serverSnap2 ? serverSnap2.val() : {};
             const ordersMap = {};
             orders.forEach(o => {
@@ -338,7 +348,19 @@ const debouncedSync = debounce(async () => {
     if (updates.prices)     lastHash.prices  = ph;
     if (updates.stockItems) lastHash.stock   = sh;
     setSyncStatus('syncing');
-    // ★ v113 fix: 타임아웃 12→8초로 단축 (소켓 끊김 후 12초 대기하던 문제 해소)
+    // ★ v117: write 직전 isConnected 재확인 — 소켓이 이미 끊겼으면 즉시 실패 처리
+    if (!isConnected) {
+        diagLog('⏭ 동기화 종료', '업로드 직전 연결 끊김 감지 → hash 롤백');
+        if (updates.clients)    lastHash.clients = '';
+        if (updates.orders)     lastHash.orders  = '';
+        if (updates.prices)     lastHash.prices  = '';
+        if (updates.stockItems) lastHash.stock   = '';
+        dirtySnap.forEach(id   => _dirtyOrders.add(id));
+        deletedSnap.forEach(id => _deletedOrders.add(id));
+        _syncGuard = false;
+        setSyncStatus('error');
+        return;
+    }
     _withTimeout(workspaceRef.update(updates), 8000, 'orders.update')
         .then(() => {
             diagLog('✅ 동기화 성공');

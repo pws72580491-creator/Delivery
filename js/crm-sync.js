@@ -148,14 +148,29 @@ async function _flushCrmFailQueue() {
 function _patchCrmWithRetry(orderId, order, attempt) {
     _patchCrmTransaction(orderId, order)
         .then(ok => {
-            if (ok) {
+            // ★ v118: true/null/false 명시 분기 (null은 falsy라 if(ok)로는 구분 불가)
+            if (ok === true) {
                 toast('📊 CRM에도 반영됨', 'var(--green)', 2500);
                 // 성공 시 fail 큐에서 제거
                 const q = _getCrmFailQueue().filter(i => i.orderId !== orderId);
                 _saveCrmFailQueue(q);
-            } else {
+            } else if (ok === null) {
                 // CRM에 거래 없음 — 재시도 불필요 (연동 전 주문)
                 console.info('[CRM패치] 미연동 주문 (CRM에 거래 없음):', orderId);
+            } else {
+                // false: 오류 발생 — catch로 넘기지 않으므로 여기서 재시도
+                console.warn(`[CRM패치] 실패 반환 (시도 ${attempt + 1})`);
+                if (attempt < _CRM_RETRY_DELAYS.length) {
+                    const delay = _CRM_RETRY_DELAYS[attempt];
+                    setTimeout(() => _patchCrmWithRetry(orderId, order, attempt + 1), delay);
+                } else {
+                    const q = _getCrmFailQueue();
+                    const existIdx = q.findIndex(i => i.orderId === orderId);
+                    const entry = { orderId, order, failCount: attempt + 1, savedAt: new Date().toISOString(), lastError: 'false returned' };
+                    if (existIdx >= 0) q[existIdx] = entry; else q.push(entry);
+                    _saveCrmFailQueue(q);
+                    toast('⚠️ CRM 반영 실패 — 다음 연결 시 자동 재시도됩니다', 'var(--orange)', 5000);
+                }
             }
         })
         .catch(e => {
