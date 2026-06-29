@@ -958,7 +958,9 @@ function _doConnect(id, auto=false) {
             _initialLoadDone = true; // 실패해도 리스너는 활성화
             console.error('Firebase 연결 실패:', err);
             isConnected = false;
-            workspaceRef.off();
+            // ★ v120: 핸들러 참조 먼저 정리 → workspaceRef=null 이전에 호출해야 ref 조건 통과
+            _detachFirebaseListeners();
+            if (workspaceRef) workspaceRef.off();
             workspaceRef = null;
             setSyncStatus('error');
             document.getElementById('connectBtn').style.display    = 'block';

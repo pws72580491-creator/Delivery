@@ -267,7 +267,10 @@ async function restoreBackup(key) {
         } catch(be) { console.warn('복원 전 백업 실패(무시):', be); }
 
         // ── 리스너 일시 중단 → 복원 데이터가 리스너로 덮어쓰이는 것 방지 ──
-        workspaceRef.off('value');
+        // ★ v120: _workspaceHandler 참조로 정확히 해제 (_connectedRef 리스너는 유지)
+        if (typeof _workspaceHandler !== 'undefined' && _workspaceHandler)
+            workspaceRef.off('value', _workspaceHandler);
+        else workspaceRef.off('value');
 
         // ── 공통 정규화 함수로 복원 데이터 처리 ──
         const normalized = normalizeBackupData(data);
@@ -294,7 +297,13 @@ async function restoreBackup(key) {
         lastHash={clients:ch, orders:oh, prices:ph, stock:sh};
 
         // 리스너 재등록 — 공용 _fbValueHandler 사용
-        workspaceRef.off('value');
+        // ★ v120: _workspaceHandler 참조 갱신 후 등록 (중복 방지)
+        if (typeof _workspaceHandler !== 'undefined') {
+            if (_workspaceHandler) workspaceRef.off('value', _workspaceHandler);
+            _workspaceHandler = _fbValueHandler;
+        } else {
+            workspaceRef.off('value');
+        }
         workspaceRef.on('value', _fbValueHandler);
 
         _fullRender();
