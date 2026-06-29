@@ -652,6 +652,20 @@ function waitFirebase(callback, retries=50, interval=200) {
     }
 }
 
+// ★ v120: Firebase 핵심 리스너 안전 해제 헬퍼
+// _doConnect() 재호출 시 중복 등록 방지
+function _detachFirebaseListeners() {
+    if (workspaceRef && _workspaceHandler) {
+        workspaceRef.off('value', _workspaceHandler);
+        _workspaceHandler = null;
+    }
+    if (_connectedRef && _connectedHandler) {
+        _connectedRef.off('value', _connectedHandler);
+        _connectedHandler = null;
+        _connectedRef     = null;
+    }
+}
+
 function connectWorkspace(auto=false) {
     // 잠금 상태면 localStorage의 고정 ID를 우선 사용
     const locked = localStorage.getItem('wsLocked') === '1';
@@ -671,6 +685,8 @@ function _doConnect(id, auto=false) {
             // RTDB 오프라인 지속성: 디스크 캐시로 초기 로드 속도 향상
             try { firebase.database().setPersistenceEnabled(true); } catch(e) {}
         }
+        // ★ v120: 재연결 시 .info/connected + workspaceRef 리스너 먼저 해제 (중복 방지)
+        _detachFirebaseListeners();
         if (workspaceRef) workspaceRef.off();
         // ★ 재연결 시 기존 sharedClients 리스너 중복 방지 — 먼저 전부 해제
         _getSharedWs().forEach(item => {
@@ -690,7 +706,8 @@ function _doConnect(id, auto=false) {
         document.getElementById('disconnectBtn').style.display = 'block';
 
         // ── 실시간 리스너를 .get() 이전에 먼저 등록 (이벤트 유실 방지) ──
-        workspaceRef.on('value', _fbValueHandler);
+        _workspaceHandler = _fbValueHandler; // ★ v120: 핸들러 참조 저장
+        workspaceRef.on('value', _workspaceHandler);
 
         // ★ 공유 워크스페이스의 sharedClients 변경 감지 리스너
         // A가 공개 허용 거래처를 추가/제거하면 B의 orders 리스너 allowedNames도 즉시 갱신
@@ -722,7 +739,8 @@ function _doConnect(id, auto=false) {
         // ── Firebase 소켓 실제 연결 상태 추적 (.info/connected) ──
         // window.online/offline 이벤트는 WiFi 수준만 감지 → 슬립·방화벽·모바일 백그라운드 후
         // Firebase 소켓이 끊겨도 isConnected=true로 남는 문제를 해소
-        firebase.database().ref('.info/connected').on('value', snap => {
+        _connectedRef = firebase.database().ref('.info/connected'); // ★ v120: ref 저장
+        _connectedHandler = snap => { // ★ v120: 핸들러 참조 저장
             const fbConnected = snap.val() === true;
             if (fbConnected) {
                 if (!isConnected) {
@@ -779,7 +797,8 @@ function _doConnect(id, auto=false) {
                     setSyncStatus(_intentionalDisconnect ? 'syncing' : 'error');
                 }
             }
-        });
+        };
+        _connectedRef.on('value', _connectedHandler); // ★ v120: 저장된 ref/핸들러로 등록
 
         // ── 최초 1회 스냅샷: 서버↔로컬 병합 판단 ──
         _withTimeout(workspaceRef.get(), 15000, 'initialConnect.get').then(async snap => {
@@ -962,9 +981,10 @@ function _doConnect(id, auto=false) {
 }
 
 function disconnectWorkspace() {
+    // ★ v120: 핵심 리스너 안전 해제 — workspaceRef=null 이전에 호출해야 ref 조건 통과
+    _detachFirebaseListeners();
     if (workspaceRef) workspaceRef.off();
-    // .info/connected 리스너 해제 (연결 해제 시 불필요한 상태 변경 차단)
-    try { firebase.database().ref('.info/connected').off(); } catch(e) {}
+    _workspaceHandler = null; // ★ v120: 전체 off 이후 명시적 초기화
     // ★ 공유 워크스페이스 실시간 리스너 전체 해제 (orders + sharedClients)
     _detachSharedOrdersListeners();
     _getSharedWs().forEach(item => {

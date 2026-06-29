@@ -632,7 +632,7 @@ async function submitOrder() {
     const priceHint = document.getElementById('priceHint');
     if (priceHint) priceHint.textContent = '';
     renderTempGroups();
-    if (!isSharedVirtual) saveData(); // 공유 거래처 납품은 내 로컬 저장 불필요
+    if (!isSharedVirtual) saveData(true); // 공유 거래처 납품은 내 로컬 저장 불필요 ★v119 즉시 업로드
     updateInfoCounts(); updateNavBadges();
     renderDashboard();
     updateItemDatalist('');

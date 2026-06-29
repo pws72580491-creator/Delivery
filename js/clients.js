@@ -53,7 +53,7 @@ function saveClient() {
         toast('✅ 거래처 등록 완료', 'var(--green)');
     }
     cancelClientEdit();
-    saveData(); renderClients(); renderOrders(); updateInfoCounts(); renderDashboard(); updateNavBadges();
+    saveData(true); renderClients(); renderOrders(); updateInfoCounts(); renderDashboard(); updateNavBadges(); // ★v119
     _refreshSettlementIfActive();
 }
 

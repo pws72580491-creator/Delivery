@@ -460,24 +460,28 @@ function _refreshUnpaidIfActive() {
 
 // ─── 메모 즉시 동기화 헬퍼 (메모 저장/삭제 공통 패턴) ───
 function _saveAndFlush() {
-    saveData();
-    // ★ v99 fix: _syncGuard 중이면 _flushSync가 차단됨
-    // → debouncedSync를 취소하지 않고 그대로 두어 업로드 완료 후 자동 재시도 보장
-    if (_syncGuard) {
-        saveToLocal();
-        return;
-    }
-    debouncedSync.cancel();
-    _flushSync();
+    // ★ v119: saveData(true)가 즉시 _flushSync를 호출하므로 별도 _flushSync 불필요
+    // _syncGuard 중이면 saveData(true) 내부에서 debouncedSync로 fallback됨
+    saveData(true);
     saveToLocal();
 }
 
-function saveData() {
+function saveData(immediate) {
     invalidateOrdersCache();
     _localWriteTime = Date.now();
     localStorage.setItem('lastLocalUpdated', new Date().toISOString()); // 로컬 변경 시각 기록
     saveToLocal();
-    if (isConnected) debouncedSync();
+    if (isConnected) {
+        if (immediate && !_syncGuard && !_flushSyncInProgress) {
+            // ★ v119: 중요 저장(납품 등록·수금 등)은 debounce 대기 없이 즉시 Firebase 업로드
+            // → 백그라운드 진입 전에 이미 업로드 완료 상태를 만들어 flushSync 부담 최소화
+            diagLog('⚡ saveData 즉시 업로드', '백그라운드 진입 전 선제 동기화');
+            debouncedSync.cancel();
+            _flushSync(); // 800ms 대기 없이 즉시 전송
+        } else {
+            debouncedSync();
+        }
+    }
     _markDirty('dashboard','clients','unpaid','delivery','history','settlement','settings');
     _renderActiveIfDirty();
 }

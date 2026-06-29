@@ -392,6 +392,10 @@ let showHiddenClients = false; // 숨긴 거래처 포함 표시 여부
 // Firebase
 let workspaceRef = null;
 let isConnected  = false;
+// ★ v120: 리스너 중복 등록 방지 — 핸들러 참조 보관
+let _connectedRef     = null;  // .info/connected ref
+let _connectedHandler = null;  // .info/connected 핸들러
+let _workspaceHandler = null;  // workspaceRef value 핸들러
 let _initialLoadDone = false;  // 전역 선언 — _fbValueHandler에서 접근 가능
 const SESSION_ID = Math.random().toString(36).slice(2);
 let lastHash = { clients:'', orders:'', prices:'', stock:'' };
