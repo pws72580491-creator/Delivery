@@ -5,16 +5,20 @@
 // ─── 정산 ───
 
 // ★ v116: 거래명세서 누계 토글 전역 함수
+// ★ v120: 이월 행(carry_N 키)은 주황 계열로 구분 표시
 function _toggleAccum(idx, trEl) {
     const rowId = 'accum-row-' + idx;
     const existing = document.getElementById(rowId);
     if (existing) { existing.remove(); return; }
     const info = (window._accumMap || {})[idx];
     if (!info) return;
+    const isCarry = String(idx).startsWith('carry_');
     const tr = document.createElement('tr');
     tr.id = rowId;
-    tr.style.cssText = 'background:rgba(99,102,241,0.08);';
-    tr.innerHTML = '<td colspan="4" style="padding:6px 12px;font-size:12px;color:#4f46e5;font-weight:700;">📊 ' + info.date + '까지 누계: ' + fmt(info.total) + '원</td>';
+    tr.style.cssText = isCarry ? 'background:rgba(245,158,11,0.10);' : 'background:rgba(99,102,241,0.08);';
+    const color = isCarry ? '#d97706' : '#4f46e5';
+    const label = isCarry ? '이월 누계' : '누계';
+    tr.innerHTML = `<td colspan="4" style="padding:6px 12px;font-size:12px;color:${color};font-weight:700;">📊 ${info.date}까지 ${label}: ${fmt(info.total)}원</td>`;
     trEl.after(tr);
 }
 
@@ -480,7 +484,15 @@ async function showClientStatement(clientName, month) {
     const smsText = `[${clientName}님 ${_monthLabel} 거래명세표]\n기간: ${month}\n전월이월: ${fmt(carryAmt)}원\n당월매출: ${fmt(monthTotal)}원\n수금액: ${fmt(monthPaid)}원\n청구금액: ${fmt(grandUnpaid)}원\n\n입금계좌: 농협 916-02-055664 (이애경)`;
     // 공유 텍스트 빌더로 분리
     _statShareText = _buildStatShareText(clientName, month, { filt, carryAmt, monthTotal, monthPaid, grandUnpaid });
-    const carryRows = carryOrders.map(o=>{
+    // ★ v120: 이월 행 누계 — carryOrders 기준 누적합을 carry_N 키로 _accumMap에 등록
+    // (아직 window._accumMap 초기화 전이므로 여기서 임시 변수로 계산, 이후 merge)
+    let _carryRunAcc = 0;
+    const _carryAccumTemp = {};
+    carryOrders.forEach((o, ci) => {
+        _carryRunAcc += (o.total - (o.paidAmount || 0));
+        _carryAccumTemp['carry_' + ci] = { date: o.date, total: _carryRunAcc };
+    });
+    const carryRows = carryOrders.map((o, ci)=>{
         const carryPartial = !o.isPaid && (o.paidAmount||0)>0;
         const carryRemain  = carryPartial ? o.total-(o.paidAmount||0) : 0;
         const carryPartialRow = carryPartial ? `
@@ -499,14 +511,15 @@ async function showClientStatement(clientName, month) {
         </tr>` : '';
         return `
         <tr style="background:var(--surf3);cursor:pointer;" onclick="openQuickPayFromStatement('${o.id||''}','${escapeAttr(clientName)}','${escapeAttr(month)}')" title="탭하여 결제 처리">
-            <td style="color:var(--orange);font-size:12px;" onclick="event.stopPropagation();showOrderDetail('${o.id||''}')" title="탭하여 상세 보기">${o.date} <span style="font-size:9px;color:var(--text3);">🔍</span></td>
+            <td style="color:var(--orange);font-size:12px;" onclick="event.stopPropagation();_toggleAccum('carry_${ci}',this.closest('tr'))" title="탭하여 이월 누계 보기">${o.date} <span style="font-size:9px;color:var(--text3);">📊</span> <span style="font-size:9px;color:var(--text3);" onclick="event.stopPropagation();showOrderDetail('${o.id||''}')">🔍</span></td>
             <td style="font-size:11px;">${_fmtItems(o)}</td>
-            <td class="text-right" style="color:var(--orange);">${fmt(o.total)}원${carryPartial?`<br><small style="color:#60a5fa;">수금 ${fmt(o.paidAmount)}원</small>`:''}</td>
+            <td class="text-right" style="color:var(--orange);" onclick="event.stopPropagation();_toggleAccum('carry_${ci}',this.closest('tr'))" title="탭하여 이월 누계 보기">${fmt(o.total)}원${carryPartial?`<br><small style="color:#60a5fa;">수금 ${fmt(o.paidAmount)}원</small>`:''}</td>
             <td class="text-center"><span class="pay-badge unpaid" style="cursor:default;font-size:9px;">이월</span></td>
         </tr>${carryPartialRow}`;
     }).join('');
     // ★ v116: 날짜/금액 셀 클릭 시 해당 날짜까지 누계 토글 (전역 Map 사용)
-    window._accumMap = {};
+    // ★ v120: 이월 행 누계(_carryAccumTemp)도 함께 등록
+    window._accumMap = { ..._carryAccumTemp };
     let _runAcc = 0;
     filt.forEach((o, idx) => {
         _runAcc += _effectiveTotal(o);
