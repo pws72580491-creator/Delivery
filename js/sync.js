@@ -834,27 +834,31 @@ function _doConnect(id, auto=false) {
 
                 if (localIsNewer) {
                     // 공통 업로드 payload 빌더 (배열 대신 map + minify로 payload 최소화)
+                    // ★ v121 fix: orders: {...} 로 통째 교체하던 방식은, 내가 오프라인이던 사이
+                    // 다른 사람이 공유거래처 대납으로 내 워크스페이스에 직접 써넣은 전표를
+                    // 재접속 시 통째로 지워버리는 버그가 있었음.
+                    // → orders만 경로별(orders/{id}) 키로 풀어서, 서버에만 있는 항목은 건드리지 않는다.
                     const _buildUploadPayload = () => {
-                        const ordersMap = {};
-                        orders.forEach(o => { ordersMap[o.id] = _minifyOrder(o); });
                         const ver = Date.now();
                         localStorage.setItem('ws_version', String(ver));
-                        return {
+                        const payload = {
                             clients:    clients.map(_minifyClient),
-                            orders:     ordersMap,
                             prices,
                             stockItems: _getLightStock(),
                             lastUpdated: new Date().toISOString(),
                             writtenBy:  SESSION_ID,
                             version:    ver,  // ★ v99 fix: 충돌 감지용 version 포함
                         };
+                        orders.forEach(o => { payload['orders/' + o.id] = _minifyOrder(o); });
+                        _deletedOrders.forEach(id => { payload['orders/' + id] = null; });
+                        return payload;
                     };
                     if (auto) {
                         // 자동 연결에서 로컬이 더 최신 → 조용히 로컬 데이터를 서버에 업로드
                         // (오프라인 중 작업한 데이터 유실 방지)
                         const ch=dataHash(clients),oh=dataHash(orders),ph=dataHash(prices),sh=dataHash(stockItems);
                         workspaceRef.update(_buildUploadPayload())
-                            .then(()=>{ lastHash.clients=ch;lastHash.orders=oh;lastHash.prices=ph;lastHash.stock=sh; setSyncStatus('online'); toast('🟢 자동 연결 완료 (로컬→서버 업로드)', 'var(--green)'); })
+                            .then(()=>{ lastHash.clients=ch;lastHash.orders=oh;lastHash.prices=ph;lastHash.stock=sh; _clearOrderDelta(); setSyncStatus('online'); toast('🟢 자동 연결 완료 (로컬→서버 업로드)', 'var(--green)'); })
                             .catch(e=>{ console.error('업로드 실패:',e); setSyncStatus('error'); });
                         _connectGuard    = false; // ★ 업로드 트리거 후 리스너 해제
                         _initialLoadDone = true;
@@ -870,7 +874,7 @@ function _doConnect(id, auto=false) {
                         if (useLocal) {
                             const ch=dataHash(clients),oh=dataHash(orders),ph=dataHash(prices),sh=dataHash(stockItems);
                             workspaceRef.update(_buildUploadPayload())
-                                .then(()=>{ lastHash.clients=ch;lastHash.orders=oh;lastHash.prices=ph;lastHash.stock=sh; setSyncStatus('online'); toast('☁️ 로컬 데이터를 서버에 업로드했습니다','var(--green)'); })
+                                .then(()=>{ lastHash.clients=ch;lastHash.orders=oh;lastHash.prices=ph;lastHash.stock=sh; _clearOrderDelta(); setSyncStatus('online'); toast('☁️ 로컬 데이터를 서버에 업로드했습니다','var(--green)'); })
                                 .catch(e=>{ console.error('업로드 실패:',e); setSyncStatus('error'); });
                             _connectGuard    = false;
                             _initialLoadDone = true;

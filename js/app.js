@@ -878,15 +878,20 @@ function _flushSync() {
     const ph = dataHash(prices);
     const sh = dataHash(stockItems);
     let changed = false;
+    let ordersChanged = false; // ★ v121: orders는 orders/{id} 경로별 키로 기록되므로 별도 플래그로 추적
     const updates = {};
     if (ch !== lastHash.clients) { updates.clients    = clients.map(_minifyClient); changed = true; }
     if (oh !== lastHash.orders)  {
-        // flushSync는 항상 full map (비상 저장 — delta 미사용)
-        const ordersMap = {};
-        orders.forEach(o => { ordersMap[o.id] = _minifyOrder(o); });
-        updates.orders = ordersMap;
+        // ★ v121 fix: orders 노드 전체 덮어쓰기(updates.orders = {...}) 대신 건별 경로 병합으로 변경.
+        // 기존엔 내 로컬 orders 스냅샷으로 서버의 orders 노드 전체를 교체했기 때문에,
+        // 공유거래처 대납으로 상대방이 내 워크스페이스에 직접 써넣은 전표가
+        // 아직 내 로컬에 실시간 반영되지 않은 타이밍에 이 저장이 실행되면 통째로 삭제됐음.
+        // 경로별(orders/{id}) 업데이트는 언급되지 않은 항목(=아직 못 받은 대납 전표 등)을 건드리지 않는다.
+        orders.forEach(o => { updates['orders/' + o.id] = _minifyOrder(o); });
+        _deletedOrders.forEach(id => { updates['orders/' + id] = null; });
         _clearOrderDelta();
         changed = true;
+        ordersChanged = true;
     }
     if (ph !== lastHash.prices)  { updates.prices     = prices;     changed = true; }
     if (sh !== lastHash.stock)   { updates.stockItems = _getLightStock(); changed = true; }
@@ -898,7 +903,7 @@ function _flushSync() {
     updates.version = Date.now();
     localStorage.setItem('ws_version', String(updates.version));
     if (updates.clients)    lastHash.clients = ch;
-    if (updates.orders)     lastHash.orders  = oh;
+    if (ordersChanged)      lastHash.orders  = oh;
     if (updates.prices)     lastHash.prices  = ph;
     if (updates.stockItems) lastHash.stock   = sh;
     debouncedSync.cancel(); // 대기 중인 debounce 취소 (중복 방지)
@@ -911,7 +916,7 @@ function _flushSync() {
             _flushSyncInProgress = false;
             diagLog('⚡ flushSync 조기 중단', 'isConnected=false 감지 → hash 롤백');
             if (updates.clients)    lastHash.clients = '';
-            if (updates.orders)     lastHash.orders  = '';
+            if (ordersChanged)      lastHash.orders  = '';
             if (updates.prices)     lastHash.prices  = '';
             if (updates.stockItems) lastHash.stock   = '';
         }
@@ -927,7 +932,7 @@ function _flushSync() {
         diagLog('❌ flushSync 실패', String(e && e.message || e));
         // 롤백 — 다음 실행 시 재시도
         if (updates.clients)    lastHash.clients = '';
-        if (updates.orders)     lastHash.orders  = '';
+        if (ordersChanged)      lastHash.orders  = '';
         if (updates.prices)     lastHash.prices  = '';
         if (updates.stockItems) lastHash.stock   = '';
     });

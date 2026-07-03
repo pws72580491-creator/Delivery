@@ -271,6 +271,7 @@ const debouncedSync = debounce(async () => {
     const ph = dataHash(prices);
     const sh = dataHash(stockItems);
     let changed = false;
+    let ordersChanged = false; // ★ v121: orders는 이제 단일 키가 아닌 orders/{id} 경로별로 기록되므로 별도 플래그로 추적
     const updates = {};
     if (ch !== lastHash.clients) { updates.clients    = clients.map(_minifyClient); changed = true; }
     if (oh !== lastHash.orders)  {
@@ -300,7 +301,7 @@ const debouncedSync = debounce(async () => {
             }
             for (const id of _deletedOrders) { updates[`orders/${id}`] = null; }
         } else {
-            // full: bulk 작업·첫 동기화 시 전체 map 업로드
+            // full: bulk 작업·첫 동기화 시 건별 경로 업로드 (★ v121: 통짜 덮어쓰기 금지)
             // ★ CRM 우선권: 서버 결제 필드를 먼저 읽어 merge
             // ★ v99 fix: 동일하게 _syncGuard 선점 후 await
             _syncGuard = true;
@@ -314,15 +315,18 @@ const debouncedSync = debounce(async () => {
             });
             if (!_syncGuard && serverSnap2 === null) return; // 타임아웃으로 해제된 경우 중단
             const serverOrders2 = serverSnap2 ? serverSnap2.val() : {};
-            const ordersMap = {};
+            // ★ v121 fix: updates.orders = {...} (노드 전체 교체) 대신 경로별(orders/{id}) 업데이트로 변경.
+            // 전체 교체는 서버에만 있는 항목(예: 공유거래처 대납으로 상대방이 직접 써넣은 전표로
+            // 아직 내 로컬에 반영 안 된 것)을 통째로 지워버리는 위험이 있었음.
             orders.forEach(o => {
                 const m = _minifyOrder(o);
                 if (serverOrders2 && serverOrders2[o.id]) _mergeCrmPaymentFields(m, serverOrders2[o.id]);
-                ordersMap[o.id] = m;
+                updates[`orders/${o.id}`] = m;
             });
-            updates.orders = ordersMap;
+            for (const id of _deletedOrders) { updates[`orders/${id}`] = null; }
         }
         changed = true;
+        ordersChanged = true;
     }
     if (ph !== lastHash.prices)  { updates.prices     = prices;     changed = true; }
     if (sh !== lastHash.stock)   { updates.stockItems = _getLightStock(); changed = true; }
@@ -344,7 +348,7 @@ const debouncedSync = debounce(async () => {
     _syncGuardSetAt = Date.now();
     // ★ 업로드 직전 lastHash 선점 갱신 → 리스너 echo 수신 시 hash 일치로 무시
     if (updates.clients)    lastHash.clients = ch;
-    if (updates.orders)     lastHash.orders  = oh;
+    if (ordersChanged)      lastHash.orders  = oh;
     if (updates.prices)     lastHash.prices  = ph;
     if (updates.stockItems) lastHash.stock   = sh;
     setSyncStatus('syncing');
@@ -352,7 +356,7 @@ const debouncedSync = debounce(async () => {
     if (!isConnected) {
         diagLog('⏭ 동기화 종료', '업로드 직전 연결 끊김 감지 → hash 롤백');
         if (updates.clients)    lastHash.clients = '';
-        if (updates.orders)     lastHash.orders  = '';
+        if (ordersChanged)      lastHash.orders  = '';
         if (updates.prices)     lastHash.prices  = '';
         if (updates.stockItems) lastHash.stock   = '';
         dirtySnap.forEach(id   => _dirtyOrders.add(id));
@@ -374,7 +378,7 @@ const debouncedSync = debounce(async () => {
             diagLog('❌ 동기화 실패', String(e && e.message || e));
             // 실패 시 lastHash 롤백 → 다음 saveData() 때 재시도
             if (updates.clients)    lastHash.clients = '';
-            if (updates.orders)     lastHash.orders  = '';
+            if (ordersChanged)      lastHash.orders  = '';
             if (updates.prices)     lastHash.prices  = '';
             if (updates.stockItems) lastHash.stock   = '';
             // ★ Problem 3 수정: 스냅샷된 dirty/deleted id 복원
