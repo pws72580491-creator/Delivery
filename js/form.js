@@ -511,8 +511,9 @@ async function submitOrder() {
     const isSharedVirtual = !!client._isSharedVirtual;
     const sharedTargetWsId = client._sharedWsId || null;
 
-    // ── 자동 재고 처리 (타인거래 또는 공유거래처면 스킵) — 일반 납품은 차감, 반품/회수는 입고 ──
-    if (stockAutoDeduct && !isVoid && !isSharedVirtual) {
+    // ── 자동 재고 처리 (타인거래면 스킵) — 일반 납품은 차감, 반품/회수는 입고 ──
+    // ★ 공유거래처 대납도 내가 직접 상품을 출고하는 거래이므로 내 재고에서 차감한다(타인거래와는 다름)
+    if (stockAutoDeduct && !isVoid) {
         tempGroups.forEach(group => {
             (group.items||[]).forEach(it => {
                 const si = findStockByName(it.name);
@@ -521,7 +522,7 @@ async function submitOrder() {
                 const qtyNum = Number(it.qty)||0;
                 si.qty = Math.max(0, si.qty + (isReturn ? qtyNum : -qtyNum));
                 (si.log = si.log||[]).unshift({ type: isReturn ? 'in' : 'auto', qty:si.qty-before, before, after:si.qty,
-                    reason: (isReturn ? '반품/회수 입고(' : '납품차감(') + client.name + ')', date:group.date, at:new Date().toISOString() });
+                    reason: (isReturn ? '반품/회수 입고(' : (isSharedVirtual ? '공유대납차감(' : '납품차감(')) + client.name + ')', date:group.date, at:new Date().toISOString() });
                 si.log = _trimLogByDate(si.log);
             });
         });

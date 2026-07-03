@@ -568,8 +568,44 @@ async function deleteOrder(id) {
     const foundAnywhere = _findOrderAnywhere(id);
     if (!foundAnywhere) return;
     if (foundAnywhere.isShared) {
+        const o = foundAnywhere.order;
+        // ── 자동 재고 보정 (공유 대납 전표 — 내가 대납한 거래이므로 삭제 시 내 재고도 복구) ──
+        let doRestoreShared = false;
+        let matchedItemsShared = [];
+        if (stockAutoDeduct && !o.isVoid) {
+            matchedItemsShared = (o.items||[]).filter(it => findStockByName(it.name));
+            if (matchedItemsShared.length > 0) {
+                const isReturnShared = !!o.isReturn;
+                doRestoreShared = await customConfirm(
+                    `자동 재고 차감이 켜져 있습니다.\n\n` +
+                    `이 공유 대납 ${isReturnShared ? '반품/회수' : '납품'} 전표(${o.clientName} · ${o.date})의\n` +
+                    `재고를 ${isReturnShared ? '다시 차감' : '복구'}할까요?\n\n` +
+                    matchedItemsShared.map(it => {
+                        const q = Number(it.qty)||0;
+                        return `· ${it.name} ${q>0?'+':''}${q}${findStockByName(it.name)?.unit||''}`;
+                    }).join('\n'),
+                    isReturnShared ? '재고 차감' : '재고 복구', 'btn-primary'
+                );
+            }
+        }
         const ok = await _patchSharedOrder(foundAnywhere.sharedWsId, id, null);
         if (ok) {
+            if (doRestoreShared) {
+                matchedItemsShared.forEach(it => {
+                    const si = findStockByName(it.name);
+                    if (!si) return;
+                    const before = si.qty;
+                    si.qty = Math.max(0, before + (Number(it.qty)||0));
+                    (si.log = si.log||[]).unshift({
+                        type:'restore', qty: si.qty-before, before, after:si.qty,
+                        reason:(o.isReturn ? '공유대납반품삭제차감(' : '공유대납삭제복구(')+o.clientName+'·'+o.date+')',
+                        date: todayKST(), originalDate: o.date, at: new Date().toISOString()
+                    });
+                    si.log = _trimLogByDate(si.log);
+                });
+                _refreshStockIfActive();
+                toast(o.isReturn ? '↩ 재고가 다시 차감되었습니다' : '↩ 재고가 복구되었습니다', 'var(--green)');
+            }
             renderOrders();
             updateInfoCounts();
             renderDashboard();
@@ -848,7 +884,7 @@ async function saveOrderEdit() {
     if (!foundEdit) return toast('❗ 전표를 찾을 수 없습니다');
     const o = foundEdit.order;
 
-    // ── 공유 내역이면 재고 보정 스킵 후 Firebase에만 저장 ──
+    // ── 공유 내역이면 A의 Firebase에 저장하되, 내가 대납한 거래이므로 내 재고도 수량 차이만큼 보정 ──
     if (foundEdit.isShared) {
         const items = _oeditItems.map(it => ({
             name:  (it.name||'').trim(),
@@ -859,10 +895,49 @@ async function saveOrderEdit() {
         const total = items.reduce((s, it) => s + it.total, 0);
         const patch = { date, items, total, note };
         const oeditSw = document.getElementById('oeditVoidSwitch');
-        if (oeditSw) patch.isVoid = oeditSw.dataset.void === '1';
+        const newIsVoidShared = oeditSw ? oeditSw.dataset.void === '1' : !!o.isVoid;
+        patch.isVoid = newIsVoidShared;
+        const wasVoidShared = !!o.isVoid;
+        const oldItemsShared = [...(o.items||[])]; // Firebase 저장 전에 수정 전 품목 스냅샷 확보
         items.forEach(it => { if (it.price > 0) prices[it.name] = it.price; });
         const ok = await _patchSharedOrder(foundEdit.sharedWsId, id, patch);
         if (ok) {
+            // ── 자동 재고 보정 (수정 전후 수량 차이 반영) — 저장 성공 후에만 적용 ──
+            if (stockAutoDeduct && !newIsVoidShared) {
+                const oldMap = {};
+                if (!wasVoidShared) {
+                    oldItemsShared.forEach(it => {
+                        const key = normItemName(it.name);
+                        oldMap[key] = (oldMap[key]||0) + (Number(it.qty)||0);
+                    });
+                }
+                const newMap = {};
+                items.forEach(it => {
+                    const key = normItemName(it.name);
+                    newMap[key] = (newMap[key]||0) + (Number(it.qty)||0);
+                });
+                const allKeys = new Set([...Object.keys(oldMap), ...Object.keys(newMap)]);
+                const reasonLabelShared = wasVoidShared ? '타인거래→내거래 전환반영' : '공유대납수정보정';
+                allKeys.forEach(key => {
+                    const oldQty = oldMap[key]||0;
+                    const newQty = newMap[key]||0;
+                    const diff   = newQty - oldQty;
+                    if (diff === 0) return;
+                    const itemName = (items.find(it=>normItemName(it.name)===key)||oldItemsShared.find(it=>normItemName(it.name)===key)||{}).name||key;
+                    const si = findStockByName(itemName);
+                    if (!si) return;
+                    const before = si.qty;
+                    si.qty = Math.max(0, before - diff);
+                    const actual = si.qty - before;
+                    (si.log = si.log||[]).unshift({
+                        type: 'edit_adj', qty: actual, before, after: si.qty,
+                        reason: reasonLabelShared + '(' + (o.clientName||'') + ')',
+                        date: todayKST(), at: new Date().toISOString()
+                    });
+                    si.log = _trimLogByDate(si.log);
+                });
+                _refreshStockIfActive();
+            }
             renderOrders();
             renderDashboard();
             updateInfoCounts();
