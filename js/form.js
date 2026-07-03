@@ -23,7 +23,8 @@ function recalcStockFromOrders(silent = false) {
         // ★ 오늘 전표만 대상 — 재고 로그가 어제·오늘만 보관되므로(중복방지 체크 한계),
         //   날짜 필터가 없으면 과거 전표가 매번 다시 차감되는 심각한 버그가 됨
         if (o.date !== today) return;
-        if (o.isVoid || !(o.items||[]).length) return;
+        // ★ delegatedBy(대납 전표)는 남(B)이 자기 재고로 배송한 거래 — 내(A) 재고와 무관하므로 재계산 대상에서 제외
+        if (o.isVoid || o.delegatedBy || !(o.items||[]).length) return;
         o.items.forEach(it => {
             const si = findStockByName(it.name);
             if (!si) return;
@@ -522,7 +523,7 @@ async function submitOrder() {
                 const qtyNum = Number(it.qty)||0;
                 si.qty = Math.max(0, si.qty + (isReturn ? qtyNum : -qtyNum));
                 (si.log = si.log||[]).unshift({ type: isReturn ? 'in' : 'auto', qty:si.qty-before, before, after:si.qty,
-                    reason: (isReturn ? '반품/회수 입고(' : (isSharedVirtual ? '공유대납차감(' : '납품차감(')) + client.name + ')', date:group.date, at:new Date().toISOString() });
+                    reason: (isReturn ? (isSharedVirtual ? '공유대납반품입고(' : '반품/회수 입고(') : (isSharedVirtual ? '공유대납차감(' : '납품차감(')) + client.name + ')', date:group.date, at:new Date().toISOString() });
                 si.log = _trimLogByDate(si.log);
             });
         });
@@ -633,7 +634,9 @@ async function submitOrder() {
     const priceHint = document.getElementById('priceHint');
     if (priceHint) priceHint.textContent = '';
     renderTempGroups();
-    if (!isSharedVirtual) saveData(true); // 공유 거래처 납품은 내 로컬 저장 불필요 ★v119 즉시 업로드
+    // ★ v121: 공유거래처 대납도 이제 내 재고를 차감하므로, 재고 변경분 유실 방지를 위해 항상 로컬 저장 필요
+    // (기존엔 "공유 거래처 납품은 내 로컬 저장 불필요"였으나, 대납 시 재고 차감이 추가되며 전제가 깨짐)
+    saveData(true);
     updateInfoCounts(); updateNavBadges();
     renderDashboard();
     updateItemDatalist('');

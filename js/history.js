@@ -603,6 +603,7 @@ async function deleteOrder(id) {
                     });
                     si.log = _trimLogByDate(si.log);
                 });
+                saveData(true); // ★ 재고 변경분을 내 로컬/Firebase에 저장
                 _refreshStockIfActive();
                 toast(o.isReturn ? '↩ 재고가 다시 차감되었습니다' : '↩ 재고가 복구되었습니다', 'var(--green)');
             }
@@ -936,6 +937,7 @@ async function saveOrderEdit() {
                     });
                     si.log = _trimLogByDate(si.log);
                 });
+                saveData(true); // ★ 재고 변경분을 내 로컬/Firebase에 저장
                 _refreshStockIfActive();
             }
             renderOrders();
