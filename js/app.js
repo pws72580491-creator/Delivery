@@ -866,13 +866,17 @@ function toggleClientTooltip(e, card) {
 // 자주 껐다 켜는 환경에서 debounce 대기 중 종료로 인한 데이터 유실 방지
 let _flushSyncInProgress = false; // ★ v113: 중복 실행 방지
 
-function _flushSync() {
+async function _flushSync() {
     if (!workspaceRef || !isConnected) { diagLog('⏭ flushSync 스킵', `workspaceRef=${!!workspaceRef}, isConnected=${isConnected}`); return; }
     // ★ v99 fix: debouncedSync 업로드 진행 중이면 충돌 방지를 위해 건너뜀
     // (visibilitychange hidden 시 debouncedSync와 동시 실행 race condition 차단)
     if (_syncGuard) { diagLog('⏭ flushSync 스킵', '_syncGuard 진행 중'); return; }
     // ★ v113 fix: flushSync 이미 진행 중이면 중복 실행 방지
     if (_flushSyncInProgress) { diagLog('⏭ flushSync 스킵', '이미 진행 중'); return; }
+    // ★ v122 fix: CRM 조회를 위해 await가 생기면서, 아래 가드 세팅이 늦어지면 그 사이(await 중)
+    // flushSync가 다시 호출됐을 때 위 가드를 통과해버려 중복 실행될 수 있었음(v113 fix가 무력화됨).
+    // → 어떤 await보다 먼저, 동기 구간에서 즉시 선점한다.
+    _flushSyncInProgress = true;
     const ch = dataHash(clients);
     const oh = dataHash(orders);
     const ph = dataHash(prices);
@@ -887,7 +891,25 @@ function _flushSync() {
         // 공유거래처 대납으로 상대방이 내 워크스페이스에 직접 써넣은 전표가
         // 아직 내 로컬에 실시간 반영되지 않은 타이밍에 이 저장이 실행되면 통째로 삭제됐음.
         // 경로별(orders/{id}) 업데이트는 언급되지 않은 항목(=아직 못 받은 대납 전표 등)을 건드리지 않는다.
-        orders.forEach(o => { updates['orders/' + o.id] = _minifyOrder(o); });
+        //
+        // ★ v122 fix2: CRM 결제 필드 보존 — debouncedSync와 달리 flushSync는 서버 값을 조회하지 않고
+        // 로컬 스냅샷을 그대로 올려서, CRM이 방금 기록한 결제 정보(crmControlled)가 아직 내 로컬에
+        // 반영되기 전 타이밍에 이 저장이 실행되면 CRM 값이 로컬의 stale 값으로 덮여버렸음(설계 원칙 위반).
+        // → 짧은 타임아웃으로 서버 orders를 조회해 병합, 조회 실패 시엔 병합 없이 진행(속도 우선, 기존 동작 유지).
+        let serverOrdersForCrm = null;
+        try {
+            const snap = await _withTimeout(workspaceRef.child('orders').once('value'), 3000, 'flushSync.orders.once(crm)');
+            serverOrdersForCrm = snap ? snap.val() : null;
+        } catch (e) {
+            diagLog('⚠️ flushSync CRM 조회 실패(병합 없이 진행)', String(e && e.message || e));
+        }
+        // ★ await 중 isConnected가 끊겼으면 여기서 중단 (가드 해제 후 재시도는 다음 트리거에서)
+        if (!isConnected) { diagLog('⚡ flushSync 중단', 'CRM 조회 중 연결 끊김'); _flushSyncInProgress = false; return; }
+        orders.forEach(o => {
+            const m = _minifyOrder(o);
+            if (serverOrdersForCrm && serverOrdersForCrm[o.id]) _mergeCrmPaymentFields(m, serverOrdersForCrm[o.id]);
+            updates['orders/' + o.id] = m;
+        });
         _deletedOrders.forEach(id => { updates['orders/' + id] = null; });
         _clearOrderDelta();
         changed = true;
@@ -895,7 +917,7 @@ function _flushSync() {
     }
     if (ph !== lastHash.prices)  { updates.prices     = prices;     changed = true; }
     if (sh !== lastHash.stock)   { updates.stockItems = _getLightStock(); changed = true; }
-    if (!changed) { diagLog('⏭ flushSync 스킵', '변경사항 없음'); return; }
+    if (!changed) { diagLog('⏭ flushSync 스킵', '변경사항 없음'); _flushSyncInProgress = false; return; }
     const nowIso = new Date().toISOString();
     updates.lastUpdated = nowIso;
     updates.writtenBy   = SESSION_ID;
@@ -907,7 +929,6 @@ function _flushSync() {
     if (updates.prices)     lastHash.prices  = ph;
     if (updates.stockItems) lastHash.stock   = sh;
     debouncedSync.cancel(); // 대기 중인 debounce 취소 (중복 방지)
-    _flushSyncInProgress = true;
     diagLog('🔵 flushSync 시작', '백그라운드 진입 직전 비상 저장');
     // ★ v117: isConnected 끊김 감지 시 즉시 abort — 5초 대기 없이 hash 롤백 후 복귀 시 재시도
     const _flushAbortCheck = setInterval(() => {
