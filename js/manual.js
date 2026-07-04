@@ -70,13 +70,10 @@ function _md2html(md) {
 // ─── 앱 내 변경이력 추출 (changelog-item 파싱) ───
 function _extractChangelog() {
     let md = '\n## 변경이력\n\n';
+    // ★ v122 fix: #oldChangelogItems는 #changelogList의 하위요소라 querySelectorAll('#changelogList .changelog-item')만으로
+    // 이미 전체(현재 버전 + 접힌 이전 이력)를 포함함. 예전엔 oldChangelogItems를 별도로 한 번 더 순회해서
+    // 접힌 이전 버전들이 설명서에 중복으로 나오는 버그가 있었음.
     document.querySelectorAll('#changelogList .changelog-item').forEach(el => {
-        const ver  = el.querySelector('.changelog-ver')?.textContent?.trim() || '';
-        const desc = el.querySelector('.changelog-desc')?.textContent?.trim() || '';
-        if (ver && desc) md += `### ${ver}\n\n${desc}\n\n`;
-    });
-    // oldChangelogItems 안도 포함
-    document.querySelectorAll('#oldChangelogItems .changelog-item').forEach(el => {
         const ver  = el.querySelector('.changelog-ver')?.textContent?.trim() || '';
         const desc = el.querySelector('.changelog-desc')?.textContent?.trim() || '';
         if (ver && desc) md += `### ${ver}\n\n${desc}\n\n`;

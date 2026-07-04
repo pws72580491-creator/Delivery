@@ -834,7 +834,7 @@ function _doConnect(id, auto=false) {
 
                 if (localIsNewer) {
                     // 공통 업로드 payload 빌더 (배열 대신 map + minify로 payload 최소화)
-                    // ★ v121 fix: orders: {...} 로 통째 교체하던 방식은, 내가 오프라인이던 사이
+                    // ★ v122 fix: orders: {...} 로 통째 교체하던 방식은, 내가 오프라인이던 사이
                     // 다른 사람이 공유거래처 대납으로 내 워크스페이스에 직접 써넣은 전표를
                     // 재접속 시 통째로 지워버리는 버그가 있었음.
                     // → orders만 경로별(orders/{id}) 키로 풀어서, 서버에만 있는 항목은 건드리지 않는다.

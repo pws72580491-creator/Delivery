@@ -878,11 +878,11 @@ function _flushSync() {
     const ph = dataHash(prices);
     const sh = dataHash(stockItems);
     let changed = false;
-    let ordersChanged = false; // ★ v121: orders는 orders/{id} 경로별 키로 기록되므로 별도 플래그로 추적
+    let ordersChanged = false; // ★ v122: orders는 orders/{id} 경로별 키로 기록되므로 별도 플래그로 추적
     const updates = {};
     if (ch !== lastHash.clients) { updates.clients    = clients.map(_minifyClient); changed = true; }
     if (oh !== lastHash.orders)  {
-        // ★ v121 fix: orders 노드 전체 덮어쓰기(updates.orders = {...}) 대신 건별 경로 병합으로 변경.
+        // ★ v122 fix: orders 노드 전체 덮어쓰기(updates.orders = {...}) 대신 건별 경로 병합으로 변경.
         // 기존엔 내 로컬 orders 스냅샷으로 서버의 orders 노드 전체를 교체했기 때문에,
         // 공유거래처 대납으로 상대방이 내 워크스페이스에 직접 써넣은 전표가
         // 아직 내 로컬에 실시간 반영되지 않은 타이밍에 이 저장이 실행되면 통째로 삭제됐음.

@@ -634,7 +634,7 @@ async function submitOrder() {
     const priceHint = document.getElementById('priceHint');
     if (priceHint) priceHint.textContent = '';
     renderTempGroups();
-    // ★ v121: 공유거래처 대납도 이제 내 재고를 차감하므로, 재고 변경분 유실 방지를 위해 항상 로컬 저장 필요
+    // ★ v122: 공유거래처 대납도 이제 내 재고를 차감하므로, 재고 변경분 유실 방지를 위해 항상 로컬 저장 필요
     // (기존엔 "공유 거래처 납품은 내 로컬 저장 불필요"였으나, 대납 시 재고 차감이 추가되며 전제가 깨짐)
     saveData(true);
     updateInfoCounts(); updateNavBadges();
