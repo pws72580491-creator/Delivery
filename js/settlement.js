@@ -422,6 +422,30 @@ function _buildStatShareText(clientName, month, { filt, carryAmt, monthTotal, mo
     ].filter(Boolean).join('\n');
 }
 
+// ─── 거래명세표 월 이동 (◀ ▶ 버튼 및 월 선택 picker) ───
+function _shiftStatementMonth(delta) {
+    const el = document.getElementById('statementContent')?.querySelector('[data-client-name]');
+    if (!el) return;
+    const clientName = el.dataset.clientName;
+    const [y, m] = el.dataset.month.split('-').map(Number);
+    const d = new Date(y, m - 1 + delta, 1);
+    const newMonth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    showClientStatement(clientName, newMonth);
+}
+function _pickStatementMonth(value) {
+    if (!value) return; // 취소 시 값 없음
+    const el = document.getElementById('statementContent')?.querySelector('[data-client-name]');
+    if (!el) return;
+    showClientStatement(el.dataset.clientName, value);
+}
+// 라벨 탭 시 네이티브 월 선택 picker를 확실히 띄움 (showPicker 미지원 브라우저는 click()으로 폴백)
+function _openStatementMonthPicker() {
+    const inp = document.getElementById('statementMonthPicker');
+    if (!inp) return;
+    if (typeof inp.showPicker === 'function') { try { inp.showPicker(); return; } catch(e) {} }
+    inp.click();
+}
+
 async function showClientStatement(clientName, month) {
     const monthStart = month+'-01';
 
@@ -576,9 +600,16 @@ async function showClientStatement(clientName, month) {
         </tr>${partialDetailRow}`;
     }).join('');
     document.getElementById('statementContent').innerHTML = `
-        <div style="margin-bottom:14px;display:flex;align-items:baseline;justify-content:space-between;gap:8px;">
-            <div style="font-size:19px;font-weight:900;">${escapeHtml(clientName)}</div>
-            <div style="font-size:19px;font-weight:900;white-space:nowrap;">${month} 거래명세표</div>
+        <div data-client-name="${escapeAttr(clientName)}" data-month="${escapeAttr(month)}" style="margin-bottom:14px;">
+            <div style="font-size:19px;font-weight:900;margin-bottom:8px;">${escapeHtml(clientName)}</div>
+            <div style="display:flex;align-items:center;justify-content:center;gap:4px;position:relative;">
+                <button onclick="_shiftStatementMonth(-1)" aria-label="이전 달" style="width:34px;height:34px;flex-shrink:0;border-radius:9px;border:1px solid var(--border);background:var(--surf2);color:var(--text2);font-size:18px;font-weight:700;cursor:pointer;">‹</button>
+                <label for="statementMonthPicker" onclick="_openStatementMonthPicker()" style="flex:1;text-align:center;font-size:17px;font-weight:900;white-space:nowrap;cursor:pointer;padding:6px 2px;border-radius:9px;" title="탭하여 월 선택">
+                    ${month} 거래명세표 <span style="font-size:12px;">📅</span>
+                </label>
+                <button onclick="_shiftStatementMonth(1)" aria-label="다음 달" style="width:34px;height:34px;flex-shrink:0;border-radius:9px;border:1px solid var(--border);background:var(--surf2);color:var(--text2);font-size:18px;font-weight:700;cursor:pointer;">›</button>
+                <input type="month" id="statementMonthPicker" value="${month}" onchange="_pickStatementMonth(this.value)" style="position:absolute;opacity:0;width:1px;height:1px;pointer-events:none;">
+            </div>
         </div>
         ${hasShared ? `<div style="background:#eef2ff;border:1px solid #c7d2fe;border-radius:8px;padding:8px 12px;margin-bottom:12px;font-size:12px;color:#4f46e5;display:flex;align-items:center;gap:6px;">
             🔗 <strong>공유 합산 내역</strong>&nbsp;— 공유 워크스페이스 ${sharedWsIds.length}개 포함
