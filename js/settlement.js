@@ -446,6 +446,16 @@ function _openStatementMonthPicker() {
     inp.click();
 }
 
+// 수금 이력 접기/펼치기 토글 (기본 접힘)
+function _toggleStatPayHistory() {
+    const body = document.getElementById('statPayHistoryBody');
+    const icon = document.getElementById('statPayHistoryIcon');
+    if (!body) return;
+    const open = body.style.display !== 'none';
+    body.style.display = open ? 'none' : 'block';
+    if (icon) icon.textContent = open ? '▶' : '▼';
+}
+
 async function showClientStatement(clientName, month) {
     const monthStart = month+'-01';
 
@@ -649,9 +659,13 @@ async function showClientStatement(clientName, month) {
                 </div>`;
             }).join('');
             const totalPartialPaid = partialOrders.reduce((s,o)=>s+(o.paidAmount||0),0);
+            // ★ 기본 접힘 — 헤더를 탭하면 펼침/접힘 토글
             return `<div style="background:rgba(59,130,246,0.07);border:1px solid rgba(59,130,246,0.25);border-radius:10px;padding:13px 14px;margin-bottom:14px;">
-                <div style="font-size:11px;font-weight:700;color:#60a5fa;letter-spacing:.8px;text-transform:uppercase;margin-bottom:10px;">💳 수금 이력 (${partialOrders.length}건 · 합계 ${fmt(totalPartialPaid)}원)</div>
-                ${rows}
+                <div onclick="_toggleStatPayHistory()" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;font-size:11px;font-weight:700;color:#60a5fa;letter-spacing:.8px;text-transform:uppercase;">
+                    <span>💳 수금 이력 (${partialOrders.length}건 · 합계 ${fmt(totalPartialPaid)}원)</span>
+                    <span id="statPayHistoryIcon" style="font-size:13px;">▶</span>
+                </div>
+                <div id="statPayHistoryBody" style="display:none;margin-top:10px;">${rows}</div>
             </div>`;
         })()}
         <div style="overflow-x:auto;">
