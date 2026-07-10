@@ -636,7 +636,7 @@
                 <!-- 현재 버전 -->
                 <div class="changelog-item">
                     <span class="changelog-ver" style="color:var(--green);">v123</span>
-                    <span class="changelog-desc">거래명세표 월 이동 기능 추가 — 거래명세표 헤더에 ‹ › 버튼으로 이전/다음 달 이동, 제목 탭으로 월 선택(달력 picker) 가능. 자동 갱신 지점(전표 삭제·수정 시 명세표 즉시 새로고침)에서 원래 참조하던 data-client-name·data-month 속성이 실제로는 어디에도 없어 동작하지 않던 기존 사각지대도 이번에 헤더 요소에 속성을 부여하며 함께 정상화됨.</span>
+                    <span class="changelog-desc">거래명세표 월 이동 기능 추가 — 거래명세표 헤더에 ‹ › 버튼으로 이전/다음 달 이동, 제목 탭으로 월 선택(달력 picker) 가능. 자동 갱신 지점(전표 삭제·수정 시 명세표 즉시 새로고침)에서 원래 참조하던 data-client-name·data-month 속성이 실제로는 어디에도 없어 동작하지 않던 기존 사각지대도 이번에 헤더 요소에 속성을 부여하며 함께 정상화됨. 추가로 "💳 수금 이력" 섹션을 기본 접힘 상태로 변경 — 헤더 탭으로 펼침/접힘 토글, 건수·합계 요약은 접힌 상태에서도 표시. — 전체 검수 중 flushSync()에 남아있던 견고성 허점도 보강: v122에서 CRM 병합을 위해 await를 추가하면서, 가드 선점 이후~업로드 시작 전 구간(해시 계산·CRM 조회·병합)에서 예기치 못한 예외가 나면 어떤 catch도 없어 "저장 진행 중" 가드가 영구히 풀리지 않아 이후 모든 flushSync가 계속 스킵될 수 있는 위험이 있었음 — try/catch로 감싸 어떤 경로로 실패하든 가드가 반드시 해제되도록 보강.</span>
                 </div>
                 <div class="changelog-item">
                     <span class="changelog-ver" style="color:var(--green);">v122</span>
