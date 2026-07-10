@@ -877,6 +877,11 @@ async function _flushSync() {
     // flushSync가 다시 호출됐을 때 위 가드를 통과해버려 중복 실행될 수 있었음(v113 fix가 무력화됨).
     // → 어떤 await보다 먼저, 동기 구간에서 즉시 선점한다.
     _flushSyncInProgress = true;
+    // ★ v123 fix: 가드 선점 이후 ~ 업로드 시작 전까지(동기 계산 + CRM await) 구간에서
+    // 예기치 못한 예외가 발생하면 아래 finally 없이는 _flushSyncInProgress가 영구히 true로 남아
+    // 이후 모든 flushSync가 계속 스킵되는 위험이 있었음(가드를 최상단으로 당기며 새로 생긴 여지).
+    // → try/catch로 감싸 어떤 경로로 실패하든 가드를 반드시 해제하도록 보강.
+    try {
     const ch = dataHash(clients);
     const oh = dataHash(orders);
     const ph = dataHash(prices);
@@ -957,6 +962,11 @@ async function _flushSync() {
         if (updates.prices)     lastHash.prices  = '';
         if (updates.stockItems) lastHash.stock   = '';
     });
+    } catch (e) {
+        // ★ v123 fix: 업로드 시작 전 동기/await 계산 구간에서 예기치 못한 예외 발생 시 가드 해제
+        _flushSyncInProgress = false;
+        diagLog('❌ flushSync 예외', String(e && e.message || e));
+    }
 }
 
 // 화면 꺼짐 / 다른 앱으로 전환 시
