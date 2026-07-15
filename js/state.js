@@ -342,7 +342,9 @@ function _buildClientStatsCache() {
         const key = o.clientId || o.clientName;
         if (!m[key]) m[key] = { count:0, total:0, unpaid:0, lastDate:'' };
         m[key].count++;
-        m[key].total += o.total;
+        // ★ v123 fix: 할인 완납 전표는 실청구액(total-discount)으로 집계 — 원래 raw total을 그대로 더해
+        // 거래처 카드의 "총 매출" 표시가 할인분만큼 부풀려 보이던 문제 (settlement.js 미수 집계 버그와 동일 원인)
+        m[key].total += (o.isPaid && o.discount > 0) ? (o.total - o.discount) : o.total;
         if (!o.isPaid) m[key].unpaid += Math.max(0, (o.total - (o.paidAmount||0)));
         if (o.date > m[key].lastDate) m[key].lastDate = o.date;
     }

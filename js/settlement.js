@@ -138,7 +138,10 @@ function renderSettlement() {
     filtered.forEach(o => {
         const key = o.clientName||'(없음)';
         if (!window._settleMap[key]) window._settleMap[key]={total:0,paid:0,count:0};
-        window._settleMap[key].total += o.total;
+        // ★ v123 fix: 할인 완납 전표는 실청구액(_et, total-discount)으로 집계해야
+        // 미수 = total - paid 계산 시 할인분이 남은 미수처럼 잘못 표시되지 않는다.
+        // (상단 요약 박스는 이미 _et를 쓰고 있었는데, 거래처별 테이블만 raw o.total을 쓰고 있었음)
+        window._settleMap[key].total += _et(o);
         window._settleMap[key].paid += _actualPaid(o);
         window._settleMap[key].count++;
     });

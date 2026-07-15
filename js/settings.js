@@ -161,10 +161,13 @@ function exportSettlementExcel() {
         const filtered = applyPayFilter(orders.filter(o=>o.date?.startsWith(String(year))));
         if (!filtered.length) return toast('❗ 해당 연도 데이터가 없습니다');
         const qMap = { '1분기':{매출:0,수금:0,건수:0}, '2분기':{매출:0,수금:0,건수:0}, '3분기':{매출:0,수금:0,건수:0}, '4분기':{매출:0,수금:0,건수:0} };
+        // ★ v123 fix: 할인 완납 전표는 실청구액(total-discount)으로 집계 — 원래 raw total을 그대로 더해
+        // '미수'(매출-수금) 컬럼에 할인분이 남은 미수처럼 잘못 표시되던 문제 (renderSettlement와 동일 원인)
+        const _etQ = o => o.isPaid && o.discount > 0 ? o.total - o.discount : o.total;
         filtered.forEach(o => {
             const m = parseInt(o.date.slice(5,7));
             const q = m<=3?'1분기':m<=6?'2분기':m<=9?'3분기':'4분기';
-            qMap[q].매출 += o.total;
+            qMap[q].매출 += _etQ(o);
             qMap[q].수금 += _actualPaid(o);
             qMap[q].건수++;
         });
