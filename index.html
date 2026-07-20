@@ -11,7 +11,7 @@
     <meta name="apple-mobile-web-app-title" content="납품관리">
     <link rel="apple-touch-icon" href="./icon-192.png">
     <link rel="manifest" href="./manifest.json">
-    <title>납품 관리 Pro v124</title>
+    <title>납품 관리 Pro v125</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js" defer></script>
@@ -38,7 +38,7 @@
             <div class="logo-icon">📦</div>
             <div>
                 <div class="logo-text">납품 관리 Pro</div>
-                <div class="logo-sub">v124 · PWA 앱 설치 지원</div>
+                <div class="logo-sub">v125 · PWA 앱 설치 지원</div>
             </div>
         </div>
         <div class="header-btns">
@@ -621,7 +621,7 @@
     <div class="card">
         <div class="card-title">앱 정보</div>
         <div style="font-size:13px;color:var(--text2);line-height:2;margin-bottom:12px;">
-            버전: <strong style="color:var(--accent);">v124</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
+            버전: <strong style="color:var(--accent);">v125</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
             거래처: <span id="infoClients">0</span>개 &nbsp;·&nbsp;
             납품내역: <span id="infoOrders">0</span>건
         </div>
@@ -634,6 +634,10 @@
             <div style="font-size:11px;font-weight:700;color:var(--text2);letter-spacing:.7px;text-transform:uppercase;margin-bottom:8px;">변경 이력</div>
             <div id="changelogList" style="display:flex;flex-direction:column;gap:6px;">
                 <!-- 현재 버전 -->
+                <div class="changelog-item">
+                    <span class="changelog-ver" style="color:var(--green);">v125</span>
+                    <span class="changelog-desc">거래처별 "최근 품목" 자동완성이 10개까지만 보이던 제한을 30개로 상향 — 품목 종류가 10개를 넘는 거래처는 11번째 이후 품목이 납품 등록 화면의 "⚡ 이 거래처 최근 품목" 칩 목록뿐 아니라 "이 거래처 최근 단가" 자동완성에서도 영구히 안 나타났음. 원인은 두 겹: 거래처별 최근 품목을 모아두는 캐시 자체가 거래처당 10개로 잘려있었고(1차 원인), 화면에 뿌려주는 함수의 기본 표시 개수도 별도로 10개였음(2차 원인) — 둘 다 30개로 올려 실제로 더 보이도록 수정. 칩 영역은 줄바꿈(flex-wrap) 레이아웃이라 개수가 늘어도 잘리지 않고 자연스럽게 세로로 늘어남.</span>
+                </div>
                 <div class="changelog-item">
                     <span class="changelog-ver" style="color:var(--green);">v124</span>
                     <span class="changelog-desc">할인 완납 전표가 거래처별 정산 화면에 미수로 남아 보이던 버그 수정 — 할인 완납 처리된 전표는 실청구액(청구액-할인액)이 실제 청구 기준이 되어야 하는데, 다음 3곳이 raw 청구액(discount 반영 전)을 그대로 합산하고 있어서 할인액만큼이 계속 미수로 표시됐음: ① 월별 정산 화면의 거래처별 테이블(💡 거래처 클릭 시 상세 명세서 목록) ② 정산서 Excel의 분기별 내보내기 매출·미수 컬럼 ③ 거래처 카드의 "총 매출" 표시. 세 곳 모두 이미 존재하던 실청구액 계산 헬퍼(할인 완납 시 total-discount)를 쓰도록 수정. 일별·분기별 인앱 화면, 거래명세표, 월별/일별 Excel 내보내기는 이미 정확히 계산되고 있어 변경 없음.</span>
