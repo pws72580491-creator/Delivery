@@ -181,7 +181,7 @@ function getRecentPrices(name) {
 
 // 거래처별 최근 품목+단가 (최근 납품일 순, 중복 품목명 제거) — 캐시 활용
 
-function getClientRecentItems(clientId, limit=10) {
+function getClientRecentItems(clientId, limit=30) {
     if (!clientId) return [];
     const cache = _buildClientItemsCache();
     const list  = cache[clientId] || [];
