@@ -11,7 +11,7 @@
     <meta name="apple-mobile-web-app-title" content="납품관리">
     <link rel="apple-touch-icon" href="./icon-192.png">
     <link rel="manifest" href="./manifest.json">
-    <title>납품 관리 Pro v125</title>
+    <title>납품 관리 Pro v126</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js" defer></script>
@@ -38,7 +38,7 @@
             <div class="logo-icon">📦</div>
             <div>
                 <div class="logo-text">납품 관리 Pro</div>
-                <div class="logo-sub">v125 · PWA 앱 설치 지원</div>
+                <div class="logo-sub">v126 · PWA 앱 설치 지원</div>
             </div>
         </div>
         <div class="header-btns">
@@ -621,7 +621,7 @@
     <div class="card">
         <div class="card-title">앱 정보</div>
         <div style="font-size:13px;color:var(--text2);line-height:2;margin-bottom:12px;">
-            버전: <strong style="color:var(--accent);">v125</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
+            버전: <strong style="color:var(--accent);">v126</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
             거래처: <span id="infoClients">0</span>개 &nbsp;·&nbsp;
             납품내역: <span id="infoOrders">0</span>건
         </div>
@@ -634,6 +634,10 @@
             <div style="font-size:11px;font-weight:700;color:var(--text2);letter-spacing:.7px;text-transform:uppercase;margin-bottom:8px;">변경 이력</div>
             <div id="changelogList" style="display:flex;flex-direction:column;gap:6px;">
                 <!-- 현재 버전 -->
+                <div class="changelog-item">
+                    <span class="changelog-ver" style="color:var(--green);">v126</span>
+                    <span class="changelog-desc">배포 후 새 버전이 자동으로 반영되지 않던 문제 개선 — 깃허브·Vercel 배포는 정상이어도, PWA 자체 서비스워커 캐시(stale-while-revalidate) 때문에 사용자가 수동으로 캐시를 지우거나 앱을 재설치하기 전까진 계속 옛 버전이 보였음. ① 서비스워커 등록 시 updateViaCache:'none' 적용 — 브라우저가 sw.js 파일 자체를 HTTP 캐시에서 재사용해 새 배포 감지가 늦어지는 것을 방지 ② 새 서비스워커가 설치·활성화되는 것을 감지(updatefound/statechange, 최초 설치는 제외)하면 "🆕 새 버전이 준비되었습니다 · 새로고침" 안내 배너를 자동으로 띄우도록 추가 — 기존에 이미 있었지만 아무도 듣고 있지 않던 SW_UPDATED 메시지도 보조 트리거로 함께 활용 ③ 화면(탭)으로 돌아올 때마다 능동적으로 업데이트 여부를 확인하도록 추가 — 기존엔 브라우저 기본 주기(최대 24시간)에만 의존하고 있었음.</span>
+                </div>
                 <div class="changelog-item">
                     <span class="changelog-ver" style="color:var(--green);">v125</span>
                     <span class="changelog-desc">거래처별 "최근 품목" 자동완성이 10개까지만 보이던 제한을 30개로 상향 — 품목 종류가 10개를 넘는 거래처는 11번째 이후 품목이 납품 등록 화면의 "⚡ 이 거래처 최근 품목" 칩 목록뿐 아니라 "이 거래처 최근 단가" 자동완성에서도 영구히 안 나타났음. 원인은 두 겹: 거래처별 최근 품목을 모아두는 캐시 자체가 거래처당 10개로 잘려있었고(1차 원인), 화면에 뿌려주는 함수의 기본 표시 개수도 별도로 10개였음(2차 원인) — 둘 다 30개로 올려 실제로 더 보이도록 수정. 칩 영역은 줄바꿈(flex-wrap) 레이아웃이라 개수가 늘어도 잘리지 않고 자연스럽게 세로로 늘어남.</span>
@@ -1830,9 +1834,59 @@ document.addEventListener('DOMContentLoaded', () => {
 <script src="./js/app.js"></script>
 <script>
 if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('./sw.js', { scope: './' })
-        .then(() => console.log('SW 등록 완료'))
+    // ★ v126: updateViaCache:'none' — 브라우저가 sw.js 자체를 HTTP 캐시에서 재사용하지 않도록 해서
+    // 새 배포(새 CACHE_NAME) 감지가 늦어지는 것을 방지
+    navigator.serviceWorker.register('./sw.js', { scope: './', updateViaCache: 'none' })
+        .then(reg => {
+            console.log('SW 등록 완료');
+
+            // 이미 다른 탭/이전 배포로 새 버전이 대기 중인 경우도 포착
+            const _watchNewWorker = worker => {
+                if (!worker) return;
+                worker.addEventListener('statechange', () => {
+                    // controller가 이미 있었다는 건 "최초 설치"가 아니라 "갱신"이라는 뜻
+                    if (worker.state === 'activated' && navigator.serviceWorker.controller) {
+                        showUpdateBanner();
+                    }
+                });
+            };
+            _watchNewWorker(reg.installing);
+            reg.addEventListener('updatefound', () => _watchNewWorker(reg.installing));
+
+            // 화면(탭)으로 돌아올 때마다 능동적으로 새 버전 여부 확인 (기본 브라우저 주기는 최대 24시간)
+            document.addEventListener('visibilitychange', () => {
+                if (document.visibilityState === 'visible') reg.update().catch(() => {});
+            });
+        })
         .catch(e => console.warn('SW 등록 실패:', e));
+
+    // sw.js가 JS/CSS 갱신을 감지했을 때 보내는 메시지 — updatefound를 놓친 경우의 보조 트리거
+    let _swUpdateNotified = false;
+    navigator.serviceWorker.addEventListener('message', e => {
+        if (e.data && e.data.type === 'SW_UPDATED' && !_swUpdateNotified) {
+            _swUpdateNotified = true;
+            showUpdateBanner();
+        }
+    });
+}
+
+function showUpdateBanner() {
+    if (document.getElementById('swUpdateBanner')) return; // 중복 표시 방지
+    const banner = document.createElement('div');
+    banner.id = 'swUpdateBanner';
+    banner.style.cssText = 'position:fixed;bottom:150px;left:50%;transform:translateX(-50%);' +
+        'width:calc(100% - 32px);max-width:488px;' +
+        'background:linear-gradient(135deg,#4e54c8,#6c63ff);color:#fff;' +
+        'border-radius:14px;padding:13px 16px;display:flex;align-items:center;' +
+        'justify-content:space-between;gap:10px;z-index:9999;' +
+        'box-shadow:0 4px 20px rgba(108,99,255,.5);font-size:13px;font-weight:700;';
+    banner.innerHTML =
+        '<span>🆕 새 버전이 준비되었습니다</span>' +
+        '<div style="display:flex;gap:8px;flex-shrink:0;">' +
+        '<button onclick="location.reload()" style="background:#fff;color:#6c63ff;border:none;border-radius:8px;padding:7px 14px;font-weight:900;font-size:12px;cursor:pointer;">새로고침</button>' +
+        '<button onclick="document.getElementById(\'swUpdateBanner\').remove()" style="background:rgba(255,255,255,.2);color:#fff;border:none;border-radius:8px;padding:7px 10px;font-size:12px;cursor:pointer;">✕</button>' +
+        '</div>';
+    document.body.appendChild(banner);
 }
 </script>
 </body>
