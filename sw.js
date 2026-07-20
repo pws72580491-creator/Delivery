@@ -1,4 +1,4 @@
-const CACHE_NAME = 'delivery-pro-v126';
+const CACHE_NAME = 'delivery-pro-v127';
 const ASSETS = [
   '/',
   '/index.html',
@@ -55,15 +55,36 @@ self.addEventListener('fetch', e => {
     e.respondWith(
       caches.open(CACHE_NAME).then(cache =>
         cache.match(e.request).then(cached => {
+          // ★ v127 fix (리뷰 중 발견): cached는 바로 아래에서 그대로 반환되어 브라우저가
+          // 곧장 body를 소비하기 시작함. 그 뒤 fetch().then() 콜백(네트워크 왕복 후, 항상 더 늦게 실행)에서
+          // cached.clone()을 호출하면 "body already used"로 예외가 나고, 그게 .catch(()=>{})에
+          // 조용히 삼켜져서 비교 로직 자체가 사실상 죽어있게 됨. body가 아직 손대지지 않은
+          // 지금 시점에 미리 clone해서 비교용으로 따로 들고 있어야 함.
+          const cachedForCompare = cached ? cached.clone() : null;
+
           // 백그라운드 갱신 (stale-while-revalidate)
           const revalidate = fetch(e.request).then(res => {
             if (res.ok) {
-              cache.put(e.request, res.clone());
-              // ★ JS 파일이 갱신되면 모든 클라이언트에 알림 → 앱이 알아서 새로고침 유도 가능
-              if (url.pathname.endsWith('.js') || url.pathname.endsWith('.css')) {
-                self.clients.matchAll().then(clients =>
-                  clients.forEach(c => c.postMessage({ type: 'SW_UPDATED', url: url.pathname }))
-                );
+              const isAppScript = url.pathname.endsWith('.js') || url.pathname.endsWith('.css');
+              // ★ v127 fix: 재검증 성공 = "네트워크 응답 받음"일 뿐, 내용이 바뀌었다는 뜻이 아님.
+              // 예전엔 매번 성공할 때마다(즉, 앱을 열 때마다) 무조건 알림을 보내서
+              // 실제로는 새 버전이 없어도 "새 버전이 준비되었습니다" 배너가 계속 재표시됐음.
+              // 캐시된 내용과 실제로 달라졌을 때만 클라이언트에 알림.
+              if (isAppScript && cachedForCompare) {
+                const resForCache = res.clone();
+                const resForCompare = res.clone();
+                Promise.all([cachedForCompare.text(), resForCompare.text()])
+                  .then(([oldText, newText]) => {
+                    if (oldText !== newText) {
+                      self.clients.matchAll().then(clients =>
+                        clients.forEach(c => c.postMessage({ type: 'SW_UPDATED', url: url.pathname }))
+                      );
+                    }
+                  })
+                  .catch(() => {});
+                cache.put(e.request, resForCache);
+              } else {
+                cache.put(e.request, res.clone());
               }
             }
             return res;
