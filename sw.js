@@ -1,4 +1,4 @@
-const CACHE_NAME = 'delivery-pro-v128';
+const CACHE_NAME = 'delivery-pro-v129';
 const ASSETS = [
   '/',
   '/index.html',
@@ -25,8 +25,19 @@ const ASSETS = [
 ];
 
 self.addEventListener('install', e => {
+  // ★ v129 fix: cache.addAll()의 기본 fetch는 브라우저 HTTP 캐시로 응답이 충족될 수 있음 —
+  // 즉 SW 자체는 새로 설치돼도, 그 안에 채워 넣는 내용이 여전히 브라우저 HTTP 캐시에 남아있던
+  // "옛 버전" 바이트일 수 있음 (SW 입장에선 알 방법이 없음). cache:'reload'로 HTTP 캐시를
+  // 완전히 건너뛰고 매번 네트워크에서 진짜 새 파일을 받아오도록 강제.
   e.waitUntil(
-    caches.open(CACHE_NAME).then(cache => cache.addAll(ASSETS))
+    caches.open(CACHE_NAME).then(cache =>
+      Promise.all(ASSETS.map(path =>
+        fetch(path, { cache: 'reload' }).then(res => {
+          if (!res.ok) throw new Error(`설치 중 자산 요청 실패: ${path} (${res.status})`);
+          return cache.put(path, res);
+        })
+      ))
+    )
   );
   self.skipWaiting();
 });
@@ -63,7 +74,10 @@ self.addEventListener('fetch', e => {
           const cachedForCompare = cached ? cached.clone() : null;
 
           // 백그라운드 갱신 (stale-while-revalidate)
-          const revalidate = fetch(e.request).then(res => {
+          // ★ v129 fix: 여기도 install과 동일한 이유로 cache:'reload' 필요 —
+          // 아니면 "새 버전 확인용" 재검증 fetch 자체가 브라우저 HTTP 캐시로 조용히
+          // 충족되어 버려서, 서버에 진짜 새 파일이 올라가 있어도 영원히 감지를 못 함.
+          const revalidate = fetch(e.request, { cache: 'reload' }).then(res => {
             if (res.ok) {
               const isAppScript = url.pathname.endsWith('.js') || url.pathname.endsWith('.css');
               // ★ v127 fix: 재검증 성공 = "네트워크 응답 받음"일 뿐, 내용이 바뀌었다는 뜻이 아님.

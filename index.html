@@ -11,7 +11,7 @@
     <meta name="apple-mobile-web-app-title" content="납품관리">
     <link rel="apple-touch-icon" href="./icon-192.png">
     <link rel="manifest" href="./manifest.json">
-    <title>납품 관리 Pro v128</title>
+    <title>납품 관리 Pro v129</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js" defer></script>
@@ -38,7 +38,7 @@
             <div class="logo-icon">📦</div>
             <div>
                 <div class="logo-text">납품 관리 Pro</div>
-                <div class="logo-sub">v128 · PWA 앱 설치 지원</div>
+                <div class="logo-sub">v129 · PWA 앱 설치 지원</div>
             </div>
         </div>
         <div class="header-btns">
@@ -621,7 +621,7 @@
     <div class="card">
         <div class="card-title">앱 정보</div>
         <div style="font-size:13px;color:var(--text2);line-height:2;margin-bottom:12px;">
-            버전: <strong style="color:var(--accent);">v128</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
+            버전: <strong style="color:var(--accent);">v129</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
             거래처: <span id="infoClients">0</span>개 &nbsp;·&nbsp;
             납품내역: <span id="infoOrders">0</span>건
         </div>
@@ -635,7 +635,11 @@
             <div id="changelogList" style="display:flex;flex-direction:column;gap:6px;">
                 <!-- 현재 버전 -->
                 <div class="changelog-item">
-                    <span class="changelog-ver" style="color:var(--green);">v128</span>
+                    <span class="changelog-ver" style="color:var(--green);">v129</span>
+                    <span class="changelog-desc">업데이트해도 일부 파일만 옛날 내용으로 남아있을 수 있던 근본 원인 수정 — 서비스워커가 새 파일을 받아올 때(설치 시 전체 캐싱, 백그라운드 재검증 둘 다) 브라우저 자체의 HTTP 캐시를 그대로 거쳐가고 있었음. 그래서 서비스워커 자체는 정상적으로 새 버전으로 교체돼도, 그 안에 채워 넣는 파일 내용이 브라우저 HTTP 캐시에 남아있던 옛 바이트일 수 있었음(서비스워커 입장에선 구분할 방법이 없음) — 예: index.html의 버전 표시는 v128로 바뀌었는데 js/app.js 같은 실제 동작 파일은 여전히 그 이전 코드로 실행되는 식. 모든 자산 fetch에 cache:'reload'를 명시해서 브라우저 HTTP 캐시를 완전히 건너뛰고 항상 네트워크에서 진짜 최신 파일을 받아오도록 수정.</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v128</span>
                     <span class="changelog-desc">납품 메모 중요도(색상) 표시 기능 추가 — 메모 저장 시 🔵낮음 / 🟠보통(기본) / 🔴높음 3단계 중요도를 선택할 수 있고, 내역 카드의 메모 버튼·메모 본문, 전표 상세, 정산 화면, 메모 모아보기(요약 카드·상세 목록)까지 선택한 색으로 표시됨. 공유 내역(대납)에도 동일하게 적용. 기존 메모는 모두 보통(주황)으로 표시됨. 메모를 삭제하면 중요도도 함께 기본값으로 초기화되어, 다음에 새로 메모를 달 때 이전 중요도가 남아있지 않음.</span>
                 </div>
                 <div class="changelog-item">
