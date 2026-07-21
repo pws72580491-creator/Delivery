@@ -19,6 +19,7 @@
     --orange:     #f5a623;
     --orange-dim: rgba(245,166,35,.12);
     --blue:       #3b82f6;
+    --blue-dim:   rgba(59,130,246,.12);
     --text:       #eaeaf4;
     --text2:      #7878a0;
     --text3:      #3e3e58;
@@ -43,6 +44,7 @@ body.light {
     --green-dim:  rgba(32,192,92,.08);
     --red-dim:    rgba(240,78,78,.08);
     --orange-dim: rgba(245,166,35,.08);
+    --blue-dim:   rgba(59,130,246,.08);
     --text:       #18182e;
     --text2:      #5050a0;
     --text3:      #aaaac8;
@@ -413,6 +415,9 @@ body.light .stat-card.orange .stat-value { color:#a07010; }
     word-break:break-all;
 }
 .order-memo-body:active { opacity:.7; }
+/* 메모 중요도별 색상 — v128 (기본 = 보통/orange, 클래스 없으면 그대로 유지) */
+.order-memo-body.priority-1 { background:var(--blue-dim); border-left-color:var(--blue); color:var(--blue); }
+.order-memo-body.priority-3 { background:var(--red-dim); border-left-color:var(--red); color:var(--red); }
 
 /* 이전 메모 (현재 카드에 메모 없을 때) */
 .order-memo-prev {
@@ -1794,7 +1799,21 @@ button, a, input, select, textarea,
     max-width:130px; overflow:hidden; text-overflow:ellipsis;
 }
 .memo-btn.has-memo { border-color:var(--orange); background:var(--orange-dim); color:var(--orange); }
+.memo-btn.has-memo.priority-1 { border-color:var(--blue); background:var(--blue-dim); color:var(--blue); }
+.memo-btn.has-memo.priority-3 { border-color:var(--red); background:var(--red-dim); color:var(--red); }
 .memo-btn:active { transform:scale(.94); }
+/* 메모 팝업 — 중요도(낮음/보통/높음) 선택 — v128 */
+.memo-priority-row { display:flex; gap:8px; margin-bottom:12px; }
+.memo-priority-btn {
+    flex:1; padding:9px 0; border-radius:10px;
+    border:1.5px solid var(--border-s); background:transparent;
+    font-size:12px; font-weight:700; cursor:pointer; transition:all .15s;
+    color:var(--text3);
+}
+.memo-priority-btn:active { transform:scale(.95); }
+.memo-priority-btn.priority-1.active { border-color:var(--blue); background:var(--blue-dim); color:var(--blue); }
+.memo-priority-btn.priority-2.active { border-color:var(--orange); background:var(--orange-dim); color:var(--orange); }
+.memo-priority-btn.priority-3.active { border-color:var(--red); background:var(--red-dim); color:var(--red); }
 #memoPopup {
     display:none; position:fixed; inset:0;
     background:rgba(0,0,0,.6); z-index:3000;

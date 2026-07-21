@@ -11,7 +11,7 @@
     <meta name="apple-mobile-web-app-title" content="납품관리">
     <link rel="apple-touch-icon" href="./icon-192.png">
     <link rel="manifest" href="./manifest.json">
-    <title>납품 관리 Pro v127</title>
+    <title>납품 관리 Pro v128</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js" defer></script>
@@ -38,7 +38,7 @@
             <div class="logo-icon">📦</div>
             <div>
                 <div class="logo-text">납품 관리 Pro</div>
-                <div class="logo-sub">v127 · PWA 앱 설치 지원</div>
+                <div class="logo-sub">v128 · PWA 앱 설치 지원</div>
             </div>
         </div>
         <div class="header-btns">
@@ -621,7 +621,7 @@
     <div class="card">
         <div class="card-title">앱 정보</div>
         <div style="font-size:13px;color:var(--text2);line-height:2;margin-bottom:12px;">
-            버전: <strong style="color:var(--accent);">v127</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
+            버전: <strong style="color:var(--accent);">v128</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
             거래처: <span id="infoClients">0</span>개 &nbsp;·&nbsp;
             납품내역: <span id="infoOrders">0</span>건
         </div>
@@ -635,7 +635,11 @@
             <div id="changelogList" style="display:flex;flex-direction:column;gap:6px;">
                 <!-- 현재 버전 -->
                 <div class="changelog-item">
-                    <span class="changelog-ver" style="color:var(--green);">v127</span>
+                    <span class="changelog-ver" style="color:var(--green);">v128</span>
+                    <span class="changelog-desc">납품 메모 중요도(색상) 표시 기능 추가 — 메모 저장 시 🔵낮음 / 🟠보통(기본) / 🔴높음 3단계 중요도를 선택할 수 있고, 내역 카드의 메모 버튼·메모 본문·전표 상세·정산 화면에서 선택한 색으로 표시됨. 공유 내역(대납)에도 동일하게 적용. 기존 메모는 모두 보통(주황)으로 표시됨.</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v127</span>
                     <span class="changelog-desc">"새 버전이 준비되었습니다" 배너가 실제로 새 버전이 없어도 계속 재표시되던 문제 수정 — v126에서 배너 기능을 넣으며 함께 활용한 SW_UPDATED 메시지가, 실제 내용 변경 여부와 무관하게 백그라운드 재검증(stale-while-revalidate)이 성공할 때마다(즉 앱을 열 때마다) 무조건 발송되고 있었음. 그 결과 새로고침으로 최신 버전을 이미 적용한 직후에도 배너가 다시 나타나 사실상 저절로 사라지지 않는 것처럼 보였음 — 서비스워커가 캐시된 파일과 새로 받아온 파일 내용을 직접 비교해서, 실제로 달라졌을 때만 알림을 보내도록 수정. 이제 진짜 새 배포가 있을 때만 배너가 뜨고, 새로고침으로 적용하고 나면 다시 뜨지 않음.</span>
                 </div>
                 <div class="changelog-item">
@@ -1716,6 +1720,11 @@
 <div id="memoPopup" onclick="if(event.target===this)closeMemoPopup()">
     <div class="memo-popup-box">
         <div class="memo-popup-title">📝 메모 <span id="memoPopupClient"></span></div>
+        <div class="memo-priority-row" id="memoPriorityRow">
+            <button type="button" class="memo-priority-btn priority-1" data-level="1" onclick="setMemoPriority(1)">🔵 낮음</button>
+            <button type="button" class="memo-priority-btn priority-2" data-level="2" onclick="setMemoPriority(2)">🟠 보통</button>
+            <button type="button" class="memo-priority-btn priority-3" data-level="3" onclick="setMemoPriority(3)">🔴 높음</button>
+        </div>
         <textarea id="memoTextarea" placeholder="메모를 입력하세요…"></textarea>
         <div class="memo-popup-btns">
             <button class="btn btn-ghost"   style="flex:1;" onclick="closeMemoPopup()">취소</button>
