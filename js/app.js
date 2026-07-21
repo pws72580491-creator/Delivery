@@ -631,7 +631,7 @@ async function deleteAllMemoInView() {
     const clientNames = [...new Set(targets.map(o => o.clientName))].join(', ');
     if (!await customConfirm(`📋 현재 기간의 메모 ${targets.length}건을 모두 삭제할까요?\n\n대상: ${clientNames}`)) return;
     const now = new Date().toISOString();
-    targets.forEach(o => { o.note = ''; o.updatedAt = now; });
+    targets.forEach(o => { o.note = ''; o.notePriority = 2; o.updatedAt = now; });
     _saveAndFlush();
     renderMemoView();
     renderOrders();
@@ -668,7 +668,7 @@ function renderMemoView() {
             const preview = ords[0].note.length > 24 ? ords[0].note.slice(0, 24) + '…' : ords[0].note;
             const safeNameHtml = escapeHtml(name);
             const safeNameAttr = escapeAttr(name);
-            return `<div class="memo-view-client-card" onclick="openMemoDetail('${safeNameAttr}')">
+            return `<div class="memo-view-client-card priority-${memoPriorityLevel(ords[0])}" onclick="openMemoDetail('${safeNameAttr}')">
                 <div class="memo-view-client-name">${safeNameHtml} <span class="memo-count-badge">${cnt}건</span></div>
                 <div class="memo-view-preview">${escapeHtml(preview)}</div>
             </div>`;
@@ -694,7 +694,7 @@ function openMemoDetail(clientName) {
         ? ords.map(o => {
             const paidBadge = o.isPaid ? '✅ 완납' : '🔴 미수';
             const amount    = o.total ? `${o.total.toLocaleString()}원 · ${paidBadge}` : '';
-            return `<div class="memo-detail-item" id="mdi-${o.id}">
+            return `<div class="memo-detail-item priority-${memoPriorityLevel(o)}" id="mdi-${o.id}">
                 <div class="memo-detail-header">
                     <div class="memo-detail-date">📅 ${o.date}</div>
                     <button class="memo-delete-btn" onclick="deleteMemoById('${o.id}')" title="메모 삭제">🗑️</button>
@@ -714,6 +714,7 @@ async function deletePrevMemo(orderId) {
     if (!o || !o.note) return;
     if (!await customConfirm(`📅 ${o.date} 이전 메모를 삭제할까요?\n\n"${o.note}"`)) return;
     o.note = '';
+    o.notePriority = 2;
     o.updatedAt = new Date().toISOString();
     _markDirtyOrder(o.id);
     _saveAndFlush();
@@ -727,6 +728,7 @@ async function deleteMemoById(orderId) {
     if (!await customConfirm(`📅 ${o.date} 메모를 삭제할까요?\n\n"${o.note}"`)) return;
 
     o.note = '';
+    o.notePriority = 2;
     o.updatedAt = new Date().toISOString();
     _markDirtyOrder(o.id);
     _saveAndFlush();
