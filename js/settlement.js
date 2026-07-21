@@ -212,7 +212,7 @@ function renderSettlementDaily() {
                         <div style="font-size:12px;color:var(--text2);">
                             ${(o.items||[]).map(i=>`${escapeHtml(i.name)} ${Math.abs(i.qty)}개 × ${fmt(i.price||0)}원`).join(' / ')}
                         </div>
-                        ${o.note?`<div style="font-size:11px;color:var(--text3);margin-top:4px;">📝 ${escapeHtml(o.note)}</div>`:''}
+                        ${o.note?`<div style="font-size:11px;color:${memoPriorityLevel(o)===1?'var(--blue)':memoPriorityLevel(o)===3?'var(--red)':'var(--orange)'};margin-top:4px;">📝 ${escapeHtml(o.note)}</div>`:''}
                     </div>`).join('')}
                 <div style="display:flex;justify-content:space-between;font-size:12px;font-weight:700;padding-top:6px;border-top:1px solid var(--border);">
                     <span>소계</span>

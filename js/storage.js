@@ -100,6 +100,7 @@ function _minifyOrder(o) {
     const ca = _compactTs(o.createdAt);
     if (ca)            r.createdAt  = ca;
     if (o.note)        r.note       = o.note;       // ③ 빈 값 저장 방지
+    if (o.notePriority && o.notePriority !== 2) r.notePriority = o.notePriority; // 메모 중요도(2=보통은 기본값이라 생략)
     if (o.paidAmount != null && o.paidAmount !== 0) r.paidAmount = o.paidAmount;
     if (o.paidMethod)  r.paidMethod = o.paidMethod;
     if (o.paidMethodDetail) r.paidMethodDetail = o.paidMethodDetail;

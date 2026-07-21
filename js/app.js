@@ -763,6 +763,7 @@ function closeMemoDetail() {
 // 메모 팝업
 // ═══════════════════════════════════════
 let _memoTargetId = null;
+let _memoPriority = 2; // 1=낮음 2=보통(기본) 3=높음
 
 function openMemoPopup(orderId) {
     const foundMemo = _findOrderAnywhere(orderId);
@@ -771,8 +772,21 @@ function openMemoPopup(orderId) {
     _memoTargetId = orderId;
     document.getElementById('memoPopupClient').textContent = o.clientName || '';
     document.getElementById('memoTextarea').value = o.note || '';
+    _memoPriority = memoPriorityLevel(o);
+    _renderMemoPriorityButtons();
     document.getElementById('memoPopup').classList.add('open');
     setTimeout(() => document.getElementById('memoTextarea').focus(), 120);
+}
+function setMemoPriority(level) {
+    _memoPriority = level;
+    _renderMemoPriorityButtons();
+}
+function _renderMemoPriorityButtons() {
+    const row = document.getElementById('memoPriorityRow');
+    if (!row) return;
+    row.querySelectorAll('.memo-priority-btn').forEach(btn => {
+        btn.classList.toggle('active', Number(btn.dataset.level) === _memoPriority);
+    });
 }
 function closeMemoPopup() {
     document.getElementById('memoPopup').classList.remove('open');
@@ -784,8 +798,9 @@ async function saveMemoPopup() {
     if (!foundMemoSave) return;
     const o = foundMemoSave.order;
     const text = document.getElementById('memoTextarea').value.trim();
+    const priority = _memoPriority || 2;
     if (foundMemoSave.isShared) {
-        const ok = await _patchSharedOrder(foundMemoSave.sharedWsId, _memoTargetId, { note: text });
+        const ok = await _patchSharedOrder(foundMemoSave.sharedWsId, _memoTargetId, { note: text, notePriority: priority });
         if (ok) {
             closeMemoPopup();
             renderOrders();
@@ -793,6 +808,7 @@ async function saveMemoPopup() {
         }
     } else {
         o.note = text;
+        o.notePriority = priority;
         o.updatedAt = new Date().toISOString();
         _markDirtyOrder(o.id);
         _saveAndFlush();

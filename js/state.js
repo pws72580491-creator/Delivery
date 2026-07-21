@@ -260,6 +260,13 @@ function escapeAttr(str) {
     return String(str||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;');
 }
 
+// 메모 중요도(1=낮음 2=보통 3=높음) — class 속성에 그대로 꽂아 넣는 값이라
+// 손상되거나 조작된 백업 데이터가 들어와도 1/2/3 외의 값은 절대 통과시키지 않음
+function memoPriorityLevel(o) {
+    const p = Number(o && o.notePriority);
+    return (p === 1 || p === 3) ? p : 2;
+}
+
 // 초성 검색
 const CHO = ['ㄱ','ㄲ','ㄴ','ㄷ','ㄸ','ㄹ','ㅁ','ㅂ','ㅃ','ㅅ','ㅆ','ㅇ','ㅈ','ㅉ','ㅊ','ㅋ','ㅌ','ㅍ','ㅎ'];
 
