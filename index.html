@@ -11,7 +11,7 @@
     <meta name="apple-mobile-web-app-title" content="납품관리">
     <link rel="apple-touch-icon" href="./icon-192.png">
     <link rel="manifest" href="./manifest.json">
-    <title>납품 관리 Pro v129</title>
+    <title>납품 관리 Pro v131</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js" defer></script>
@@ -38,7 +38,7 @@
             <div class="logo-icon">📦</div>
             <div>
                 <div class="logo-text">납품 관리 Pro</div>
-                <div class="logo-sub">v129 · PWA 앱 설치 지원</div>
+                <div class="logo-sub">v131 · PWA 앱 설치 지원</div>
             </div>
         </div>
         <div class="header-btns">
@@ -621,7 +621,7 @@
     <div class="card">
         <div class="card-title">앱 정보</div>
         <div style="font-size:13px;color:var(--text2);line-height:2;margin-bottom:12px;">
-            버전: <strong style="color:var(--accent);">v129</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
+            버전: <strong style="color:var(--accent);">v131</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
             거래처: <span id="infoClients">0</span>개 &nbsp;·&nbsp;
             납품내역: <span id="infoOrders">0</span>건
         </div>
@@ -635,7 +635,15 @@
             <div id="changelogList" style="display:flex;flex-direction:column;gap:6px;">
                 <!-- 현재 버전 -->
                 <div class="changelog-item">
-                    <span class="changelog-ver" style="color:var(--green);">v129</span>
+                    <span class="changelog-ver" style="color:var(--green);">v131</span>
+                    <span class="changelog-desc">v130에서 찾은 "갱신 체인 중 하나 실패 시 나머지가 통째로 안 도는" 문제를 전수점검 — 같은 패턴이 남아있는 곳이 없는지 코드 전체를 다시 훑음. 가장 심각했던 곳은 전표 수정 저장(`saveOrderEdit`, 공유·비공유 둘 다) — 여기서 실패하면 수정 모달이 안 닫히고 완료 토스트도 안 뜰 수 있었음. 그 외 납품 등록 확정(명세서 자동 오픈이 아예 무산될 수 있었음), 전표 삭제, 거래처 등록/수정/삭제(스와이프 삭제 포함), 오프라인 공유 납품 업로드 알림까지 총 5곳 추가로 동일하게 수정 — 전부 지금 보고 있는 화면부터 최우선으로, 각각 독립 실행되도록 통일. Firebase 쓰기 오류 처리도 전체적으로 점검했고 이상 없음 확인.</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v130</span>
+                    <span class="changelog-desc">완납→미수 복귀(및 수금 취소·수정)를 해도 열려있는 명세표 화면에 반영이 안 될 수 있던 문제 수정 — 결제/미수복귀 처리 후 여러 화면(전표 목록·대시보드·뱃지·명세표 등)을 한 줄로 쭉 이어서 갱신하던 코드가 13곳 있었는데, 그중 어느 하나라도 도중에 예외를 던지면 그 뒤에 나오는 갱신 호출은 아예 실행되지 않는 구조였음 — 특히 명세표 갱신이 뒤쪽에 있던 곳들은 데이터는 이미 바뀌었는데 화면만 안 바뀐 것처럼 보일 수 있었음. 지금 사용자가 보고 있는 화면(명세표)부터 최우선으로, 그리고 각 갱신을 서로 독립적으로 실행하도록 고쳐서 하나가 실패해도 나머지는 정상적으로 갱신됨.</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v129</span>
                     <span class="changelog-desc">업데이트해도 일부 파일만 옛날 내용으로 남아있을 수 있던 근본 원인 수정 — 서비스워커가 새 파일을 받아올 때(설치 시 전체 캐싱, 백그라운드 재검증 둘 다) 브라우저 자체의 HTTP 캐시를 그대로 거쳐가고 있었음. 그래서 서비스워커 자체는 정상적으로 새 버전으로 교체돼도, 그 안에 채워 넣는 파일 내용이 브라우저 HTTP 캐시에 남아있던 옛 바이트일 수 있었음(서비스워커 입장에선 구분할 방법이 없음) — 예: index.html의 버전 표시는 v128로 바뀌었는데 js/app.js 같은 실제 동작 파일은 여전히 그 이전 코드로 실행되는 식. 모든 자산 fetch에 cache:'reload'를 명시해서 브라우저 HTTP 캐시를 완전히 건너뛰고 항상 네트워크에서 진짜 최신 파일을 받아오도록 수정.</span>
                 </div>
                 <div class="changelog-item">
