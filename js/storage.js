@@ -297,7 +297,11 @@ const debouncedSync = debounce(async () => {
                 if (!o) continue;
                 const m = _minifyOrder(o);
                 const sv = serverOrders ? serverOrders[id] : null;
-                if (sv) _mergeCrmPaymentFields(m, sv); // CRM 결제 필드 보존
+                // ★ v132 fix: o.crmControlled가 명시적으로 null이면(togglePaid 등에서 방금
+                // "CRM 우선권 해제"로 patch한 것) 서버 값으로 되돌리지 않음. undefined(한 번도
+                // CRM과 연결된 적 없는 전표)일 때만 기존처럼 서버 값을 보존 — 그 외엔
+                // 납품앱에서 미수복귀를 해도 다음 동기화 때 CRM 값으로 조용히 되돌아갔음.
+                if (sv && o.crmControlled !== null) _mergeCrmPaymentFields(m, sv); // CRM 결제 필드 보존
                 updates[`orders/${id}`] = m;
             }
             for (const id of _deletedOrders) { updates[`orders/${id}`] = null; }
@@ -321,7 +325,8 @@ const debouncedSync = debounce(async () => {
             // 아직 내 로컬에 반영 안 된 것)을 통째로 지워버리는 위험이 있었음.
             orders.forEach(o => {
                 const m = _minifyOrder(o);
-                if (serverOrders2 && serverOrders2[o.id]) _mergeCrmPaymentFields(m, serverOrders2[o.id]);
+                // ★ v132 fix: 위 delta 경로와 동일한 이유
+                if (serverOrders2 && serverOrders2[o.id] && o.crmControlled !== null) _mergeCrmPaymentFields(m, serverOrders2[o.id]);
                 updates[`orders/${o.id}`] = m;
             });
             for (const id of _deletedOrders) { updates[`orders/${id}`] = null; }

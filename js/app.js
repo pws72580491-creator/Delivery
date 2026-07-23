@@ -930,7 +930,11 @@ async function _flushSync() {
         if (!isConnected) { diagLog('⚡ flushSync 중단', 'CRM 조회 중 연결 끊김'); _flushSyncInProgress = false; return; }
         orders.forEach(o => {
             const m = _minifyOrder(o);
-            if (serverOrdersForCrm && serverOrdersForCrm[o.id]) _mergeCrmPaymentFields(m, serverOrdersForCrm[o.id]);
+            // ★ v132 fix: o.crmControlled === null이면 "방금 납품앱에서 CRM 우선권을 명시적으로
+            // 해제한 전표"라는 뜻이므로 서버의 CRM 값으로 되돌리지 않음. undefined(CRM과 무관한
+            // 전표)일 때만 기존처럼 보존 — 안 그러면 미수복귀 같은 액션이 다음 동기화 때
+            // CRM 값으로 조용히 되돌아갔음.
+            if (serverOrdersForCrm && serverOrdersForCrm[o.id] && o.crmControlled !== null) _mergeCrmPaymentFields(m, serverOrdersForCrm[o.id]);
             updates['orders/' + o.id] = m;
         });
         _deletedOrders.forEach(id => { updates['orders/' + id] = null; });
