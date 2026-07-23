@@ -116,8 +116,7 @@ async function _flushSharedOrderQueue() {
     _saveSharedOrderQueue(failed);
 
     if (successCnt > 0) {
-        renderOrders(); updateInfoCounts(); updateNavBadges(); renderDashboard();
-        toast(`📤 오프라인 중 작성한 공유 납품 ${successCnt}건이 업로드되었습니다`, 'var(--green)', 4000);
+        _safeRefresh(renderOrders, updateInfoCounts, updateNavBadges, renderDashboard, () => toast(`📤 오프라인 중 작성한 공유 납품 ${successCnt}건이 업로드되었습니다`, 'var(--green)', 4000));
     }
     const deadAfter = _getDeadQueue();
     if (deadAfter.length > 0) {

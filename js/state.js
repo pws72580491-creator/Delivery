@@ -267,6 +267,17 @@ function memoPriorityLevel(o) {
     return (p === 1 || p === 3) ? p : 2;
 }
 
+// ★ v130 fix: 결제/미수복귀 처리 후 renderOrders·renderDashboard·... ·showClientStatement를
+// 한 줄에 순서대로 그냥 호출하던 곳이 13군데 있었는데, 그 중 아무거나 하나라도 예외를 던지면
+// 그 뒤에 나오는 함수(특히 현재 열려있는 명세표 갱신)는 아예 실행조차 안 됨 — 데이터는
+// 이미 바뀌었는데 화면만 안 바뀐 것처럼 보이는 원인이 됨. 하나씩 독립적으로 실행해서
+// 하나가 실패해도 나머지는 계속 갱신되도록 보장.
+function _safeRefresh(...fns) {
+    fns.forEach(fn => {
+        try { fn(); } catch (e) { console.error('[화면 갱신 실패]', fn && fn.name || '(익명)', e); }
+    });
+}
+
 // 초성 검색
 const CHO = ['ㄱ','ㄲ','ㄴ','ㄷ','ㄸ','ㄹ','ㅁ','ㅂ','ㅃ','ㅅ','ㅆ','ㅇ','ㅈ','ㅉ','ㅊ','ㅋ','ㅌ','ㅍ','ㅎ'];
 

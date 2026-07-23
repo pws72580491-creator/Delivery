@@ -637,20 +637,16 @@ async function submitOrder() {
     // ★ v122: 공유거래처 대납도 이제 내 재고를 차감하므로, 재고 변경분 유실 방지를 위해 항상 로컬 저장 필요
     // (기존엔 "공유 거래처 납품은 내 로컬 저장 불필요"였으나, 대납 시 재고 차감이 추가되며 전제가 깨짐)
     saveData(true);
-    updateInfoCounts(); updateNavBadges();
-    renderDashboard();
-    updateItemDatalist('');
-    _refreshSettlementIfActive();
-    _refreshStockIfActive();
-    _refreshUnpaidIfActive();
-    renderOrders(); // 공유 캐시 포함 내역 갱신
+    _safeRefresh(updateInfoCounts, updateNavBadges, renderDashboard, () => updateItemDatalist(''), _refreshSettlementIfActive, _refreshStockIfActive, _refreshUnpaidIfActive, renderOrders); // 공유 캐시 포함 내역 갱신
     // 납품 확정 후: 내역 탭 전환 → 거래명세서 자동 오픈
+    // ★ v130 fix: showTab/setHistPeriod/toast가 도중에 던지면 뒤이은 showClientStatement 예약(setTimeout) 자체가
+    // 안 걸려서 명세서 자동오픈이 통째로 무산될 수 있었음 — 각각 독립 실행으로 분리.
     setTimeout(() => {
-        showTab('history');
-        setHistPeriod('today', document.querySelector('.chip.hist-period[data-p="today"]'));
-        if (!isSharedVirtual) {
-            toast(isReturn ? '↩ 반품/회수 등록 완료! (재고 입고 처리됨)' : isVoid ? '👤 타인거래로 등록 완료 (재고 차감 제외)' : '✅ 납품 등록 완료!', 'var(--green)');
-        }
+        _safeRefresh(
+            () => showTab('history'),
+            () => setHistPeriod('today', document.querySelector('.chip.hist-period[data-p="today"]')),
+            () => { if (!isSharedVirtual) { toast(isReturn ? '↩ 반품/회수 등록 완료! (재고 입고 처리됨)' : isVoid ? '👤 타인거래로 등록 완료 (재고 차감 제외)' : '✅ 납품 등록 완료!', 'var(--green)'); } }
+        );
         setTimeout(() => showClientStatement(_savedClientName, _savedMonth), 200);
     }, 80);
 }

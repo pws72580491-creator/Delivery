@@ -1290,10 +1290,11 @@ async function confirmPartialPayDiscount() {
 
     _saveAndFlush();
     closeModal('partialPayModal');
-    renderOrders(); renderDashboard(); updateInfoCounts(); updateNavBadges();
-    _refreshUnpaidIfActive();
-    _refreshSettlementIfActive();
-    showClientStatement(clientName, month);
+    _safeRefresh(
+        () => showClientStatement(clientName, month),
+        renderOrders, renderDashboard, updateInfoCounts, updateNavBadges,
+        _refreshUnpaidIfActive, _refreshSettlementIfActive
+    );
     const discount = total - amount;
     toast(`✂️ 할인 완납 처리 (할인 ${fmt(discount)}원)`, 'var(--green)');
     // CRM 역방향 패치: 내 전표만 (공유 전표는 A의 거래장이 직접 처리)
@@ -1357,10 +1358,11 @@ async function confirmPartialPay() {
             firebase.database().ref('/').update(fbUpdates).catch(e => console.warn('[공유부분수금]', e));
         }
         _saveAndFlush(); closeModal('partialPayModal');
-        renderOrders(); renderDashboard(); updateInfoCounts(); updateNavBadges();
-        _refreshUnpaidIfActive();
-        _refreshSettlementIfActive();
-        showClientStatement(clientName, month);
+        _safeRefresh(
+            () => showClientStatement(clientName, month),
+            renderOrders, renderDashboard, updateInfoCounts, updateNavBadges,
+            _refreshUnpaidIfActive, _refreshSettlementIfActive
+        );
         toast(`💳 혼합 완납 (🏦${fmt(transferAmt)}원 + 💵${fmt(cashAmt)}원)`, 'var(--green)');
         list.filter(o => !o._sharedWsId).forEach(o => _afterDlPayPatch(o.id, o));
         return;
@@ -1419,10 +1421,11 @@ async function confirmPartialPay() {
     }
     _saveAndFlush();
     closeModal('partialPayModal');
-    renderOrders(); renderDashboard(); updateInfoCounts(); updateNavBadges();
-    _refreshUnpaidIfActive();
-    _refreshSettlementIfActive();
-    showClientStatement(clientName, month);
+    _safeRefresh(
+        () => showClientStatement(clientName, month),
+        renderOrders, renderDashboard, updateInfoCounts, updateNavBadges,
+        _refreshUnpaidIfActive, _refreshSettlementIfActive
+    );
 
     const methodLbl = _methodLabel(method);
     const msg = fullCnt > 0 && partCnt > 0
@@ -1514,9 +1517,11 @@ function confirmPayEdit() {
         _patchSharedOrder(foundPeConfirm.sharedWsId, orderId, patch)
             .then(ok => {
                 if (ok) {
-                    renderOrders(); renderDashboard(); updateInfoCounts(); updateNavBadges();
-                    _refreshUnpaidIfActive(); _refreshSettlementIfActive();
-                    showClientStatement(clientName, month);
+                    _safeRefresh(
+                        () => showClientStatement(clientName, month),
+                        renderOrders, renderDashboard, updateInfoCounts, updateNavBadges,
+                        _refreshUnpaidIfActive, _refreshSettlementIfActive
+                    );
                     // 공유 전표도 CRM 역방향 패치
                     _afterDlPayPatch(o.id, o);
                 }
@@ -1524,11 +1529,12 @@ function confirmPayEdit() {
     } else {
         _markDirtyOrder(orderId);
         _saveAndFlush();
-        showClientStatement(clientName, month);
-        renderOrders(); renderDashboard(); updateInfoCounts(); updateNavBadges();
-        _afterDlPayPatch(o.id, o);
-        _refreshUnpaidIfActive();
-        _refreshSettlementIfActive();
+        _safeRefresh(
+            () => showClientStatement(clientName, month),
+            renderOrders, renderDashboard, updateInfoCounts, updateNavBadges,
+            () => _afterDlPayPatch(o.id, o),
+            _refreshUnpaidIfActive, _refreshSettlementIfActive
+        );
     }
 }
 
@@ -1591,10 +1597,11 @@ async function _doBulkPay(selectedMethod) {
         await firebase.database().ref('/').update(fbBulk).catch(e => console.warn('[공유전체완납]', e));
     }
     _saveAndFlush();
-    showClientStatement(clientName, month);
-    renderOrders(); renderDashboard(); updateInfoCounts(); updateNavBadges();
-    _refreshUnpaidIfActive();
-    _refreshSettlementIfActive();
+    _safeRefresh(
+        () => showClientStatement(clientName, month),
+        renderOrders, renderDashboard, updateInfoCounts, updateNavBadges,
+        _refreshUnpaidIfActive, _refreshSettlementIfActive
+    );
     toast(`💚 ${unpaidList.length}건 완납 처리 완료 · ${_methodLabel(selectedMethod)}`, 'var(--green)');
     // CRM 역방향 패치 (내 전표 + 공유 전표 모두 — wsId는 crm-sync가 _sharedWsId로 판단)
     unpaidList.forEach(o => _afterDlPayPatch(o.id, o));

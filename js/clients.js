@@ -53,8 +53,8 @@ function saveClient() {
         toast('✅ 거래처 등록 완료', 'var(--green)');
     }
     cancelClientEdit();
-    saveData(true); renderClients(); renderOrders(); updateInfoCounts(); renderDashboard(); updateNavBadges(); // ★v119
-    _refreshSettlementIfActive();
+    saveData(true);
+    _safeRefresh(renderClients, renderOrders, updateInfoCounts, renderDashboard, updateNavBadges, _refreshSettlementIfActive); // ★v119
 }
 
 function cancelClientEdit() {
@@ -92,8 +92,8 @@ async function deleteClient(id) {
         : `'${c.name}'을 삭제할까요?`;
     if (!await customConfirm(msg)) return;
     clients = clients.filter(c => c.id !== id);
-    saveData(); renderClients(); updateInfoCounts(); updateNavBadges();
-    toast('🗑️ 삭제되었습니다');
+    saveData();
+    _safeRefresh(renderClients, updateInfoCounts, updateNavBadges, () => toast('🗑️ 삭제되었습니다'));
 }
 
 function toggleClientList() {
@@ -349,13 +349,13 @@ async function deleteClientWithAnim(id, wrapEl) {
         wrapEl.classList.add('card-deleting');
         setTimeout(() => {
             clients = clients.filter(c => c.id !== id);
-            saveData(); renderClients(); updateInfoCounts(); updateNavBadges();
-            toast('🗑️ 삭제되었습니다');
+            saveData();
+            _safeRefresh(renderClients, updateInfoCounts, updateNavBadges, () => toast('🗑️ 삭제되었습니다'));
         }, 350);
     } else {
         clients = clients.filter(c => c.id !== id);
-        saveData(); renderClients(); updateInfoCounts(); updateNavBadges();
-        toast('🗑️ 삭제되었습니다');
+        saveData();
+        _safeRefresh(renderClients, updateInfoCounts, updateNavBadges, () => toast('🗑️ 삭제되었습니다'));
     }
 }
 

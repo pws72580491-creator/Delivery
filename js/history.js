@@ -367,6 +367,8 @@ async function togglePaid(id) {
                         paidMethod: null, discount: null, paidMethodDetail: null,
                         crmControlled: null, dlControlled: null };
         // ★ v113 fix: 완납→미수 복귀 후 statementModal이 열려있으면 즉시 갱신
+        // ★ v130 fix: 지금 사용자가 보고 있는 화면(명세표)부터 맨 먼저, 그리고 각각 독립적으로
+        // 안전하게 갱신 — 이 중 하나가 예외를 던져도 나머지(특히 명세표)는 계속 갱신됨
         const _refreshStatement = () => {
             if (document.getElementById('statementModal')?.classList.contains('open')) {
                 const month = (o.date || '').slice(0, 7);
@@ -376,9 +378,7 @@ async function togglePaid(id) {
         if (foundToggle.isShared) {
             const ok = await _patchSharedOrder(foundToggle.sharedWsId, id, patch);
             if (ok) {
-                renderOrders(); renderDashboard(); updateInfoCounts(); updateNavBadges();
-                _refreshUnpaidIfActive(); _refreshSettlementIfActive();
-                _refreshStatement();
+                _safeRefresh(_refreshStatement, renderOrders, renderDashboard, updateInfoCounts, updateNavBadges, _refreshUnpaidIfActive, _refreshSettlementIfActive);
                 toast('🔴 미수로 변경');
                 // 공유 전표도 CRM 역방향 패치 (미수금 상태로 반영)
                 _afterDlPayPatch(id, { ...o, ...patch });
@@ -386,10 +386,8 @@ async function togglePaid(id) {
         } else {
             Object.assign(o, patch);
             _markDirtyOrder(id);
-            _saveAndFlush(); renderOrders(); renderDashboard(); updateInfoCounts(); updateNavBadges();
-            _refreshUnpaidIfActive();
-            _refreshSettlementIfActive();
-            _refreshStatement();
+            _saveAndFlush();
+            _safeRefresh(_refreshStatement, renderOrders, renderDashboard, updateInfoCounts, updateNavBadges, _refreshUnpaidIfActive, _refreshSettlementIfActive);
             toast('🔴 미수로 변경');
             _afterDlPayPatch(id, o);
         }
@@ -472,8 +470,7 @@ async function confirmQuickPayDiscount(method) {
         const ok = await _patchSharedOrder(foundDisc.sharedWsId, orderId, patch);
         if (ok) {
             closeQuickPay(true);
-            renderOrders(); renderDashboard(); updateInfoCounts(); updateNavBadges();
-            _refreshUnpaidIfActive(); _refreshSettlementIfActive();
+            _safeRefresh(renderOrders, renderDashboard, updateInfoCounts, updateNavBadges, _refreshUnpaidIfActive, _refreshSettlementIfActive);
             toast(msg, 'var(--green)');
             _afterDlPayPatch(orderId, o);
         }
@@ -481,9 +478,8 @@ async function confirmQuickPayDiscount(method) {
         Object.assign(o, patch);
         _markDirtyOrder(orderId);
         closeQuickPay(true);
-        _saveAndFlush(); renderOrders(); renderDashboard(); updateInfoCounts(); updateNavBadges();
-        _refreshUnpaidIfActive();
-        _refreshSettlementIfActive();
+        _saveAndFlush();
+        _safeRefresh(renderOrders, renderDashboard, updateInfoCounts, updateNavBadges, _refreshUnpaidIfActive, _refreshSettlementIfActive);
         toast(msg, 'var(--green)');
         _afterDlPayPatch(orderId, o);
     }
@@ -531,8 +527,7 @@ async function confirmQuickPay(method) {
         const ok = await _patchSharedOrder(foundCqp.sharedWsId, orderId, patch);
         if (ok) {
             closeQuickPay(true);
-            renderOrders(); renderDashboard(); updateInfoCounts(); updateNavBadges();
-            _refreshUnpaidIfActive(); _refreshSettlementIfActive();
+            _safeRefresh(renderOrders, renderDashboard, updateInfoCounts, updateNavBadges, _refreshUnpaidIfActive, _refreshSettlementIfActive);
             toast(label, 'var(--green)');
             // 공유 전표도 CRM 역방향 패치 (wsId는 crm-sync가 _sharedWsId로 판단)
             _afterDlPayPatch(orderId, o);
@@ -543,9 +538,8 @@ async function confirmQuickPay(method) {
         Object.assign(o, patch);
         _markDirtyOrder(orderId);
         closeQuickPay(true);
-        _saveAndFlush(); renderOrders(); renderDashboard(); updateInfoCounts(); updateNavBadges();
-        _refreshUnpaidIfActive();
-        _refreshSettlementIfActive();
+        _saveAndFlush();
+        _safeRefresh(renderOrders, renderDashboard, updateInfoCounts, updateNavBadges, _refreshUnpaidIfActive, _refreshSettlementIfActive);
         toast(label, 'var(--green)');
         _afterDlPayPatch(orderId, o);
     }
@@ -556,9 +550,8 @@ function toggleVoidOrder(id) {
     if (!o) return;
     o.isVoid = !o.isVoid;
     _markDirtyOrder(id); // delta sync 마킹
-    saveData(); renderOrders(); renderDashboard(); updateInfoCounts(); updateNavBadges();
-    _refreshUnpaidIfActive();
-    _refreshSettlementIfActive();
+    saveData();
+    _safeRefresh(renderOrders, renderDashboard, updateInfoCounts, updateNavBadges, _refreshUnpaidIfActive, _refreshSettlementIfActive);
     toast(o.isVoid ? '👤 타인거래로 변경 — 재고 차감 미반영' : '↩ 내 거래로 변경 — 재고는 수동 확인 필요', o.isVoid ? 'var(--orange)' : 'var(--green)');
 }
 
@@ -666,10 +659,8 @@ async function deleteOrder(id) {
 
     orders = orders.filter(o=>o.id!==id);
     _markDeletedOrder(id); // delta sync 마킹
-    saveData(); renderOrders(); updateInfoCounts(); renderDashboard(); updateNavBadges();
-    _refreshUnpaidIfActive();
-    _refreshStockIfActive();
-    _refreshSettlementIfActive();
+    saveData();
+    _safeRefresh(renderOrders, updateInfoCounts, renderDashboard, updateNavBadges, _refreshUnpaidIfActive, _refreshStockIfActive, _refreshSettlementIfActive);
     toast('🗑️ 전표 삭제 완료');
 }
 
@@ -941,17 +932,15 @@ async function saveOrderEdit() {
                 saveData(true); // ★ 재고 변경분을 내 로컬/Firebase에 저장
                 _refreshStockIfActive();
             }
-            renderOrders();
-            renderDashboard();
-            updateInfoCounts();
-            updateNavBadges();
-            _refreshUnpaidIfActive();
-            _refreshSettlementIfActive();
-            if (document.getElementById('statementModal')?.classList.contains('open')) {
-                showClientStatement(o.clientName, (patch.date || o.date).slice(0, 7));
-            }
             closeModal('orderEditModal');
-            toast('✅ 공유 납품 내역이 수정되었습니다', 'var(--green)');
+            // ★ v130 fix: 렌더/갱신 체인 중 하나가 던지면 뒤쪽(특히 명세표 갱신·완료 토스트)이
+            // 통째로 실행 안 되던 문제 — 명세표 갱신을 맨 앞으로, 전부 독립 실행으로 분리.
+            _safeRefresh(
+                () => { if (document.getElementById('statementModal')?.classList.contains('open')) showClientStatement(o.clientName, (patch.date || o.date).slice(0, 7)); },
+                renderOrders, renderDashboard, updateInfoCounts, updateNavBadges,
+                _refreshUnpaidIfActive, _refreshSettlementIfActive,
+                () => toast('✅ 공유 납품 내역이 수정되었습니다', 'var(--green)')
+            );
         }
         return;
     }
@@ -1056,25 +1045,22 @@ async function saveOrderEdit() {
     items.forEach(it => { if (it.price > 0) prices[it.name] = it.price; });
 
     saveData();
-    renderOrders();
-    renderDashboard();
-    updateInfoCounts();
-    updateNavBadges();
-    updateItemDatalist(o.clientId || '');
-    _refreshUnpaidIfActive();
-    _refreshStockIfActive();
-    _refreshSettlementIfActive();
-    // 명세표가 열려 있으면 자동 갱신
-    if (document.getElementById('statementModal')?.classList.contains('open')) {
-        showClientStatement(o.clientName, o.date.slice(0, 7));
-    }
     closeModal('orderEditModal');
-    const voidMsg = newIsVoid !== wasVoid
-        ? (newIsVoid ? ' · 👤 타인거래로 변경' : ' · ↩ 내거래로 변경')
-        : '';
-    toast(_autoCompleted
-        ? '💚 수정 완료 — 단가 감소로 완납 처리되었습니다' + voidMsg
-        : '✅ 납품 내역이 수정되었습니다' + voidMsg, 'var(--green)');
+    // ★ v130 fix: 같은 이유 — 명세표 갱신을 맨 앞으로, 전부 독립 실행으로 분리
+    _safeRefresh(
+        () => { if (document.getElementById('statementModal')?.classList.contains('open')) showClientStatement(o.clientName, o.date.slice(0, 7)); },
+        renderOrders, renderDashboard, updateInfoCounts, updateNavBadges,
+        () => updateItemDatalist(o.clientId || ''),
+        _refreshUnpaidIfActive, _refreshStockIfActive, _refreshSettlementIfActive,
+        () => {
+            const voidMsg = newIsVoid !== wasVoid
+                ? (newIsVoid ? ' · 👤 타인거래로 변경' : ' · ↩ 내거래로 변경')
+                : '';
+            toast(_autoCompleted
+                ? '💚 수정 완료 — 단가 감소로 완납 처리되었습니다' + voidMsg
+                : '✅ 납품 내역이 수정되었습니다' + voidMsg, 'var(--green)');
+        }
+    );
 }
 
 function showOrderDetail(id) {
