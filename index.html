@@ -11,7 +11,7 @@
     <meta name="apple-mobile-web-app-title" content="납품관리">
     <link rel="apple-touch-icon" href="./icon-192.png">
     <link rel="manifest" href="./manifest.json">
-    <title>납품 관리 Pro v133</title>
+    <title>납품 관리 Pro v135</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js" defer></script>
@@ -38,7 +38,7 @@
             <div class="logo-icon">📦</div>
             <div>
                 <div class="logo-text">납품 관리 Pro</div>
-                <div class="logo-sub">v133 · PWA 앱 설치 지원</div>
+                <div class="logo-sub">v135 · PWA 앱 설치 지원</div>
             </div>
         </div>
         <div class="header-btns">
@@ -621,7 +621,7 @@
     <div class="card">
         <div class="card-title">앱 정보</div>
         <div style="font-size:13px;color:var(--text2);line-height:2;margin-bottom:12px;">
-            버전: <strong style="color:var(--accent);">v133</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
+            버전: <strong style="color:var(--accent);">v135</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
             거래처: <span id="infoClients">0</span>개 &nbsp;·&nbsp;
             납품내역: <span id="infoOrders">0</span>건
         </div>
@@ -635,7 +635,15 @@
             <div id="changelogList" style="display:flex;flex-direction:column;gap:6px;">
                 <!-- 현재 버전 -->
                 <div class="changelog-item">
-                    <span class="changelog-ver" style="color:var(--green);">v133</span>
+                    <span class="changelog-ver" style="color:var(--green);">v135</span>
+                    <span class="changelog-desc">거래명세표 팝업 — 전표 행마다 있던 건별 "계산서" 체크박스 열을 제거하고, 거래처명 옆 "계산서 일괄" 체크박스만 남겼습니다. 화면이 한 열 줄어들어 더 깔끔해졌고, 계산서 발급 여부는 일괄 체크박스로 한 번에 체크·해제합니다.</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v134</span>
+                    <span class="changelog-desc">거래명세표 팝업 — 거래처명 옆에 "계산서 일괄" 체크박스 추가. 지금 명세표에 보이는 전표(당월 + 미수 이월) 전체를 한 번에 체크/해제 가능 — 일부만 체크됐으면 눌렀을 때 전체 체크로, 전부 체크됐으면 전체 해제로 동작. 일부만 체크된 상태에선 체크박스가 반체크(－) 표시로 나타남. 건별 체크박스는 그대로 남아있어서 일부만 발급된 경우도 세밀하게 조정 가능.</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v133</span>
                     <span class="changelog-desc">거래명세표 팝업에 "계산서" 체크박스 열 추가 — 각 전표 행에서 세금계산서 발급 여부를 체크로 기록 가능(결제 상태와는 무관한 별도 기록). 당월 내역·전월 이월 내역 둘 다 적용, 공유(대납) 전표도 동일하게 동작.</span>
                 </div>
                 <div class="changelog-item">
