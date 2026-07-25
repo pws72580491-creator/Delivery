@@ -534,7 +534,7 @@ async function showClientStatement(clientName, month) {
         const carryRemain  = carryPartial ? o.total-(o.paidAmount||0) : 0;
         const carryPartialRow = carryPartial ? `
         <tr style="background:rgba(245,158,11,0.08);">
-            <td colspan="5" style="padding:5px 8px 7px 22px;border-top:none;">
+            <td colspan="4" style="padding:5px 8px 7px 22px;border-top:none;">
                 <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
                     <span style="font-size:10px;font-weight:700;color:#60a5fa;letter-spacing:.5px;">💳 부분 수금</span>
                     <span style="font-size:12px;font-weight:800;color:#60a5fa;">${fmt(o.paidAmount)}원</span>
@@ -552,7 +552,6 @@ async function showClientStatement(clientName, month) {
             <td style="font-size:11px;">${_fmtItems(o)}</td>
             <td class="text-right" style="color:var(--orange);" onclick="event.stopPropagation();_toggleAccum('carry_${ci}',this.closest('tr'))" title="탭하여 이월 누계 보기">${fmt(o.total)}원${carryPartial?`<br><small style="color:#60a5fa;">수금 ${fmt(o.paidAmount)}원</small>`:''}</td>
             <td class="text-center"><span class="pay-badge unpaid" style="cursor:default;font-size:9px;">이월</span></td>
-            <td class="text-center" onclick="event.stopPropagation()"><input type="checkbox" ${o.invoiceIssued?'checked':''} onclick="event.stopPropagation();toggleInvoiceIssued('${o.id||''}','${escapeAttr(clientName)}','${escapeAttr(month)}')" title="계산서 발급 여부" style="width:17px;height:17px;cursor:pointer;"></td>
         </tr>${carryPartialRow}`;
     }).join('');
     // ★ v116: 날짜/금액 셀 클릭 시 해당 날짜까지 누계 토글 (전역 Map 사용)
@@ -583,7 +582,7 @@ async function showClientStatement(clientName, month) {
         // 부분 결제 세부 행
         const partialDetailRow = partial ? `
         <tr style="background:rgba(59,130,246,0.06);">
-            <td colspan="5" style="padding:5px 8px 7px 22px;border-top:none;">
+            <td colspan="4" style="padding:5px 8px 7px 22px;border-top:none;">
                 <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
                     <span style="font-size:10px;font-weight:700;color:#60a5fa;letter-spacing:.5px;">💳 부분 수금</span>
                     <span style="font-size:12px;font-weight:800;color:#60a5fa;">${fmt(o.paidAmount)}원</span>
@@ -611,12 +610,17 @@ async function showClientStatement(clientName, month) {
             <td style="font-size:11px;">${_fmtItems(o)}${sharedBadge}${returnBadge}</td>
             <td class="text-right" onclick="event.stopPropagation();_toggleAccum(${idx},this.closest('tr'))" title="탭하여 누계 보기" style="cursor:pointer;">${fmt(o.total)}원</td>
             <td class="text-center">${statBadge}</td>
-            <td class="text-center" onclick="event.stopPropagation()"><input type="checkbox" ${o.invoiceIssued?'checked':''} onclick="event.stopPropagation();toggleInvoiceIssued('${o.id||''}','${escapeAttr(clientName)}','${escapeAttr(month)}')" title="계산서 발급 여부" style="width:17px;height:17px;cursor:pointer;"></td>
         </tr>${partialDetailRow}`;
     }).join('');
     document.getElementById('statementContent').innerHTML = `
         <div data-client-name="${escapeAttr(clientName)}" data-month="${escapeAttr(month)}" style="margin-bottom:14px;">
-            <div style="font-size:19px;font-weight:900;margin-bottom:8px;">${escapeHtml(clientName)}</div>
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+                <div style="font-size:19px;font-weight:900;">${escapeHtml(clientName)}</div>
+                <label style="display:flex;align-items:center;gap:5px;margin-left:auto;font-size:12px;font-weight:700;color:var(--text2);cursor:pointer;white-space:nowrap;" title="현재 명세표에 보이는 전표 전체의 계산서 발급 여부를 한 번에 체크/해제">
+                    <input type="checkbox" id="statementInvoiceAllCb" onclick="toggleAllInvoiceIssued('${escapeAttr(clientName)}','${escapeAttr(month)}')" style="width:17px;height:17px;cursor:pointer;">
+                    계산서 일괄
+                </label>
+            </div>
             <div style="display:flex;align-items:center;justify-content:center;gap:4px;position:relative;">
                 <button onclick="_shiftStatementMonth(-1)" aria-label="이전 달" style="width:34px;height:34px;flex-shrink:0;border-radius:9px;border:1px solid var(--border);background:var(--surf2);color:var(--text2);font-size:18px;font-weight:700;cursor:pointer;">‹</button>
                 <label for="statementMonthPicker" onclick="_openStatementMonthPicker()" style="flex:1;text-align:center;font-size:17px;font-weight:900;white-space:nowrap;cursor:pointer;padding:6px 2px;border-radius:9px;" title="탭하여 월 선택">
@@ -675,10 +679,10 @@ async function showClientStatement(clientName, month) {
         })()}
         <div style="overflow-x:auto;">
         <table class="settle-table" style="min-width:300px;">
-            <thead><tr><th>날짜</th><th>품목</th><th class="text-right">금액</th><th class="text-center">상태</th><th class="text-center">계산서</th></tr></thead>
+            <thead><tr><th>날짜</th><th>품목</th><th class="text-right">금액</th><th class="text-center">상태</th></tr></thead>
             <tbody>
                 ${carryRows}
-                ${monthRows||'<tr><td colspan="5" style="text-align:center;color:var(--text3);padding:14px;">당월 내역 없음</td></tr>'}
+                ${monthRows||'<tr><td colspan="4" style="text-align:center;color:var(--text3);padding:14px;">당월 내역 없음</td></tr>'}
             </tbody>
         </table>
         </div>
@@ -697,24 +701,39 @@ async function showClientStatement(clientName, month) {
         <button class="btn-bulk-pay" onclick="bulkPayClient('${escapeAttr(clientName)}','${escapeAttr(month)}')">
             💚 미수금 전체 완납 (${fmt(grandUnpaid)}원)
         </button>` : `<div style="text-align:center;color:var(--green);font-weight:700;margin-top:10px;font-size:13px;">✅ 완납 완료</div>`}`;
+    // 계산서 일괄 체크박스 — 현재 명세표에 보이는 전표 기준으로 전체/부분/전체해제 상태 반영
+    const _invoiceTargets = [...carryOrders, ...filt];
+    const _invoiceAllCb = document.getElementById('statementInvoiceAllCb');
+    if (_invoiceAllCb && _invoiceTargets.length) {
+        const _issuedCnt = _invoiceTargets.filter(o => o.invoiceIssued).length;
+        _invoiceAllCb.checked = _issuedCnt === _invoiceTargets.length;
+        _invoiceAllCb.indeterminate = _issuedCnt > 0 && _issuedCnt < _invoiceTargets.length;
+    }
     openModal('statementModal');
 }
 
-// 거래명세표의 "계산서" 체크박스 — 세금계산서 발급 여부 표시용 (결제 상태와 무관, 단순 기록)
-async function toggleInvoiceIssued(orderId, clientName, month) {
-    const found = _findOrderAnywhere(orderId);
-    if (!found) return;
-    const o = found.order;
-    const patch = { invoiceIssued: !o.invoiceIssued };
-    if (found.isShared) {
-        const ok = await _patchSharedOrder(found.sharedWsId, orderId, patch);
-        if (ok) _safeRefresh(() => showClientStatement(clientName, month), renderOrders);
-    } else {
-        Object.assign(o, patch);
-        _markDirtyOrder(orderId);
-        _saveAndFlush();
-        _safeRefresh(() => showClientStatement(clientName, month), renderOrders);
+// "계산서 일괄" 체크박스 — 지금 명세표에 보이는 전표(당월 + 미수 이월) 전체를 한 번에 체크/해제
+// 일부만 체크된 상태에서 누르면 전체 체크로, 전부 체크된 상태에서 누르면 전체 해제로 동작
+async function toggleAllInvoiceIssued(clientName, month) {
+    const monthStart = month + '-01';
+    const allOrdersForBulk = [...orders, ..._sharedOrdersCache];
+    const targets = allOrdersForBulk.filter(o =>
+        o.clientName === clientName &&
+        (o.date?.startsWith(month) || (o.date < monthStart && !o.isPaid))
+    );
+    if (!targets.length) return;
+    const newVal = !targets.every(o => o.invoiceIssued);
+    const patch = { invoiceIssued: newVal };
+    for (const o of targets) {
+        if (o._sharedWsId) {
+            await _patchSharedOrder(o._sharedWsId, o.id, patch);
+        } else {
+            Object.assign(o, patch);
+            _markDirtyOrder(o.id);
+        }
     }
+    _saveAndFlush();
+    _safeRefresh(() => showClientStatement(clientName, month), renderOrders);
 }
 
 // ─── 거래처 명세표 JPG 저장 ───
