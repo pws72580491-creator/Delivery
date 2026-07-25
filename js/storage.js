@@ -108,6 +108,7 @@ function _minifyOrder(o) {
     if (o.paidNote)    r.paidNote   = o.paidNote;
     if (o.discount)    r.discount   = o.discount;  // 할인 완납 금액
     if (o.isVoid)      r.isVoid     = true;         // 타인거래
+    if (o.invoiceIssued) r.invoiceIssued = true;    // 계산서 발급 여부 (거래명세표 체크박스)
     if (o.delegatedBy) r.delegatedBy = o.delegatedBy; // 대납자 ID (A 앱에서 매출 제외용)
     if (o.crmControlled) r.crmControlled = true; // CRM 결제 우선권 플래그
     const ua = _compactTs(o.updatedAt);
