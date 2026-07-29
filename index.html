@@ -11,7 +11,7 @@
     <meta name="apple-mobile-web-app-title" content="납품관리">
     <link rel="apple-touch-icon" href="./icon-192.png">
     <link rel="manifest" href="./manifest.json">
-    <title>납품 관리 Pro v135</title>
+    <title>납품 관리 Pro v136</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js" defer></script>
@@ -38,7 +38,7 @@
             <div class="logo-icon">📦</div>
             <div>
                 <div class="logo-text">납품 관리 Pro</div>
-                <div class="logo-sub">v135 · PWA 앱 설치 지원</div>
+                <div class="logo-sub">v136 · PWA 앱 설치 지원</div>
             </div>
         </div>
         <div class="header-btns">
@@ -621,7 +621,7 @@
     <div class="card">
         <div class="card-title">앱 정보</div>
         <div style="font-size:13px;color:var(--text2);line-height:2;margin-bottom:12px;">
-            버전: <strong style="color:var(--accent);">v135</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
+            버전: <strong style="color:var(--accent);">v136</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
             거래처: <span id="infoClients">0</span>개 &nbsp;·&nbsp;
             납품내역: <span id="infoOrders">0</span>건
         </div>
@@ -635,7 +635,11 @@
             <div id="changelogList" style="display:flex;flex-direction:column;gap:6px;">
                 <!-- 현재 버전 -->
                 <div class="changelog-item">
-                    <span class="changelog-ver" style="color:var(--green);">v135</span>
+                    <span class="changelog-ver" style="color:var(--green);">v136</span>
+                    <span class="changelog-desc">재고 품목 단위 정리 — 기타 품목(이른아침·유정란·구운란 등 박스 단위로 등록되던 품목들)의 단위 표시를 "박스"에서 "개"로 통일했습니다. 기존에 등록된 품목은 표시 라벨만 바뀌고 재고 수량 숫자는 그대로 유지되며(예: "30 박스" → "30 개"), 이후 새로 등록하는 기타 품목도 기본 단위가 "개"로 등록됩니다. 앱을 한 번 열면 자동 적용되는 1회성 정리라 별도 조작은 필요 없습니다.</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v135</span>
                     <span class="changelog-desc">거래명세표 팝업 — 전표 행마다 있던 건별 "계산서" 체크박스 열을 제거하고, 거래처명 옆 "계산서 일괄" 체크박스만 남겼습니다. 화면이 한 열 줄어들어 더 깔끔해졌고, 계산서 발급 여부는 일괄 체크박스로 한 번에 체크·해제합니다.</span>
                 </div>
                 <div class="changelog-item">

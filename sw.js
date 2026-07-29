@@ -1,4 +1,4 @@
-const CACHE_NAME = 'delivery-pro-v135';
+const CACHE_NAME = 'delivery-pro-v136';
 const ASSETS = [
   '/',
   '/index.html',
