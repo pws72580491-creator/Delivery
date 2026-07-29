@@ -52,10 +52,10 @@ renderClients = _safeWrap(renderClients, function() { _clientSwipeInited = false
 
 // ─── 달걀 품목 초기 등록 ───
 const EGG_ITEMS_DEFAULT = [
-    { name:'왕란', unit:'판', low:5, danger:2, note:'왕란' },
-    { name:'특란', unit:'판', low:5, danger:2, note:'특란' },
-    { name:'대란', unit:'판', low:5, danger:2, note:'대란' },
-    { name:'중란', unit:'판', low:5, danger:2, note:'중란' },
+    { name:'왕란', unit:'개', low:5, danger:2, note:'왕란' },
+    { name:'특란', unit:'개', low:5, danger:2, note:'특란' },
+    { name:'대란', unit:'개', low:5, danger:2, note:'대란' },
+    { name:'중란', unit:'개', low:5, danger:2, note:'중란' },
 ];
 
 const ETC_ITEMS_DEFAULT = [
