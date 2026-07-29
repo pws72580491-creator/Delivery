@@ -35,6 +35,21 @@ function normStock(s) {
     };
 }
 
+// ─── 마이그레이션: 박스 단위 → 개 단위 (표시 라벨만 변경, 수량은 그대로 유지) ───
+// v136에서 1회만 실행. 이후 사용자가 특정 품목에 '박스'를 다시 입력하면 그대로 유지됨.
+(function migrateStockUnitBoxToPiece() {
+    if (localStorage.getItem('stockUnitMigV136')) return;
+    let changed = false;
+    stockItems.forEach(si => {
+        if (si && si.unit === '박스') { si.unit = '개'; changed = true; }
+    });
+    localStorage.setItem('stockUnitMigV136', '1');
+    if (changed) {
+        saveData();
+        if (typeof _markDirty === 'function') _markDirty('stock');
+    }
+})();
+
 // 재고 상태 등급
 
 function stockLevel(si) {
