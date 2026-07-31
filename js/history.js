@@ -257,7 +257,8 @@ function renderOrders() {
                 .sort((a, b) => (b.date||'').localeCompare(a.date||'') || (b.id||'').localeCompare(a.id||''))
                 [0];
             if (prevMemo) {
-                memoBodyHtml = `<div class="order-memo-body order-memo-prev" style="display:flex;align-items:flex-start;justify-content:space-between;gap:6px;">
+                const prevPriority = memoPriorityLevel(prevMemo);
+                memoBodyHtml = `<div class="order-memo-body order-memo-prev priority-${prevPriority}" style="display:flex;align-items:flex-start;justify-content:space-between;gap:6px;">
                     <div onclick="openMemoPopup('${oId}')" style="flex:1;min-width:0;">
                         <span class="order-memo-prev-label">이전 메모 · ${prevMemo.date}</span>${escapeHtml(prevMemo.note)}
                     </div>
