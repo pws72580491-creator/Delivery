@@ -336,21 +336,7 @@ function renderOrders() {
     }
     el.innerHTML = groups.map(g => `
         <div style="margin-bottom:10px;">
-            <div style="display:flex;align-items:center;justify-content:space-between;
-                        padding:8px 13px;background:var(--surf2);
-                        border:1px solid var(--border);border-bottom:2px solid var(--accent)44;
-                        border-radius:10px 10px 0 0;">
-                <div style="display:flex;align-items:center;gap:7px;">
-                    <span style="font-size:13px;font-weight:800;color:var(--text1);">${highlight(g.name,q)}</span>
-                    <span style="font-size:11px;color:var(--text3);background:var(--surf3);padding:1px 6px;border-radius:20px;">${g.orders.length}건</span>
-                </div>
-                <div style="text-align:right;line-height:1.5;">
-                    <div style="font-size:12px;font-weight:700;color:var(--accent);">${fmt(g.total)}원</div>
-                    ${g.unpaid>0?`<div style="font-size:11px;color:var(--red);font-weight:700;">미수 ${fmt(g.unpaid)}원</div>`:''}
-                    <div style="font-size:10px;color:var(--text3);">최근납품 ${escapeHtml(g.lastDate)}</div>
-                </div>
-            </div>
-            <div style="border:1px solid var(--border);border-top:none;border-radius:0 0 10px 10px;overflow:hidden;">
+            <div style="border:1px solid var(--border);border-radius:10px;overflow:hidden;">
                 ${g.orders.map(orderCardHTML).join('')}
             </div>
         </div>`).join('');
