@@ -419,11 +419,8 @@ body.light .stat-card.orange .stat-value { color:#a07010; }
 .order-memo-body.priority-1 { background:var(--blue-dim); border-left-color:var(--blue); color:var(--blue); }
 .order-memo-body.priority-3 { background:var(--red-dim); border-left-color:var(--red); color:var(--red); }
 
-/* 이전 메모 (현재 카드에 메모 없을 때) */
+/* 이전 메모 (현재 카드에 메모 없을 때) — 색은 저장 당시 중요도(priority-1/2/3)를 그대로 따르고, 흐림 효과로만 "이전"임을 표시 */
 .order-memo-prev {
-    background:var(--surf3);
-    border-left-color:var(--text3);
-    color:var(--text2);
     opacity:.85;
     white-space:normal;
 }

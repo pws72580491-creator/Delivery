@@ -11,7 +11,7 @@
     <meta name="apple-mobile-web-app-title" content="납품관리">
     <link rel="apple-touch-icon" href="./icon-192.png">
     <link rel="manifest" href="./manifest.json">
-    <title>납품 관리 Pro v138</title>
+    <title>납품 관리 Pro v139</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js" defer></script>
@@ -38,7 +38,7 @@
             <div class="logo-icon">📦</div>
             <div>
                 <div class="logo-text">납품 관리 Pro</div>
-                <div class="logo-sub">v138 · PWA 앱 설치 지원</div>
+                <div class="logo-sub">v139 · PWA 앱 설치 지원</div>
             </div>
         </div>
         <div class="header-btns">
@@ -621,7 +621,7 @@
     <div class="card">
         <div class="card-title">앱 정보</div>
         <div style="font-size:13px;color:var(--text2);line-height:2;margin-bottom:12px;">
-            버전: <strong style="color:var(--accent);">v138</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
+            버전: <strong style="color:var(--accent);">v139</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
             거래처: <span id="infoClients">0</span>개 &nbsp;·&nbsp;
             납품내역: <span id="infoOrders">0</span>건
         </div>
@@ -635,7 +635,11 @@
             <div id="changelogList" style="display:flex;flex-direction:column;gap:6px;">
                 <!-- 현재 버전 -->
                 <div class="changelog-item">
-                    <span class="changelog-ver" style="color:var(--green);">v138</span>
+                    <span class="changelog-ver" style="color:var(--green);">v139</span>
+                    <span class="changelog-desc">이전 메모 색상 수정 — 메모가 없을 때 표시되는 "이전 메모"가 무조건 회색으로만 나오던 것을, 그 메모를 저장할 당시 지정한 중요도 색(🔵낮음/🟠보통/🔴높음)이 그대로 나오도록 고쳤습니다. "이전 메모"라는 흐림 효과만 살짝 남아있고, 색 자체는 처음 저장했을 때와 동일합니다.</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v138</span>
                     <span class="changelog-desc">내역 탭 — 거래처순/최근거래순 정렬 시 각 거래처 묶음 위에 있던 요약 바(거래처명·건수·합계·미수·최근납품)를 제거했습니다. 같은 정보가 아래 각 전표 카드에도 이미 표시되고 있어 중복이었습니다. 전표는 그대로 거래처별로 묶여서 보입니다.</span>
                 </div>
                 <div class="changelog-item">
