@@ -11,7 +11,7 @@
     <meta name="apple-mobile-web-app-title" content="납품관리">
     <link rel="apple-touch-icon" href="./icon-192.png">
     <link rel="manifest" href="./manifest.json">
-    <title>납품 관리 Pro v139</title>
+    <title>납품 관리 Pro v140</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js" defer></script>
@@ -38,7 +38,7 @@
             <div class="logo-icon">📦</div>
             <div>
                 <div class="logo-text">납품 관리 Pro</div>
-                <div class="logo-sub">v139 · PWA 앱 설치 지원</div>
+                <div class="logo-sub">v140 · PWA 앱 설치 지원</div>
             </div>
         </div>
         <div class="header-btns">
@@ -244,6 +244,13 @@
                 <span class="hist-sum-method" id="hstatCash">💵 0원</span>
                 <span class="hist-sum-method" id="hstatTransfer">🏦 0원</span>
                 <span class="hist-sum-method" id="hstatMixed" style="display:none;color:#a78bfa;">💳 0원</span>
+            </div>
+            <div class="hist-sum-recov" id="hstatRecov" style="display:none;">
+                <div class="hist-sum-recov-label">↩️ 미수금 회수 <span id="hstatRecovAmt">0원</span></div>
+                <div class="hist-sum-breakdown">
+                    <span class="hist-sum-method" id="hstatRecovCash">💵 0원</span>
+                    <span class="hist-sum-method" id="hstatRecovTransfer">🏦 0원</span>
+                </div>
             </div>
         </div>
         <div class="hist-sum-card" style="background:linear-gradient(135deg,#ef4444,#dc2626);">
@@ -621,7 +628,7 @@
     <div class="card">
         <div class="card-title">앱 정보</div>
         <div style="font-size:13px;color:var(--text2);line-height:2;margin-bottom:12px;">
-            버전: <strong style="color:var(--accent);">v139</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
+            버전: <strong style="color:var(--accent);">v140</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
             거래처: <span id="infoClients">0</span>개 &nbsp;·&nbsp;
             납품내역: <span id="infoOrders">0</span>건
         </div>
@@ -635,7 +642,11 @@
             <div id="changelogList" style="display:flex;flex-direction:column;gap:6px;">
                 <!-- 현재 버전 -->
                 <div class="changelog-item">
-                    <span class="changelog-ver" style="color:var(--green);">v139</span>
+                    <span class="changelog-ver" style="color:var(--green);">v140</span>
+                    <span class="changelog-desc">내역 탭 "수금액" 카드에 "↩️ 미수금 회수" 항목 추가 — 기존 현금/이체 구분은 선택한 기간의 납품일 기준이라, 예전 미수금을 오늘 현금으로 받아도 반영되지 않던 것을 보완했습니다. 납품일은 선택 기간 밖이지만 결제일이 선택 기간 안인 건만 따로 모아 현금/비현금으로 나눠 추가 표시하며, 기존 수금액과 중복 집계되지 않습니다. 회수 건이 없으면 표시 안 함.</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v139</span>
                     <span class="changelog-desc">이전 메모 색상 수정 — 메모가 없을 때 표시되는 "이전 메모"가 무조건 회색으로만 나오던 것을, 그 메모를 저장할 당시 지정한 중요도 색(🔵낮음/🟠보통/🔴높음)이 그대로 나오도록 고쳤습니다. "이전 메모"라는 흐림 효과만 살짝 남아있고, 색 자체는 처음 저장했을 때와 동일합니다.</span>
                 </div>
                 <div class="changelog-item">

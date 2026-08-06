@@ -1725,6 +1725,14 @@ button, a, input, select, textarea,
     background:rgba(255,255,255,.15); border-radius:6px;
     padding:2px 7px; white-space:nowrap;
 }
+/* 수금액 카드 내 "미수금 회수" 추가 표시 — v140 */
+.hist-sum-recov {
+    margin-top:6px; padding-top:6px;
+    border-top:1px dashed rgba(255,255,255,.35);
+}
+.hist-sum-recov-label {
+    font-size:10px; font-weight:700; opacity:.9; margin-bottom:3px;
+}
 
 
 /* ═══════════════════════════════════════
