@@ -207,6 +207,42 @@ function renderOrders() {
         }
     }
 
+    // 이 기간 중 회수된 "과거" 미수금 (납품일은 선택 기간 밖 · 결제일만 선택 기간 안) — 위 수금액과 이중집계 안 되게 분리 집계
+    let recovCash = 0, recovTransfer = 0, recovOther = 0, recovMixed = 0;
+    allOrders.forEach(o => {
+        if (o.isVoid || !_isMine(o)) return;
+        const got = _actualPaid(o);
+        if (got <= 0 || !o.paidAt) return;
+        const orderDateInRange = (!start||o.date>=start) && (!end||o.date<=end);
+        if (orderDateInRange) return; // 이미 위 수금액에 포함됨
+        const paidDate = o.paidAt.slice(0,10);
+        const paidInRange = (!start||paidDate>=start) && (!end||paidDate<=end);
+        if (!paidInRange) return;
+        if (!(matchSearch(o.clientName||'',q) || (o.items||[]).some(i=>matchSearch(i.name,q)))) return;
+        if (o.paidMethod === 'mixed') {
+            if (o.paidMethodDetail) {
+                recovTransfer += (o.paidMethodDetail.transfer || 0);
+                recovCash     += (o.paidMethodDetail.cash     || 0);
+            } else {
+                recovMixed += got;
+            }
+        } else if (o.paidMethod === 'transfer') recovTransfer += got;
+        else if (o.paidMethod === 'other') recovOther += got;
+        else recovCash += got;
+    });
+    const recovTotal = recovCash + recovTransfer + recovOther + recovMixed;
+    const recovEl = document.getElementById('hstatRecov');
+    if (recovEl) {
+        if (recovTotal > 0) {
+            document.getElementById('hstatRecovAmt').textContent      = fmt(recovTotal) + '원';
+            document.getElementById('hstatRecovCash').textContent     = '💵 ' + fmt(recovCash) + '원';
+            document.getElementById('hstatRecovTransfer').textContent = '🏦 ' + fmt(recovTransfer + recovOther + recovMixed) + '원';
+            recovEl.style.display = 'block';
+        } else {
+            recovEl.style.display = 'none';
+        }
+    }
+
     // ── 거래 건수 위젯 업데이트 (선택된 기간 기준) ──
     _updateTodayCountWidget(filtered, start, end);
 
