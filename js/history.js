@@ -234,7 +234,6 @@ function renderOrders() {
     const recovEl = document.getElementById('hstatRecov');
     if (recovEl) {
         if (recovTotal > 0) {
-            document.getElementById('hstatRecovAmt').textContent      = fmt(recovTotal) + '원';
             document.getElementById('hstatRecovCash').textContent     = '💵 ' + fmt(recovCash) + '원';
             document.getElementById('hstatRecovTransfer').textContent = '🏦 ' + fmt(recovTransfer + recovOther + recovMixed) + '원';
             recovEl.style.display = 'block';
