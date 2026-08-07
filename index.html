@@ -11,7 +11,7 @@
     <meta name="apple-mobile-web-app-title" content="납품관리">
     <link rel="apple-touch-icon" href="./icon-192.png">
     <link rel="manifest" href="./manifest.json">
-    <title>납품 관리 Pro v142</title>
+    <title>납품 관리 Pro v143</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js" defer></script>
@@ -38,7 +38,7 @@
             <div class="logo-icon">📦</div>
             <div>
                 <div class="logo-text">납품 관리 Pro</div>
-                <div class="logo-sub">v142 · PWA 앱 설치 지원</div>
+                <div class="logo-sub">v143 · PWA 앱 설치 지원</div>
             </div>
         </div>
         <div class="header-btns">
@@ -628,7 +628,7 @@
     <div class="card">
         <div class="card-title">앱 정보</div>
         <div style="font-size:13px;color:var(--text2);line-height:2;margin-bottom:12px;">
-            버전: <strong style="color:var(--accent);">v142</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
+            버전: <strong style="color:var(--accent);">v143</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
             거래처: <span id="infoClients">0</span>개 &nbsp;·&nbsp;
             납품내역: <span id="infoOrders">0</span>건
         </div>
@@ -642,7 +642,11 @@
             <div id="changelogList" style="display:flex;flex-direction:column;gap:6px;">
                 <!-- 현재 버전 -->
                 <div class="changelog-item">
-                    <span class="changelog-ver" style="color:var(--green);">v142</span>
+                    <span class="changelog-ver" style="color:var(--green);">v143</span>
+                    <span class="changelog-desc">재고 조정 팝업 — "적용"/"취소" 버튼 위치를 바꿨습니다. 취소가 왼쪽, 적용이 오른쪽으로 옵니다.</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v142</span>
                     <span class="changelog-desc">내역 탭 "수금액" 카드에 "↩️ 미수금 회수" 항목 추가 — 기존 총납품액/수금액/미수금 계산(선택 기간의 납품일 기준)은 그대로 두고, 옛날 미수금을 이 기간 중 실제로 받은 몫만 현금/비현금 두 줄로 따로 보여줍니다. 이중집계 없음, 회수 건이 없으면 표시 안 함. (내부 코드도 정리: 미사용 세부 변수 제거)</span>
                 </div>
                 <div class="changelog-item">
@@ -1354,8 +1358,8 @@
       <input type="text" class="form-input" id="saReason" placeholder="정기 입고·반품·재고실사">
     </div>
     <div style="display:flex;gap:8px;">
-      <button class="btn btn-primary" style="flex:2;" onclick="applyAdj()">✅ 적용</button>
       <button class="btn btn-ghost"   style="flex:1;" onclick="closeModal('stockAdjModal')">취소</button>
+      <button class="btn btn-primary" style="flex:2;" onclick="applyAdj()">✅ 적용</button>
     </div>
   </div>
 </div>
