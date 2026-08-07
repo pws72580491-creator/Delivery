@@ -208,7 +208,7 @@ function renderOrders() {
     }
 
     // 이 기간 중 회수된 "과거" 미수금 (납품일은 선택 기간 밖 · 결제일만 선택 기간 안) — 위 수금액과 이중집계 안 되게 분리 집계
-    let recovCash = 0, recovTransfer = 0, recovOther = 0, recovMixed = 0;
+    let recovCash = 0, recovNonCash = 0;
     allOrders.forEach(o => {
         if (o.isVoid || !_isMine(o)) return;
         const got = _actualPaid(o);
@@ -219,23 +219,20 @@ function renderOrders() {
         const paidInRange = (!start||paidDate>=start) && (!end||paidDate<=end);
         if (!paidInRange) return;
         if (!(matchSearch(o.clientName||'',q) || (o.items||[]).some(i=>matchSearch(i.name,q)))) return;
-        if (o.paidMethod === 'mixed') {
-            if (o.paidMethodDetail) {
-                recovTransfer += (o.paidMethodDetail.transfer || 0);
-                recovCash     += (o.paidMethodDetail.cash     || 0);
-            } else {
-                recovMixed += got;
-            }
-        } else if (o.paidMethod === 'transfer') recovTransfer += got;
-        else if (o.paidMethod === 'other') recovOther += got;
-        else recovCash += got;
+        if (o.paidMethod === 'mixed' && o.paidMethodDetail) {
+            recovCash    += (o.paidMethodDetail.cash     || 0);
+            recovNonCash += (o.paidMethodDetail.transfer || 0);
+        } else if (o.paidMethod === 'transfer' || o.paidMethod === 'other' || o.paidMethod === 'mixed') {
+            recovNonCash += got; // 이체 / 기타 / 구버전 mixed(상세 없음) → 비현금으로 통합
+        } else {
+            recovCash += got;
+        }
     });
-    const recovTotal = recovCash + recovTransfer + recovOther + recovMixed;
     const recovEl = document.getElementById('hstatRecov');
     if (recovEl) {
-        if (recovTotal > 0) {
+        if (recovCash > 0 || recovNonCash > 0) {
             document.getElementById('hstatRecovCash').textContent     = '💵 ' + fmt(recovCash) + '원';
-            document.getElementById('hstatRecovTransfer').textContent = '🏦 ' + fmt(recovTransfer + recovOther + recovMixed) + '원';
+            document.getElementById('hstatRecovTransfer').textContent = '🏦 ' + fmt(recovNonCash) + '원';
             recovEl.style.display = 'block';
         } else {
             recovEl.style.display = 'none';
