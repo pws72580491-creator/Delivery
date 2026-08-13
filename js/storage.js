@@ -369,7 +369,10 @@ const debouncedSync = debounce(async () => {
         dirtySnap.forEach(id   => _dirtyOrders.add(id));
         deletedSnap.forEach(id => _deletedOrders.add(id));
         _syncGuard = false;
-        setSyncStatus('error');
+        // ★ v145 fix: 즉시 🔴 대신 다른 끊김 감지와 동일하게 🟡 재연결 중 + 15초 유예.
+        // 방금 입력한 전표는 바로 위에서 dirty set에 복원해 뒀으므로 재연결되면 자동 재시도된다 —
+        // 데이터 유실 없이 화면 표시만 다른 끊김 경로와 일관되게 맞춘다.
+        _beginErrorGrace(15000);
         return;
     }
     _withTimeout(workspaceRef.update(updates), 8000, 'orders.update')

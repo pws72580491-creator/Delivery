@@ -1005,16 +1005,16 @@ function _refreshSocket() {
         firebase.database().goOffline();
         setTimeout(() => {
             firebase.database().goOnline();
+            // ★ v110 → v145 fix: 재연결 완료 여부를 3초 만에 판단해 곧바로 🔴를 띄우던 로직 제거.
+            // 백그라운드 복귀 직후의 모바일 네트워크(특히 셀룰러)는 재연결에 3초 넘게 걸리는 일이
+            // 흔했고, 그 흔한 지연이 "몇 초면 저절로 붙는 정상 재연결"까지 🔴 동기화 오류로
+            // 잘못 표시하는 주 원인이었다(신고된 "다음 거래 입력하려 열면 오류" 증상과 일치).
+            // 이제는 .info/connected 자연 감지와 동일하게 🟡 재연결 중 + 15초 유예를 거치므로,
+            // 15초 안에만 붙으면 사용자는 🔴를 전혀 보지 않는다.
+            _intentionalDisconnect = false;
+            if (!isConnected) _beginErrorGrace(15000);
             // ★ v117: 소켓 복구 후 2초 대기 — 안정화 후 write (600ms는 너무 빨라 타임아웃 빈발)
             setTimeout(() => { if (isConnected) debouncedSync(); }, 2000);
-            // ★ v110: 일정 시간 후 플래그 해제. 그때까지도 재연결 안 됐다면 진짜 문제이므로
-            // 정상적으로 오류 상태를 표시 (자가진단 뒤에 숨겨 영영 안 보이는 일 방지)
-            setTimeout(() => {
-                if (_intentionalDisconnect) {
-                    _intentionalDisconnect = false;
-                    if (!isConnected) setSyncStatus('error');
-                }
-            }, 3000);
         }, 300);
     } catch(e) {
         diagLog('⚠️ 소켓 새로고침 실패', String(e && e.message || e));
@@ -1039,9 +1039,13 @@ document.addEventListener('visibilitychange', () => {
             _syncGuard = false;
             setSyncStatus(isConnected ? 'online' : 'error');
         }
-        // ★ v106 fix: 10초 이상 백그라운드에 있었거나 가드가 박제됐던 경우
-        // isConnected 상태와 무관하게 선제적으로 소켓을 새로고침 (좀비 연결 대비)
-        if (wasHiddenMs > 10000 || guardStuck) {
+        // ★ v106 fix, v145 tune: 10초 기준은 너무 관대했다 — "다음 전표 입력을 위해 잠깐
+        // 내렸다 바로 여는" 흔한 습관적 사용에서도 모바일 OS가 그 짧은 사이에 소켓을 조용히
+        // 끊는 경우가 실제로 있었다(신고된 재현 시나리오와 일치). 3초로 낮춰 짧은 백그라운드
+        // 후에도 좀비 연결을 선제적으로 방지한다. isConnected 상태와 무관하게 실행.
+        // (v145에서 _refreshSocket 자체의 3초 조기 오류 판정도 제거했으므로 더 자주 호출돼도
+        // 🔴 오탐 위험 없이 안전하다 — 최악의 경우 🟡 재연결 중이 잠깐 보일 뿐)
+        if (wasHiddenMs > 3000 || guardStuck) {
             _refreshSocket();
         }
         // 탭 복귀 시: 실시간 리스너가 살아 있으면 자동 갱신됨 (별도 작업 불필요)

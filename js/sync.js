@@ -639,6 +639,23 @@ function setSyncStatus(state) {
     if (crmRow) crmRow.style.display = (state === 'online' && typeof CRM_SYNC_ENABLED !== 'undefined' && CRM_SYNC_ENABLED) ? 'block' : 'none';
 }
 
+// ★ v145: 끊김을 감지하는 모든 경로(.info/connected 자연 감지, 소켓 강제 새로고침,
+// 업로드 직전 재확인 등)가 동일한 유예 로직을 쓰도록 공통화한 헬퍼.
+// 끊기자마자 🔴를 띄우지 않고 🟡 재연결 중으로 먼저 표시하며 graceMs(기본 15초) 동안 기다린다.
+// 그 안에 .info/connected가 true로 돌아오면(=isConnected=true) 🔴는 끝까지 노출되지 않는다.
+// 이미 진행 중인 유예 타이머가 있으면 최신 호출 기준으로 재시작한다.
+function _beginErrorGrace(graceMs = 15000) {
+    setSyncStatus('reconnecting');
+    if (_errorGraceTimer) clearTimeout(_errorGraceTimer);
+    _errorGraceTimer = setTimeout(() => {
+        _errorGraceTimer = null;
+        if (!isConnected) {
+            diagLog('🔴 재연결 유예시간 초과', `${Math.round(graceMs/1000)}초 내 복구 실패 — 오류 표시`);
+            setSyncStatus('error');
+        }
+    }, graceMs);
+}
+
 // Firebase SDK 로드 완료 대기 (defer 스크립트 타이밍 보정)
 
 function waitFirebase(callback, retries=50, interval=200) {
@@ -802,15 +819,8 @@ function _doConnect(id, auto=false) {
                         // ★ v144: 끊기자마자 🔴 대신 🟡 재연결 중으로 표시하고 15초 유예.
                         // 대부분의 순간 끊김은 15초 안에 스스로 복구되므로(포그라운드 복귀 시 강제 재연결 등),
                         // 그 안에 복구되면 사용자는 🔴를 아예 안 보게 됨. 15초 넘겨도 안 붙으면 그때 진짜 🔴 표시.
-                        setSyncStatus('reconnecting');
-                        if (_errorGraceTimer) clearTimeout(_errorGraceTimer);
-                        _errorGraceTimer = setTimeout(() => {
-                            _errorGraceTimer = null;
-                            if (!isConnected) {
-                                diagLog('🔴 재연결 유예시간 초과', '15초 내 복구 실패 — 오류 표시');
-                                setSyncStatus('error');
-                            }
-                        }, 15000);
+                        // ★ v145: 동일 로직을 _refreshSocket()/flushSync 등에서도 재사용하도록 헬퍼로 추출.
+                        _beginErrorGrace(15000);
                     }
                 }
             }
