@@ -11,7 +11,7 @@
     <meta name="apple-mobile-web-app-title" content="납품관리">
     <link rel="apple-touch-icon" href="./icon-192.png">
     <link rel="manifest" href="./manifest.json">
-    <title>납품 관리 Pro v144</title>
+    <title>납품 관리 Pro v145</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js" defer></script>
@@ -38,7 +38,7 @@
             <div class="logo-icon">📦</div>
             <div>
                 <div class="logo-text">납품 관리 Pro</div>
-                <div class="logo-sub">v144 · PWA 앱 설치 지원</div>
+                <div class="logo-sub">v145 · PWA 앱 설치 지원</div>
             </div>
         </div>
         <div class="header-btns">
@@ -628,7 +628,7 @@
     <div class="card">
         <div class="card-title">앱 정보</div>
         <div style="font-size:13px;color:var(--text2);line-height:2;margin-bottom:12px;">
-            버전: <strong style="color:var(--accent);">v144</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
+            버전: <strong style="color:var(--accent);">v145</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
             거래처: <span id="infoClients">0</span>개 &nbsp;·&nbsp;
             납품내역: <span id="infoOrders">0</span>건
         </div>
@@ -642,7 +642,11 @@
             <div id="changelogList" style="display:flex;flex-direction:column;gap:6px;">
                 <!-- 현재 버전 -->
                 <div class="changelog-item">
-                    <span class="changelog-ver" style="color:var(--green);">v144</span>
+                    <span class="changelog-ver" style="color:var(--green);">v145</span>
+                    <span class="changelog-desc">동기화 오류 오탐 수정 — "거래 입력 후 백그라운드로 내렸다가, 다음 거래를 입력하려 다시 열면 동기화 오류가 뜬다(완전 종료 후 재실행하면 정상)" 신고 건 원인 규명 및 수정 3건. ① 소켓 강제 새로고침(_refreshSocket)이 재연결 성공 여부를 3초 만에 판정해 안 붙었으면 곧바로 🔴를 띄우던 것이 주 원인이었음 — 백그라운드 복귀 직후 모바일 네트워크는 재연결에 3초 넘게 걸리는 경우가 흔해, 몇 초면 저절로 붙는 정상 재연결까지 오류로 잘못 표시됐음. v144의 15초 유예 로직을 공통 헬퍼(_beginErrorGrace)로 뽑아내 동일하게 적용 ② 포그라운드 복귀 시 소켓을 선제적으로 새로고침하는 기준을 "10초 이상 백그라운드"에서 "3초 이상"으로 낮춤 — 다음 전표 입력을 위해 잠깐 내렸다 바로 여는 흔한 사용 패턴은 10초 미만인 경우가 많아 새로고침이 아예 안 걸렸고, 그 사이 OS가 소켓을 끊어도 뒤늦게 감지됐음 ③ 업로드 직전(debouncedSync) 연결 끊김을 발견했을 때도 즉시 🔴 대신 동일한 15초 유예 적용 — 입력한 내용은 이미 dirty set에 보존되어 재연결 시 자동 재시도되므로 데이터 유실 없음. 저장/업로드 로직 자체는 변경 없음 — 오류 "표시" 타이밍만 세 경로 모두 일관되게 통일.</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v144</span>
                     <span class="changelog-desc">동기화 오류 표시 유예시간 도입 — Firebase 소켓이 예기치 않게 끊기면 곧바로 "🔴 동기화 오류"를 띄우던 것을, 일단 "🟡 재연결 중..."으로 표시하고 15초 유예를 두도록 변경했습니다. 15초 안에 스스로 복구되면(대부분의 순간 끊김이 여기 해당) 🔴는 아예 안 뜨고 조용히 온라인으로 돌아갑니다. 15초를 넘겨야만 진짜 🔴 오류로 표시됩니다. 저장/업로드 로직은 변경 없음 — 화면 표시 타이밍만 조정.</span>
                 </div>
                 <div class="changelog-item">
