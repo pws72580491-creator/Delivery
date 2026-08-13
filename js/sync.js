@@ -628,6 +628,7 @@ function setSyncStatus(state) {
     el.className = ''; // reset
     if (state==='online')  { el.innerHTML=`🟢 온라인 동기화: ${escapeHtml(id)}`; el.classList.add('status-online'); }
     else if (state==='syncing') { el.innerHTML='🟡 동기화 중...'; el.classList.add('status-syncing'); }
+    else if (state==='reconnecting') { el.innerHTML='🟡 재연결 중...'; el.classList.add('status-syncing'); }
     else if (state==='error')   { el.innerHTML='🔴 동기화 오류 — 재연결 시도 중'; el.classList.add('status-error'); }
     else                        { el.innerHTML='⬡ 오프라인 모드'; el.classList.add('status-offline'); }
     // 연결 중일 때만 "현재 워크스페이스 삭제" 버튼 표시
@@ -745,6 +746,8 @@ function _doConnect(id, auto=false) {
                 if (!isConnected) {
                     diagLog('🟢 Firebase 소켓 연결됨', '.info/connected → true');
                     _intentionalDisconnect = false; // ★ v110: 재연결 성공했으니 자가진단 플래그도 즉시 해제
+                    // ★ v144: 유예시간 안에 복구됐으므로 예약된 🔴 표시 취소
+                    if (_errorGraceTimer) { clearTimeout(_errorGraceTimer); _errorGraceTimer = null; }
                     // ★ Problem 4 수정: 소켓 재연결 시 서버 최신 상태 먼저 확인 후 플러시
                     // (직접 debouncedSync 호출 시 서버에서 변경된 내용을 놓칠 수 있음)
                     isConnected = true;
@@ -793,7 +796,22 @@ function _doConnect(id, auto=false) {
                     }
                     isConnected = false;
                     debouncedSync.cancel();
-                    setSyncStatus(_intentionalDisconnect ? 'syncing' : 'error');
+                    if (_intentionalDisconnect) {
+                        setSyncStatus('syncing');
+                    } else {
+                        // ★ v144: 끊기자마자 🔴 대신 🟡 재연결 중으로 표시하고 15초 유예.
+                        // 대부분의 순간 끊김은 15초 안에 스스로 복구되므로(포그라운드 복귀 시 강제 재연결 등),
+                        // 그 안에 복구되면 사용자는 🔴를 아예 안 보게 됨. 15초 넘겨도 안 붙으면 그때 진짜 🔴 표시.
+                        setSyncStatus('reconnecting');
+                        if (_errorGraceTimer) clearTimeout(_errorGraceTimer);
+                        _errorGraceTimer = setTimeout(() => {
+                            _errorGraceTimer = null;
+                            if (!isConnected) {
+                                diagLog('🔴 재연결 유예시간 초과', '15초 내 복구 실패 — 오류 표시');
+                                setSyncStatus('error');
+                            }
+                        }, 15000);
+                    }
                 }
             }
         };
@@ -998,6 +1016,7 @@ function disconnectWorkspace() {
     });
     // 실시간 폴링 백업 타이머 정리
     if (_rtPollTimer) { clearInterval(_rtPollTimer); _rtPollTimer = null; }
+    if (_errorGraceTimer) { clearTimeout(_errorGraceTimer); _errorGraceTimer = null; } // ★ v144
     debouncedSync.cancel();
     workspaceRef=null; isConnected=false;
     _syncGuard=false; _connectGuard=false; // 가드 초기화

@@ -443,6 +443,7 @@ function _clearOrderDelta()    { _dirtyOrders.clear(); _deletedOrders.clear(); }
 let _syncGuard = false;
 let _syncGuardSetAt = 0;     // ★ v106 fix: _syncGuard=true로 전환된 시각 (워치독이 박제 감지에 사용)
 let _intentionalDisconnect = false; // ★ v110: _refreshSocket()의 의도된 goOffline 여부 (오류 표시 오인 방지)
+let _errorGraceTimer = null; // ★ v144: 소켓 끊김 감지 후 바로 🔴 표시하지 않고 유예시간(15초) 동안 🟡 재연결 중으로 표시 — 그 안에 복구되면 🔴 노출 안 됨
 let _pendingFbSnap = null;   // _syncGuard 중 도착한 타기기 변경 스냅샷 (처리 보류)
 let _rtPollTimer   = null;   // 실시간 폴링 백업 타이머
 // _connectGuard: _doConnect의 초기 .get() 처리가 완료되기 전 true
