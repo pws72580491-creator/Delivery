@@ -399,7 +399,14 @@ function _buildClientItemsCache() {
     // ★ v124 fix: 거래처당 10개로 캐시가 잘려있어, 품목 종류가 10개를 넘는 거래처는
     // 11번째 이후 품목이 "최근 품목" 칩과 "이 거래처 최근 단가" 자동완성 둘 다에서 영구히 안 보였음.
     // → 30개로 상향 (cis-chips는 flex-wrap이라 늘어나도 레이아웃 안전, 잘림 없음)
-    for (const cid in tmp) _clientItemsCache[cid] = tmp[cid].list.slice(0, 30);
+    // ★ v146: 거래처별로 "제거" 처리한 품목(client.removedItems)은 추천 목록에서 영구히 제외.
+    // 납품 내역 자체는 그대로 유지되고, 이 추천/자동완성 레이어에서만 안 보이게 됨 (되돌리기 없음).
+    for (const cid in tmp) {
+        const c = clients.find(cl => cl.id === cid);
+        const removed = (c && Array.isArray(c.removedItems) && c.removedItems.length) ? c.removedItems : null;
+        const list = removed ? tmp[cid].list.filter(it => !removed.includes(it.name)) : tmp[cid].list;
+        _clientItemsCache[cid] = list.slice(0, 30);
+    }
     return _clientItemsCache;
 }
 

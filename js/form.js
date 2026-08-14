@@ -197,12 +197,32 @@ function showClientItemSuggestions(clientId) {
     chips.innerHTML = items.map(it => {
         const priceLabel = it.price > 0 ? `${fmt(it.price)}원` : '단가미정';
         const safeItName = escapeAttr(it.name);
-        return `<button class="cis-chip" onclick="fillItemFromSuggest('${safeItName}',${Number(it.price)||0})" title="${escapeHtml(it.date)} 납품">
-            <span class="cis-chip-name">${escapeHtml(it.name)}</span>
-            <span class="cis-chip-price">${priceLabel}</span>
-        </button>`;
+        const safeCid    = escapeAttr(clientId);
+        return `<div class="cis-chip">
+            <button type="button" class="cis-chip-main" onclick="fillItemFromSuggest('${safeItName}',${Number(it.price)||0})" title="${escapeHtml(it.date)} 납품">
+                <span class="cis-chip-name">${escapeHtml(it.name)}</span>
+                <span class="cis-chip-price">${priceLabel}</span>
+            </button>
+            <button type="button" class="cis-chip-x" onclick="event.stopPropagation();removeClientRecentItem('${safeCid}','${safeItName}')" title="추천 목록에서 제거">✕</button>
+        </div>`;
     }).join('');
     box.classList.add('visible');
+}
+
+// ★ v146: "이 거래처 최근 품목" 추천에서 특정 품목을 완전히 제거 (되돌리기 없음).
+// 납품 내역(orders)은 전혀 건드리지 않고, client.removedItems 목록에 품목명만 추가해서
+// 추천/자동완성 레이어에서만 영구히 걸러지도록 함 (getClientRecentItems 경유하는 모든 곳에 자동 반영).
+// 다시 필요해지면 품목명을 직접 입력해서 새 전표를 등록하면 됨 (제거 목록과 무관하게 등록 자체는 자유로움).
+async function removeClientRecentItem(clientId, itemName) {
+    const c = clients.find(cl => cl.id === clientId);
+    if (!c) return;
+    if (!(await customConfirm(`'${itemName}' 품목을 이 거래처의 추천 목록에서 제거할까요?\n(납품 내역·통계는 그대로 유지되고, 추천 칩에서만 빠집니다)`, '제거', 'btn-danger'))) return;
+    if (!Array.isArray(c.removedItems)) c.removedItems = [];
+    if (!c.removedItems.includes(itemName)) c.removedItems.push(itemName);
+    c.updatedAt = new Date().toISOString();
+    saveData();
+    showClientItemSuggestions(clientId);
+    toast('제거했습니다');
 }
 
 function fillItemFromSuggest(name, price) {

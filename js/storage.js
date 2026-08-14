@@ -149,6 +149,8 @@ function _minifyClient(c) {
     if (c.address)   r.address   = c.address;
     if (c.note)      r.note      = c.note;
     if (c.isHidden)  r.isHidden  = true;   // true일 때만 저장 (false는 기본값이므로 생략)
+    // ★ v146: 거래처별 "최근 품목 추천"에서 제거한 품목명 목록 (비어있으면 생략, 용량 절약)
+    if (Array.isArray(c.removedItems) && c.removedItems.length) r.removedItems = c.removedItems;
     const ua = _compactTs(c.updatedAt);
     if (ua)          r.updatedAt = ua;
     return r;
