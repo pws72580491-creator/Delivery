@@ -11,7 +11,7 @@
     <meta name="apple-mobile-web-app-title" content="납품관리">
     <link rel="apple-touch-icon" href="./icon-192.png">
     <link rel="manifest" href="./manifest.json">
-    <title>납품 관리 Pro v145</title>
+    <title>납품 관리 Pro v147</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js" defer></script>
@@ -38,7 +38,7 @@
             <div class="logo-icon">📦</div>
             <div>
                 <div class="logo-text">납품 관리 Pro</div>
-                <div class="logo-sub">v145 · PWA 앱 설치 지원</div>
+                <div class="logo-sub">v147 · PWA 앱 설치 지원</div>
             </div>
         </div>
         <div class="header-btns">
@@ -198,7 +198,7 @@
         </div>
         <!-- 거래처별 최근 품목 추천 -->
         <div class="client-item-suggest" id="clientItemSuggest">
-            <div class="cis-label">⚡ 이 거래처 최근 품목 — 탭하면 바로 채워짐</div>
+            <div class="cis-label">⚡ 이 거래처 최근 품목 — 탭하면 바로 채워짐, ✕로 제거</div>
             <div class="cis-chips" id="cisChips"></div>
         </div>
         <div class="form-group">
@@ -628,7 +628,7 @@
     <div class="card">
         <div class="card-title">앱 정보</div>
         <div style="font-size:13px;color:var(--text2);line-height:2;margin-bottom:12px;">
-            버전: <strong style="color:var(--accent);">v145</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
+            버전: <strong style="color:var(--accent);">v147</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
             거래처: <span id="infoClients">0</span>개 &nbsp;·&nbsp;
             납품내역: <span id="infoOrders">0</span>건
         </div>
@@ -642,7 +642,15 @@
             <div id="changelogList" style="display:flex;flex-direction:column;gap:6px;">
                 <!-- 현재 버전 -->
                 <div class="changelog-item">
-                    <span class="changelog-ver" style="color:var(--green);">v145</span>
+                    <span class="changelog-ver" style="color:var(--green);">v147</span>
+                    <span class="changelog-desc">"이 거래처 최근 품목" 품목 제거 방식을 숨기기(복원 가능) → 완전 제거(되돌리기 없음)로 변경 — v146에서는 ✕로 누르면 "숨김" 처리되어 별도 목록에서 복원할 수 있었는데, 그 복원 UI가 오히려 불필요한 복잡함이라는 피드백을 반영해 단순화했습니다. 이제 ✕를 누르면 확인 후 그 거래처의 추천 목록에서 완전히 빠지고 되돌릴 방법은 없습니다(납품 내역·통계는 전혀 안 건드림 — 나중에 다시 필요하면 품목명을 직접 입력해서 새 전표를 등록하면 됩니다). 데이터 필드도 client.hiddenItems → client.removedItems로 정리.</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v146</span>
+                    <span class="changelog-desc">"이 거래처 최근 품목" 추천에서 개별 품목 숨기기 기능 추가 — 더 이상 안 나가는 품목이 계속 추천 칩에 떠서 불편하다는 요청 반영. 각 품목 칩 옆에 ✕ 버튼이 생겨서 탭하면 확인 후 그 거래처의 추천 목록에서만 숨겨집니다(납품 내역·통계는 전혀 안 건드림). 숨긴 품목은 칩 목록 아래 "숨긴 품목 N개 보기"에서 언제든 확인하고 다시 복원할 수 있어요. 숨김 처리는 거래처별로 따로 저장되고 다른 기기와도 동기화됩니다. "이 거래처 최근 단가" 자동완성에도 동일하게 반영(숨긴 품목은 단가 힌트에서도 안 뜸). (→ v147에서 완전 제거 방식으로 변경됨)</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v145</span>
                     <span class="changelog-desc">동기화 오류 오탐 수정 — "거래 입력 후 백그라운드로 내렸다가, 다음 거래를 입력하려 다시 열면 동기화 오류가 뜬다(완전 종료 후 재실행하면 정상)" 신고 건 원인 규명 및 수정 3건. ① 소켓 강제 새로고침(_refreshSocket)이 재연결 성공 여부를 3초 만에 판정해 안 붙었으면 곧바로 🔴를 띄우던 것이 주 원인이었음 — 백그라운드 복귀 직후 모바일 네트워크는 재연결에 3초 넘게 걸리는 경우가 흔해, 몇 초면 저절로 붙는 정상 재연결까지 오류로 잘못 표시됐음. v144의 15초 유예 로직을 공통 헬퍼(_beginErrorGrace)로 뽑아내 동일하게 적용 ② 포그라운드 복귀 시 소켓을 선제적으로 새로고침하는 기준을 "10초 이상 백그라운드"에서 "3초 이상"으로 낮춤 — 다음 전표 입력을 위해 잠깐 내렸다 바로 여는 흔한 사용 패턴은 10초 미만인 경우가 많아 새로고침이 아예 안 걸렸고, 그 사이 OS가 소켓을 끊어도 뒤늦게 감지됐음 ③ 업로드 직전(debouncedSync) 연결 끊김을 발견했을 때도 즉시 🔴 대신 동일한 15초 유예 적용 — 입력한 내용은 이미 dirty set에 보존되어 재연결 시 자동 재시도되므로 데이터 유실 없음. 저장/업로드 로직 자체는 변경 없음 — 오류 "표시" 타이밍만 세 경로 모두 일관되게 통일.</span>
                 </div>
                 <div class="changelog-item">

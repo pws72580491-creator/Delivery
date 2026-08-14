@@ -596,21 +596,35 @@ body.light .stat-card.orange .stat-value { color:#a07010; }
 }
 .cis-chips { display:flex; flex-wrap:wrap; gap:6px; }
 .cis-chip {
-    display:inline-flex; align-items:center; gap:5px;
-    padding:7px 12px;
+    display:inline-flex; align-items:center;
     background:var(--surf3);
     border:1.5px solid var(--border);
     border-radius:99px;
-    cursor:pointer;
     transition:all .15s;
-    font-size:12px;
+    overflow:hidden;
 }
-.cis-chip:hover { border-color:var(--accent); background:var(--accent-dim); color:var(--accent); box-shadow:0 2px 10px rgba(123,110,246,.15); }
-.cis-chip:active { transform:scale(.95); }
+.cis-chip:hover { border-color:var(--accent); box-shadow:0 2px 10px rgba(123,110,246,.15); }
+.cis-chip-main {
+    display:inline-flex; align-items:center; gap:5px;
+    padding:7px 6px 7px 12px;
+    background:none; border:none; cursor:pointer;
+    font-size:12px; font-family:inherit;
+}
+.cis-chip-main:active { transform:scale(.95); }
 .cis-chip-name { font-weight:700; color:var(--text); }
-.cis-chip:hover .cis-chip-name { color:var(--accent); }
+.cis-chip-main:hover .cis-chip-name { color:var(--accent); }
 .cis-chip-price { color:var(--text2); font-size:11px; font-family:'DM Mono',monospace; }
-.cis-chip:hover .cis-chip-price { color:var(--accent); opacity:.8; }
+.cis-chip-main:hover .cis-chip-price { color:var(--accent); opacity:.8; }
+.cis-chip-x {
+    display:inline-flex; align-items:center; justify-content:center;
+    width:22px; height:22px; margin:0 5px 0 0; flex-shrink:0;
+    border:none; border-radius:50%;
+    background:transparent; color:var(--text2);
+    font-size:12px; line-height:1; cursor:pointer;
+    transition:all .15s;
+}
+.cis-chip-x:hover  { background:var(--red-dim); color:var(--red); }
+.cis-chip-x:active { transform:scale(.9); }
 
 /* ═══════════════════════════════════════
    내역 조회 — v58
@@ -1352,7 +1366,7 @@ button, a, input, select, textarea,
 .bnav-item, .bnav-fab, .more-item,
 .client-card, .order-card, .recent-card,
 .eg-card, .settle-table tbody tr,
-.dropdown-item, .cis-chip, .adj-btn {
+.dropdown-item, .cis-chip, .cis-chip-main, .cis-chip-x, .adj-btn {
     /* ★ v109 fix: manipulation은 더블탭줌만 막고 핀치줌은 허용하는 값이라
        전역 핀치줌 차단(JS)과 충돌해 간헐적으로 확대가 새어나가는 원인이 됨.
        pan-x pan-y로 변경해도 300ms 탭 지연 제거 효과는 동일하게 유지됨. */
