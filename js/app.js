@@ -1023,7 +1023,17 @@ function _reconnectFromBackground() {
         diagLog('⚠️ goOnline 실패', String(e && e.message || e));
     }
     _intentionalDisconnect = false;
-    if (!isConnected) _beginErrorGrace(15000); // 15초 안에 안 붙으면 그때 🔴 (v144/v145와 동일 원칙)
+    // ★ v149: 재연결은 대부분 1~1.5초 안에 끝나는데, goOnline() 직후 바로 🟡 재연결 중을
+    // 띄우면 그 짧은 순간에도 매번 깜빡임이 생겼다. 이제는 1.2초 동안은 화면을 건드리지 않고
+    // 조용히 기다렸다가, 그때도 아직 안 붙었을 때만 🟡를 보여준다 — 대부분의 복귀는 아무 표시도
+    // 없이 그냥 조용히 온라인 상태 그대로 유지되는 것처럼 느껴진다.
+    // ★ v149: 총 유예 예산도 15초 → 8초로 단축. 포그라운드 복귀 직후는 대부분 바로 납품을
+    // 입력하는 능동적 사용 구간이라, 15초는 결론이 나기까지 너무 길다는 피드백 반영.
+    // (참고: 3초는 v145에서 이미 너무 짧아 오탐이 났던 값 — 8초는 그보다 충분히 여유 있음)
+    // 이 조용한 1.2초도 8초 예산 안에 포함해서 계산.
+    setTimeout(() => {
+        if (!isConnected) _beginErrorGrace(6800);
+    }, 1200);
     setTimeout(() => { if (isConnected) debouncedSync(); }, 2000);
 }
 
