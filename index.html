@@ -11,7 +11,7 @@
     <meta name="apple-mobile-web-app-title" content="납품관리">
     <link rel="apple-touch-icon" href="./icon-192.png">
     <link rel="manifest" href="./manifest.json">
-    <title>납품 관리 Pro v147</title>
+    <title>납품 관리 Pro v148</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js" defer></script>
@@ -38,7 +38,7 @@
             <div class="logo-icon">📦</div>
             <div>
                 <div class="logo-text">납품 관리 Pro</div>
-                <div class="logo-sub">v147 · PWA 앱 설치 지원</div>
+                <div class="logo-sub">v148 · PWA 앱 설치 지원</div>
             </div>
         </div>
         <div class="header-btns">
@@ -628,7 +628,7 @@
     <div class="card">
         <div class="card-title">앱 정보</div>
         <div style="font-size:13px;color:var(--text2);line-height:2;margin-bottom:12px;">
-            버전: <strong style="color:var(--accent);">v147</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
+            버전: <strong style="color:var(--accent);">v148</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
             거래처: <span id="infoClients">0</span>개 &nbsp;·&nbsp;
             납품내역: <span id="infoOrders">0</span>건
         </div>
@@ -642,7 +642,11 @@
             <div id="changelogList" style="display:flex;flex-direction:column;gap:6px;">
                 <!-- 현재 버전 -->
                 <div class="changelog-item">
-                    <span class="changelog-ver" style="color:var(--green);">v147</span>
+                    <span class="changelog-ver" style="color:var(--green);">v148</span>
+                    <span class="changelog-desc">동기화 재연결 방식을 근본적으로 재설계 — 백그라운드로 갈 때 소켓 연결을 "명시적으로" 끊고, 포그라운드로 돌아올 때 "명시적으로" 재연결하도록 변경했습니다. v145~v147까지는 백그라운드 중에도 연결을 열어둔 채 방치하다가 복귀 시 "오래 있었으면 아마 죽었겠지"라고 추측해서 새로고침을 걸었는데(_refreshSocket, 10초→3초 기준 조정 등으로 계속 땜질), 이 추측이 늘 맞지는 않았습니다. 이제는 화면이 꺼지면 방금 입력한 전표를 먼저 안전하게 저장(flushSync 완료까지 대기, 최대 6초)한 뒤 goOffline()으로 소켓을 확실히 끊고, 화면으로 돌아오면 무조건 goOnline()으로 재연결합니다 — "지금 연결 상태가 어떤지" 추측할 필요 자체가 없어져 좀비 연결 문제가 원천 차단됩니다. 재연결 후 표시 방식(🟡 재연결 중 + 15초 유예)은 기존과 동일하게 유지. 부수 효과로 백그라운드 중 불필요한 소켓 유지가 없어져 배터리 소모도 줄어듭니다.</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v147</span>
                     <span class="changelog-desc">"이 거래처 최근 품목" 품목 제거 방식을 숨기기(복원 가능) → 완전 제거(되돌리기 없음)로 변경 — v146에서는 ✕로 누르면 "숨김" 처리되어 별도 목록에서 복원할 수 있었는데, 그 복원 UI가 오히려 불필요한 복잡함이라는 피드백을 반영해 단순화했습니다. 이제 ✕를 누르면 확인 후 그 거래처의 추천 목록에서 완전히 빠지고 되돌릴 방법은 없습니다(납품 내역·통계는 전혀 안 건드림 — 나중에 다시 필요하면 품목명을 직접 입력해서 새 전표를 등록하면 됩니다). 데이터 필드도 client.hiddenItems → client.removedItems로 정리.</span>
                 </div>
                 <div class="changelog-item">
