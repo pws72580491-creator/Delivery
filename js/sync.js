@@ -819,7 +819,7 @@ function _doConnect(id, auto=false) {
                         // ★ v144: 끊기자마자 🔴 대신 🟡 재연결 중으로 표시하고 15초 유예.
                         // 대부분의 순간 끊김은 15초 안에 스스로 복구되므로(포그라운드 복귀 시 강제 재연결 등),
                         // 그 안에 복구되면 사용자는 🔴를 아예 안 보게 됨. 15초 넘겨도 안 붙으면 그때 진짜 🔴 표시.
-                        // ★ v145: 동일 로직을 _refreshSocket()/flushSync 등에서도 재사용하도록 헬퍼로 추출.
+                        // ★ v145: 동일 로직을 _reconnectFromBackground()/flushSync 등에서도 재사용하도록 헬퍼로 추출.
                         _beginErrorGrace(15000);
                     }
                 }

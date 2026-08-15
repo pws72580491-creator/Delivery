@@ -992,34 +992,39 @@ async function _flushSync() {
 }
 
 // 화면 꺼짐 / 다른 앱으로 전환 시
-let _bgHiddenAt = 0; // ★ v106 fix: 백그라운드 진입 시각 (장시간 백그라운드 판단용)
+let _bgHiddenAt = 0; // ★ v106 fix: 백그라운드 진입 시각 (진단 로그용)
 
-// ★ v106 fix: Firebase 소켓 강제 새로고침
-// 백그라운드 중 OS가 웹소켓을 조용히 끊어버려도 JS는 isConnected=true로 착각하는
-// "좀비 연결" 상태를 해소하기 위해 의도적으로 끊었다 재연결시킴
-function _refreshSocket() {
-    if (typeof firebase === 'undefined' || !firebase.apps || !firebase.apps.length || !workspaceRef) return;
-    diagLog('🔄 소켓 강제 새로고침 시작', 'goOffline → goOnline');
-    _intentionalDisconnect = true; // ★ v110: 이 직후 발생할 끊김은 "오류"가 아니라 자가진단임을 표시
+// ★ v148: 백그라운드로 갈 때 소켓을 "명시적으로" 끊는다.
+// v145~v147까지는 연결을 열어둔 채로 방치하다가, 복귀 시 "오래 있었으면 아마 죽었겠지"라고
+// 추측(wasHiddenMs 임계값)해서 새로고침을 걸었다 — 이 추측이 늘 맞지는 않아 계속 땜질이 필요했다.
+// 아예 우리가 먼저 goOffline()으로 끊어버리면 "지금 연결 상태가 어떤지" 추측할 필요가 없어진다
+// (우리가 끊었다는 걸 이미 알고 있으므로, 복귀 시엔 무조건 재연결하면 됨) — 부수 효과로
+// 백그라운드 중 불필요한 소켓 유지/재연결 시도가 사라져 배터리·데이터도 아낄 수 있다.
+function _goOfflineForBackground() {
+    if (typeof firebase === 'undefined' || !firebase.apps || !firebase.apps.length) return;
+    _intentionalDisconnect = true; // 이 직후 발생할 끊김은 "오류"가 아니라 의도된 것임을 표시
     try {
         firebase.database().goOffline();
-        setTimeout(() => {
-            firebase.database().goOnline();
-            // ★ v110 → v145 fix: 재연결 완료 여부를 3초 만에 판단해 곧바로 🔴를 띄우던 로직 제거.
-            // 백그라운드 복귀 직후의 모바일 네트워크(특히 셀룰러)는 재연결에 3초 넘게 걸리는 일이
-            // 흔했고, 그 흔한 지연이 "몇 초면 저절로 붙는 정상 재연결"까지 🔴 동기화 오류로
-            // 잘못 표시하는 주 원인이었다(신고된 "다음 거래 입력하려 열면 오류" 증상과 일치).
-            // 이제는 .info/connected 자연 감지와 동일하게 🟡 재연결 중 + 15초 유예를 거치므로,
-            // 15초 안에만 붙으면 사용자는 🔴를 전혀 보지 않는다.
-            _intentionalDisconnect = false;
-            if (!isConnected) _beginErrorGrace(15000);
-            // ★ v117: 소켓 복구 후 2초 대기 — 안정화 후 write (600ms는 너무 빨라 타임아웃 빈발)
-            setTimeout(() => { if (isConnected) debouncedSync(); }, 2000);
-        }, 300);
+        diagLog('📴 백그라운드 소켓 명시적 종료', 'flushSync 완료 후 goOffline — 포그라운드 복귀 시 재연결 예정');
     } catch(e) {
-        diagLog('⚠️ 소켓 새로고침 실패', String(e && e.message || e));
+        diagLog('⚠️ goOffline 실패', String(e && e.message || e));
         _intentionalDisconnect = false;
     }
+}
+
+// ★ v148: 포그라운드 복귀 시 재연결. _goOfflineForBackground로 이미 명시적으로 끊어뒀거나
+// (혹은 애초에 안 끊겼거나) 상태와 무관하게 매번 goOnline 호출 — 이미 연결돼 있으면 안전한 no-op.
+function _reconnectFromBackground() {
+    if (typeof firebase === 'undefined' || !firebase.apps || !firebase.apps.length || !workspaceRef) return;
+    diagLog('🔌 포그라운드 복귀 재연결', 'goOnline');
+    try {
+        firebase.database().goOnline();
+    } catch(e) {
+        diagLog('⚠️ goOnline 실패', String(e && e.message || e));
+    }
+    _intentionalDisconnect = false;
+    if (!isConnected) _beginErrorGrace(15000); // 15초 안에 안 붙으면 그때 🔴 (v144/v145와 동일 원칙)
+    setTimeout(() => { if (isConnected) debouncedSync(); }, 2000);
 }
 
 document.addEventListener('visibilitychange', () => {
@@ -1027,6 +1032,22 @@ document.addEventListener('visibilitychange', () => {
         _bgHiddenAt = Date.now();
         diagLog('🙈 백그라운드 진입', `isConnected=${isConnected}, _syncGuard=${_syncGuard}`);
         _flushSync();
+        // ★ v148: flushSync가 실제로 끝날 때까지(성공/실패/스킵 무관) 기다린 뒤에 소켓을 끊는다.
+        // 고정 지연이 아니라 _flushSyncInProgress 플래그를 짧은 간격으로 확인 — CRM 병합 조회 등으로
+        // flushSync가 오래 걸려도 중간에 끊어서 방금 입력한 전표의 업로드를 무산시키지 않는다.
+        // 최대 6초까지만 기다리고(내부 write 타임아웃 5초 + 여유), 그 사이 다시 포그라운드로
+        // 돌아오면(visibilityState 재확인) 아예 끊지 않고 건너뛴다.
+        let _waited = 0;
+        const _waitThenDisconnect = () => {
+            if (document.visibilityState !== 'hidden') return; // 그 사이 복귀함 — 끊지 않음
+            if (_flushSyncInProgress && _waited < 6000) {
+                _waited += 300;
+                setTimeout(_waitThenDisconnect, 300);
+                return;
+            }
+            _goOfflineForBackground();
+        };
+        setTimeout(_waitThenDisconnect, 300);
     } else {
         const wasHiddenMs = _bgHiddenAt ? (Date.now() - _bgHiddenAt) : 0;
         _bgHiddenAt = 0;
@@ -1037,17 +1058,10 @@ document.addEventListener('visibilitychange', () => {
             console.warn('[동기화 워치독] _syncGuard 박제 감지 → 강제 해제');
             diagLog('🚨 워치독: _syncGuard 박제 감지 → 강제 해제', `${Math.round((Date.now()-_syncGuardSetAt)/1000)}초간 멈춰있었음`);
             _syncGuard = false;
-            setSyncStatus(isConnected ? 'online' : 'error');
         }
-        // ★ v106 fix, v145 tune: 10초 기준은 너무 관대했다 — "다음 전표 입력을 위해 잠깐
-        // 내렸다 바로 여는" 흔한 습관적 사용에서도 모바일 OS가 그 짧은 사이에 소켓을 조용히
-        // 끊는 경우가 실제로 있었다(신고된 재현 시나리오와 일치). 3초로 낮춰 짧은 백그라운드
-        // 후에도 좀비 연결을 선제적으로 방지한다. isConnected 상태와 무관하게 실행.
-        // (v145에서 _refreshSocket 자체의 3초 조기 오류 판정도 제거했으므로 더 자주 호출돼도
-        // 🔴 오탐 위험 없이 안전하다 — 최악의 경우 🟡 재연결 중이 잠깐 보일 뿐)
-        if (wasHiddenMs > 3000 || guardStuck) {
-            _refreshSocket();
-        }
+        // ★ v148: 백그라운드 진입 시 명시적으로 끊었으므로, wasHiddenMs로 "재연결이 필요한지"
+        // 추측할 필요 없이 매번 재연결을 시도한다 (이미 연결돼 있으면 안전한 no-op).
+        _reconnectFromBackground();
         // 탭 복귀 시: 실시간 리스너가 살아 있으면 자동 갱신됨 (별도 작업 불필요)
         // 리스너가 없는 경우(오프라인 복귀, 첫 연결 전 등)에만 수동 갱신
         try {
