@@ -47,6 +47,15 @@ clients = clients.map(c => {
     if (!c.note) c.note = '';
     // isHidden: 저장된 값 보존 (false면 목록에 표시, true면 숨겨짐)
     if (c.isHidden === undefined) c.isHidden = false;
+    // ★ v150 fix: v147의 removedItems는 품목명 문자열만 저장해서 "언제 제거했는지" 정보가 없었고,
+    // 그 결과 제거 이후 그 품목을 다시 납품해도 영원히 추천 목록에서 안 보이는 문제가 있었음
+    // (신고 사례와 일치: "새롭게 추가해도 추가된 목록은 나타나지 않는다"). 문자열 항목을
+    // {name, at} 형태로 1회 변환 — at을 "지금"으로 채워서, 이 시점 이후의 새 납품부터는
+    // 다시 추천에 나타나게 된다(이전 납품 기록에 대해서만 계속 숨김 유지).
+    if (Array.isArray(c.removedItems) && c.removedItems.some(r => typeof r === 'string')) {
+        const now = new Date().toISOString();
+        c.removedItems = c.removedItems.map(r => typeof r === 'string' ? { name: r, at: now } : r);
+    }
     return c;
 });
 
@@ -382,7 +391,7 @@ function _buildClientItemsCache() {
     if (_clientItemsCache) return _clientItemsCache;
     // clientId → 날짜 내림차순으로 품목명 첫 등장만 수집
     // clientId 없는 전표는 clientName을 fallback 키로 사용
-    const tmp = {}; // key → [{name,price,date}]
+    const tmp = {}; // key → [{name,price,date,createdAt}]
     const sorted = [...orders].sort((a,b) => (b.date||"").localeCompare(a.date||""));
     for (const o of sorted) {
         const cid = o.clientId || ('name:' + (o.clientName || ''));
@@ -391,7 +400,7 @@ function _buildClientItemsCache() {
         for (const it of (o.items||[])) {
             if (!tmp[cid].seen[it.name]) {
                 tmp[cid].seen[it.name] = true;
-                tmp[cid].list.push({ name:it.name, price:it.price, date:o.date });
+                tmp[cid].list.push({ name:it.name, price:it.price, date:o.date, createdAt:o.createdAt||'' });
             }
         }
     }
@@ -399,12 +408,20 @@ function _buildClientItemsCache() {
     // ★ v124 fix: 거래처당 10개로 캐시가 잘려있어, 품목 종류가 10개를 넘는 거래처는
     // 11번째 이후 품목이 "최근 품목" 칩과 "이 거래처 최근 단가" 자동완성 둘 다에서 영구히 안 보였음.
     // → 30개로 상향 (cis-chips는 flex-wrap이라 늘어나도 레이아웃 안전, 잘림 없음)
-    // ★ v146: 거래처별로 "제거" 처리한 품목(client.removedItems)은 추천 목록에서 영구히 제외.
-    // 납품 내역 자체는 그대로 유지되고, 이 추천/자동완성 레이어에서만 안 보이게 됨 (되돌리기 없음).
+    // ★ v146→v150 fix: 거래처별로 "제거" 처리한 품목(client.removedItems)은 추천 목록에서 제외.
+    // v147까지는 이름만 보고 영구히 걸러서, 제거 후 그 품목을 다시 납품해도 평생 추천에 안 뜨는
+    // 문제가 있었음("새로 추가해도 안 보인다" 신고와 일치). v150부터는 제거 시각(at)을 같이 저장해서,
+    // 그 시각 "이후"에 새로 납품된 적이 있으면(createdAt이 at보다 뒤) 다시 정상적으로 노출된다.
     for (const cid in tmp) {
         const c = clients.find(cl => cl.id === cid);
-        const removed = (c && Array.isArray(c.removedItems) && c.removedItems.length) ? c.removedItems : null;
-        const list = removed ? tmp[cid].list.filter(it => !removed.includes(it.name)) : tmp[cid].list;
+        const removedList = (c && Array.isArray(c.removedItems) && c.removedItems.length) ? c.removedItems : null;
+        const list = removedList ? tmp[cid].list.filter(it => {
+            const rec = removedList.find(r => (typeof r === 'string' ? r : r.name) === it.name);
+            if (!rec) return true;                    // 제거 이력 없음 → 노출
+            const removedAt = typeof rec === 'string' ? null : rec.at;
+            if (!removedAt) return false;               // 시각 정보 없는 구버전 잔여 항목 → 안전하게 계속 숨김
+            return !!(it.createdAt && it.createdAt > removedAt); // 제거 이후 재납품 있으면 다시 노출
+        }) : tmp[cid].list;
         _clientItemsCache[cid] = list.slice(0, 30);
     }
     return _clientItemsCache;

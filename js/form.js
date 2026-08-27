@@ -209,17 +209,28 @@ function showClientItemSuggestions(clientId) {
     box.classList.add('visible');
 }
 
-// ★ v146: "이 거래처 최근 품목" 추천에서 특정 품목을 완전히 제거 (되돌리기 없음).
-// 납품 내역(orders)은 전혀 건드리지 않고, client.removedItems 목록에 품목명만 추가해서
-// 추천/자동완성 레이어에서만 영구히 걸러지도록 함 (getClientRecentItems 경유하는 모든 곳에 자동 반영).
-// 다시 필요해지면 품목명을 직접 입력해서 새 전표를 등록하면 됨 (제거 목록과 무관하게 등록 자체는 자유로움).
+// ★ v146→v150: "이 거래처 최근 품목" 추천에서 특정 품목을 제거.
+// 납품 내역(orders)은 전혀 건드리지 않고, client.removedItems에 {name, at:제거시각}을 추가해서
+// 추천/자동완성 레이어에서만 걸러지도록 함 (getClientRecentItems 경유하는 모든 곳에 자동 반영).
+// v150부터: 제거 시각을 함께 저장해서, 이후 그 품목을 다시 납품하면 자동으로 추천에 되살아남
+// (완전히 영구 삭제가 아니라 "이 시점까지의 이력만 숨김" — 다시 필요하면 새 전표만 등록하면 됨).
 async function removeClientRecentItem(clientId, itemName) {
     const c = clients.find(cl => cl.id === clientId);
     if (!c) return;
-    if (!(await customConfirm(`'${itemName}' 품목을 이 거래처의 추천 목록에서 제거할까요?\n(납품 내역·통계는 그대로 유지되고, 추천 칩에서만 빠집니다)`, '제거', 'btn-danger'))) return;
+    if (!(await customConfirm(`'${itemName}' 품목을 이 거래처의 추천 목록에서 제거할까요?\n(납품 내역·통계는 그대로 유지되고, 추천 칩에서만 빠집니다. 나중에 이 품목을 다시 납품하면 추천에 자동으로 다시 나타납니다)`, '제거', 'btn-danger'))) return;
     if (!Array.isArray(c.removedItems)) c.removedItems = [];
-    if (!c.removedItems.includes(itemName)) c.removedItems.push(itemName);
-    c.updatedAt = new Date().toISOString();
+    const now = new Date().toISOString();
+    const existing = c.removedItems.find(r => (typeof r === 'string' ? r : r.name) === itemName);
+    if (existing) {
+        if (typeof existing === 'string') {
+            c.removedItems = c.removedItems.map(r => r === itemName ? { name: itemName, at: now } : r);
+        } else {
+            existing.at = now; // 이미 제거돼 있던 항목을 다시 눌렀다면 시각만 최신화
+        }
+    } else {
+        c.removedItems.push({ name: itemName, at: now });
+    }
+    c.updatedAt = now;
     saveData();
     showClientItemSuggestions(clientId);
     toast('제거했습니다');
