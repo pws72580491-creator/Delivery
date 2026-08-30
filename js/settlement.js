@@ -1490,7 +1490,10 @@ function openPayEdit(orderId, clientName, month) {
     const itemNames = (o.items||[]).map(i=>`${i.name}(${Math.abs(i.qty)})`).join(', ');
     document.getElementById('peOrderInfo').textContent  = `${o.date} · ${itemNames}`;
     document.getElementById('peOrderTotal').textContent = fmt(o.total) + '원';
-    _setMoneyVal('peAmount', o.paidAmount || 0);
+    // ★ v151 fix: 할인완납된 전표(paidAmount < total)를 열면 paidAmount로 프리필되어,
+    // 금액을 안 건드리고 그대로 저장 시 amount < total → 아래 부분결제 분기로 빠져 완납이
+    // 미수로 되돌아가는 문제가 있었음. 이미 완납(isPaid)인 전표는 total로 프리필한다.
+    _setMoneyVal('peAmount', o.isPaid ? o.total : (o.paidAmount || 0));
     document.getElementById('peNote').value   = o.paidNote || '';
 
     // 빠른 버튼: 0원(취소), 절반, 전액
@@ -1530,18 +1533,22 @@ function confirmPayEdit() {
 
     if (amount < 0) return toast('❗ 0 이상의 금액을 입력하세요');
 
+    // ★ v151 fix: 세 분기 모두 discount:null 포함 — 할인완납(o.discount>0) 전표를 수금수정
+    // 하면 discount가 안 지워져 대시보드·정산·CRM 매출집계(_effectiveTotal 패턴, 9곳 이상)가
+    // 정정된 금액이 아닌 예전 할인만큼 축소 집계되는 문제가 있었음. 수금수정은 금액을 명시적
+    // 으로 재지정하는 동작이므로 이전 할인 컨텍스트는 항상 초기화한다.
     let patch, toastMsg;
     if (amount === 0) {
         patch = { paidAmount: 0, isPaid: false, paidAt: null, paidNote: null,
-                  paidMethod: null, paidMethodDetail: null, crmControlled: null };
+                  paidMethod: null, paidMethodDetail: null, crmControlled: null, discount: null };
         toastMsg = '🔴 수금 취소 — 미수로 변경됨';
     } else if (amount >= o.total) {
         patch = { paidAmount: o.total, isPaid: true, paidAt: new Date().toISOString(),
-                  paidMethod: method, crmControlled: null };
+                  paidMethod: method, crmControlled: null, discount: null };
         if (note) patch.paidNote = note;
         toastMsg = '💚 완납으로 수정됨 · ' + _methodLabel(method);
     } else {
-        patch = { paidAmount: amount, isPaid: false, paidAt: new Date().toISOString(), paidMethod: method };
+        patch = { paidAmount: amount, isPaid: false, paidAt: new Date().toISOString(), paidMethod: method, discount: null };
         if (note) patch.paidNote = note;
         toastMsg = _methodLabel(method) + ' ' + fmt(amount) + '원으로 수정됨';
     }

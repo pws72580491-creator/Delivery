@@ -392,7 +392,15 @@ function _buildClientItemsCache() {
     // clientId → 날짜 내림차순으로 품목명 첫 등장만 수집
     // clientId 없는 전표는 clientName을 fallback 키로 사용
     const tmp = {}; // key → [{name,price,date,createdAt}]
-    const sorted = [...orders].sort((a,b) => (b.date||"").localeCompare(a.date||""));
+    // ★ v151 fix: date만으로 정렬하면 같은 날짜에 같은 품목이 두 번 납품된 경우(드물지 않음 —
+    // deliveryDate 기본값이 항상 "오늘"이라 하루에 여러 건 등록이 흔함) 동률 처리 순서가 배열
+    // 원래 순서(먼저 등록된 건)로 고정되어, v150의 "제거 이후 재납품 시 추천 복귀" 로직이 같은
+    // 날짜 재납품에서는 무력화될 수 있었음. date가 같으면 createdAt(실제 등록 시각)으로 한 번
+    // 더 정렬해 진짜 최신 항목이 "첫 등장"으로 채택되도록 보강.
+    const sorted = [...orders].sort((a,b) => {
+        const d = (b.date||"").localeCompare(a.date||"");
+        return d !== 0 ? d : (b.createdAt||"").localeCompare(a.createdAt||"");
+    });
     for (const o of sorted) {
         const cid = o.clientId || ('name:' + (o.clientName || ''));
         if (!cid) continue;

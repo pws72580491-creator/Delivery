@@ -192,7 +192,10 @@ function exportSettlementExcel() {
 }
 
 function exportJSON() {
-    const data = { clients, orders, prices, stockItems, exportDate:new Date().toISOString(), version:'95' };
+    // ★ v151 fix: version이 '95'로 하드코딩되어 실제 앱 버전(v150)과 계속 어긋나 있었음.
+    // 매 릴리스 갱신되는 document.title("...v150")에서 직접 읽어와 다시 stale해지지 않게 함.
+    const verTag = document.title.match(/v(\d+)/)?.[1] || 'unknown';
+    const data = { clients, orders, prices, stockItems, exportDate:new Date().toISOString(), version:verTag };
     const blob = new Blob([JSON.stringify(data,null,2)], { type:'application/json' });
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement('a');
