@@ -268,6 +268,17 @@ document.addEventListener('click', e => {
         document.querySelectorAll('.client-card.show-tooltip').forEach(el => el.classList.remove('show-tooltip'));
 });
 
+// ★ v152: 입력창 더블탭 → 전체 선택 (품목명·수량·단가 등을 매번 지우지 않고 바로 덮어쓸 수 있게)
+// 검색창 3곳은 기존에 개별 ondblclick="this.select()"로 처리돼 있었는데, 그 외 모든 입력창
+// (수정 모달의 품목행 등 동적으로 그려지는 것 포함)엔 빠져 있어서 전역 위임 방식으로 통일.
+document.addEventListener('dblclick', e => {
+    const t = e.target;
+    const skip = ['checkbox', 'radio', 'file', 'range', 'color', 'hidden'];
+    if (t.tagName === 'TEXTAREA' || (t.tagName === 'INPUT' && !skip.includes(t.type))) {
+        t.select();
+    }
+});
+
 // ─── 바텀 네비 ───
 
 function bnavGo(tab, btnEl) {
