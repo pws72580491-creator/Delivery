@@ -11,7 +11,7 @@
     <meta name="apple-mobile-web-app-title" content="납품관리">
     <link rel="apple-touch-icon" href="./icon-192.png">
     <link rel="manifest" href="./manifest.json">
-    <title>납품 관리 Pro v151</title>
+    <title>납품 관리 Pro v152</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js" defer></script>
@@ -38,7 +38,7 @@
             <div class="logo-icon">📦</div>
             <div>
                 <div class="logo-text">납품 관리 Pro</div>
-                <div class="logo-sub">v151 · PWA 앱 설치 지원</div>
+                <div class="logo-sub">v152 · PWA 앱 설치 지원</div>
             </div>
         </div>
         <div class="header-btns">
@@ -628,7 +628,7 @@
     <div class="card">
         <div class="card-title">앱 정보</div>
         <div style="font-size:13px;color:var(--text2);line-height:2;margin-bottom:12px;">
-            버전: <strong style="color:var(--accent);">v151</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
+            버전: <strong style="color:var(--accent);">v152</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
             거래처: <span id="infoClients">0</span>개 &nbsp;·&nbsp;
             납품내역: <span id="infoOrders">0</span>건
         </div>
@@ -642,7 +642,11 @@
             <div id="changelogList" style="display:flex;flex-direction:column;gap:6px;">
                 <!-- 현재 버전 -->
                 <div class="changelog-item">
-                    <span class="changelog-ver" style="color:var(--green);">v151</span>
+                    <span class="changelog-ver" style="color:var(--green);">v152</span>
+                    <span class="changelog-desc">입력창 더블탭 시 전체 선택 기능 추가 — 품목명·수량·단가처럼 값을 고칠 일이 잦은 필드도 매번 지우지 않고 더블탭 한 번으로 전체 선택 후 바로 새 값을 입력할 수 있습니다. 거래처 검색창 3곳은 기존에도 지원하고 있었는데, 그 외 나머지 모든 입력창(수정 모달의 품목 행처럼 그때그때 그려지는 것 포함)까지 전역으로 확장했습니다.</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v151</span>
                     <span class="changelog-desc">코드 전체 검수 중 발견된 문제 3건 수정. ① v150의 "제거 후 재납품 시 추천 복귀" 로직이 납품일(date)만으로 정렬해 동률(같은 날짜에 같은 품목을 두 번 납품 — deliveryDate 기본값이 항상 오늘이라 흔한 상황) 처리 시 배열상 먼저 등록된 전표 쪽이 채택되곤 해서, 같은 날짜 안에서 제거 후 재납품한 경우엔 여전히 추천에 안 살아나는 경우가 있었음 → 날짜가 같으면 실제 등록 시각(createdAt)으로 한 번 더 정렬해 진짜 최신 항목이 채택되도록 보강. ② 할인완납 처리된 전표를 "수금 수정"으로 열면 실수령액(총액보다 작음)이 금액칸에 프리필되는데, 그대로(예: 결제수단만 고치려고) 저장하면 총액보다 작은 금액으로 인식돼 완납이 미수로 되돌아가는 문제와, 완납으로 재저장해도 할인(discount) 필드가 안 지워진 채 남아 이후 매출집계(대시보드·정산·CRM 연동, 총액에서 할인을 빼는 계산이 9곳 이상에서 쓰임)가 정정된 금액이 아닌 예전 할인만큼 축소 집계되는 문제가 있었음 → 이미 완납인 전표는 총액으로 프리필하고, 수금수정의 모든 경로에서 할인 필드를 항상 초기화하도록 수정(전표수정 쪽 로직은 기존부터 정상 처리 중이었음). ③ 데이터 내보내기(JSON)의 내부 버전 표기가 'v95'로 굳어 실제 앱 버전과 계속 어긋나 있던 것을 발견 — 화면에 표시되는 버전에서 매번 자동으로 읽어오도록 고쳐서 다시 어긋나지 않게 함. 납품 내역·재고·거래처 데이터 자체는 이번 수정과 무관하게 항상 그대로였음.</span>
                 </div>
                 <div class="changelog-item">
