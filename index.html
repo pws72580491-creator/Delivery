@@ -11,7 +11,7 @@
     <meta name="apple-mobile-web-app-title" content="납품관리">
     <link rel="apple-touch-icon" href="./icon-192.png">
     <link rel="manifest" href="./manifest.json">
-    <title>납품 관리 Pro v152</title>
+    <title>납품 관리 Pro v154</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js" defer></script>
@@ -38,7 +38,7 @@
             <div class="logo-icon">📦</div>
             <div>
                 <div class="logo-text">납품 관리 Pro</div>
-                <div class="logo-sub">v152 · PWA 앱 설치 지원</div>
+                <div class="logo-sub">v154 · PWA 앱 설치 지원</div>
             </div>
         </div>
         <div class="header-btns">
@@ -628,7 +628,7 @@
     <div class="card">
         <div class="card-title">앱 정보</div>
         <div style="font-size:13px;color:var(--text2);line-height:2;margin-bottom:12px;">
-            버전: <strong style="color:var(--accent);">v152</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
+            버전: <strong style="color:var(--accent);">v154</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
             거래처: <span id="infoClients">0</span>개 &nbsp;·&nbsp;
             납품내역: <span id="infoOrders">0</span>건
         </div>
@@ -642,7 +642,15 @@
             <div id="changelogList" style="display:flex;flex-direction:column;gap:6px;">
                 <!-- 현재 버전 -->
                 <div class="changelog-item">
-                    <span class="changelog-ver" style="color:var(--green);">v152</span>
+                    <span class="changelog-ver" style="color:var(--green);">v154</span>
+                    <span class="changelog-desc">거래명세표 PNG에 대표 도장 이미지 추가 — 공급자 정보 줄의 "대표: 이애경" 옆에 도장 이미지를 표시합니다. 명세표 팝업의 PNG 저장 버튼 위에 "🔖 PNG 저장 시 대표 도장 포함" 체크박스를 추가해 켜고 끌 수 있고, 선택 상태는 기기에 저장되어 다음에 열 때도 유지됩니다(기본값: 포함).</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v153</span>
+                    <span class="changelog-desc">거래명세표 이미지 저장 시 공급자 정보 표기 추가 — 헤더 바로 아래에 공급자명·사업자등록번호·대표자·주소를 작은 글씨 두 줄로 표시합니다.</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v152</span>
                     <span class="changelog-desc">입력창 더블탭 시 전체 선택 기능 추가 — 품목명·수량·단가처럼 값을 고칠 일이 잦은 필드도 매번 지우지 않고 더블탭 한 번으로 전체 선택 후 바로 새 값을 입력할 수 있습니다. 거래처 검색창 3곳은 기존에도 지원하고 있었는데, 그 외 나머지 모든 입력창(수정 모달의 품목 행처럼 그때그때 그려지는 것 포함)까지 전역으로 확장했습니다.</span>
                 </div>
                 <div class="changelog-item">
