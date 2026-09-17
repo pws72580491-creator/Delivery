@@ -395,6 +395,27 @@ async function openDeliveryConfirm() {
     }
     if (!client) return toast('❗ 거래처를 다시 선택하세요');
 
+    // ── 당일 중복 거래 검사 (같은 거래처 · 같은 날짜에 같은 품목이 이미 등록돼 있는지) ──
+    // 같은 날 재납품 자체는 정상적인 상황(오전/오후 추가 출고 등)이라 막지는 않고,
+    // 실수로 두 번 입력하는 상황만 잡아내도록 확인 팝업으로 안내 후 진행 여부를 맡긴다.
+    if (!client._isSharedVirtual) {
+        const dupes = [];
+        tempGroups.forEach(g => {
+            const sameDay = orders.filter(o => o.clientName === client.name && o.date === g.date);
+            if (!sameDay.length) return;
+            const existingNames = new Set();
+            sameDay.forEach(o => (o.items||[]).forEach(it => existingNames.add(normItemName(it.name))));
+            g.items.forEach(it => {
+                if (existingNames.has(normItemName(it.name))) dupes.push(`${g.date} · ${it.name}`);
+            });
+        });
+        if (dupes.length > 0) {
+            const msg = dupes.map(d => `· ${d}`).join('\n');
+            const proceed = await customConfirm(`⚠️ 같은 날짜에 이미 등록된 품목이 있습니다.\n\n${msg}\n\n그래도 등록할까요?`, '그대로 등록', 'btn-primary');
+            if (!proceed) return;
+        }
+    }
+
     // ── 재고 부족 검사 (자동차감 ON이고 타인거래 아닐 때) ──
     if (stockAutoDeduct && !_deliveryIsVoid) {
         // 품목별 총 필요 수량 집계
