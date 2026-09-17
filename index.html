@@ -11,7 +11,7 @@
     <meta name="apple-mobile-web-app-title" content="납품관리">
     <link rel="apple-touch-icon" href="./icon-192.png">
     <link rel="manifest" href="./manifest.json">
-    <title>납품 관리 Pro v154</title>
+    <title>납품 관리 Pro v155</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js" defer></script>
@@ -38,7 +38,7 @@
             <div class="logo-icon">📦</div>
             <div>
                 <div class="logo-text">납품 관리 Pro</div>
-                <div class="logo-sub">v154 · PWA 앱 설치 지원</div>
+                <div class="logo-sub">v155 · PWA 앱 설치 지원</div>
             </div>
         </div>
         <div class="header-btns">
@@ -628,7 +628,7 @@
     <div class="card">
         <div class="card-title">앱 정보</div>
         <div style="font-size:13px;color:var(--text2);line-height:2;margin-bottom:12px;">
-            버전: <strong style="color:var(--accent);">v154</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
+            버전: <strong style="color:var(--accent);">v155</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
             거래처: <span id="infoClients">0</span>개 &nbsp;·&nbsp;
             납품내역: <span id="infoOrders">0</span>건
         </div>
@@ -642,7 +642,11 @@
             <div id="changelogList" style="display:flex;flex-direction:column;gap:6px;">
                 <!-- 현재 버전 -->
                 <div class="changelog-item">
-                    <span class="changelog-ver" style="color:var(--green);">v154</span>
+                    <span class="changelog-ver" style="color:var(--green);">v155</span>
+                    <span class="changelog-desc">납품 등록 시 당일 중복 거래 검사 추가 — 같은 거래처·같은 날짜에 이미 등록된 품목이 있으면 납품확정 팝업을 열기 전에 어떤 품목이 겹치는지 알려주고 그대로 등록할지 확인합니다. 오전/오후로 나눠 같은 품목을 정상적으로 두 번 납품하는 경우까지 막으면 안 되므로 차단은 하지 않고, 확인 후 원하면 그대로 진행할 수 있습니다.</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v154</span>
                     <span class="changelog-desc">거래명세표 PNG에 대표 도장 이미지 추가 — 공급자 정보 줄의 "대표: 이애경" 옆에 도장 이미지를 표시합니다. 명세표 팝업의 PNG 저장 버튼 위에 "🔖 PNG 저장 시 대표 도장 포함" 체크박스를 추가해 켜고 끌 수 있고, 선택 상태는 기기에 저장되어 다음에 열 때도 유지됩니다(기본값: 포함).</span>
                 </div>
                 <div class="changelog-item">
