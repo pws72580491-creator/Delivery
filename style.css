@@ -1467,12 +1467,19 @@ button, a, input, select, textarea,
         --surf4:      #e4e4f4;
         --border:     #dcdcf0;
         --border-s:   #c8c8e8;
+        --accent-dim: rgba(123,110,246,.08);
+        --green-dim:  rgba(32,192,92,.08);
+        --red-dim:    rgba(240,78,78,.08);
+        --orange-dim: rgba(245,166,35,.08);
+        --blue-dim:   rgba(59,130,246,.08);
         --text:       #18182e;
         --text2:      #5050a0;
         --text3:      #aaaac8;
+        --text4:      #d0d0e8;
         --shadow:     0 8px 32px rgba(0,0,0,.10);
         --shadow-s:   0 2px 12px rgba(0,0,0,.07);
         --shadow-xs:  0 1px 4px rgba(0,0,0,.05);
+        --glow-accent: none;
     }
 }
 

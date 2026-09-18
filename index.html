@@ -4,14 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <!-- ─── PWA 메타태그 ─── -->
-    <meta name="theme-color" content="#6c63ff">
+    <meta name="theme-color" content="#0c0c13">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="납품관리">
     <link rel="apple-touch-icon" href="./icon-192.png">
     <link rel="manifest" href="./manifest.json">
-    <title>납품 관리 Pro v155</title>
+    <title>납품 관리 Pro v156</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js" defer></script>
@@ -23,6 +23,29 @@
     <link rel="stylesheet" href="./style.css">
 </head>
 <body>
+<script>
+// ★ v156 fix: 실행 시 하단 시스템 내비게이션 바 부근 색깔이 깜빡이는 현상 수정.
+// 원인: 테마(.light/.theme-override-dark) 클래스가 core.js/app.js(15개 외부 스크립트 중
+// 5번째·마지막)에서야 적용돼, 그 전까지는 기본(다크) 배경으로 먼저 그려졌다가 뒤늦게
+// 라이트로 바뀌는 순간이 있었음. 외부 스크립트가 하나도 로드되기 전인 지금 시점에
+// 동기적으로 먼저 적용해 첫 페인트부터 올바른 테마로 그려지게 한다.
+// (localStorage에 명시적 선택이 없으면 CSS의 prefers-color-scheme 미디어쿼리가 즉시
+// 알아서 처리하므로 여기서는 아무것도 하지 않는다 — core.js applyTheme()과 동일 로직)
+(function() {
+    var legacyDark = localStorage.getItem('darkMode');
+    if (legacyDark === '0' && localStorage.getItem('theme') === null) {
+        localStorage.setItem('theme', 'light');
+    }
+    var theme = localStorage.getItem('theme');
+    var metaTheme = document.querySelector('meta[name="theme-color"]');
+    if (theme === 'light') {
+        document.body.classList.add('light');
+        if (metaTheme) metaTheme.setAttribute('content', '#f2f2fb');
+    } else if (theme === 'dark') {
+        document.body.classList.add('theme-override-dark');
+    }
+})();
+</script>
 
 <div class="app" id="appRoot">
 
@@ -38,7 +61,7 @@
             <div class="logo-icon">📦</div>
             <div>
                 <div class="logo-text">납품 관리 Pro</div>
-                <div class="logo-sub">v155 · PWA 앱 설치 지원</div>
+                <div class="logo-sub">v156 · PWA 앱 설치 지원</div>
             </div>
         </div>
         <div class="header-btns">
@@ -628,7 +651,7 @@
     <div class="card">
         <div class="card-title">앱 정보</div>
         <div style="font-size:13px;color:var(--text2);line-height:2;margin-bottom:12px;">
-            버전: <strong style="color:var(--accent);">v155</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
+            버전: <strong style="color:var(--accent);">v156</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
             거래처: <span id="infoClients">0</span>개 &nbsp;·&nbsp;
             납품내역: <span id="infoOrders">0</span>건
         </div>
@@ -642,7 +665,11 @@
             <div id="changelogList" style="display:flex;flex-direction:column;gap:6px;">
                 <!-- 현재 버전 -->
                 <div class="changelog-item">
-                    <span class="changelog-ver" style="color:var(--green);">v155</span>
+                    <span class="changelog-ver" style="color:var(--green);">v156</span>
+                    <span class="changelog-desc">실행 시 하단 시스템 내비게이션 바 부근 색깔이 깜빡이는 현상 수정. 원인 3가지: ① 테마(.light) 클래스가 외부 스크립트 15개 중 5번째(core.js)·마지막(app.js)에서야 적용돼 그 전엔 기본(다크) 배경으로 먼저 그려졌다가 뒤늦게 바뀌는 순간이 있었음 → body 최상단에 동기 인라인 스크립트를 추가해 스크립트 로드 전에 먼저 적용. ② prefers-color-scheme:light 미디어쿼리 CSS가 body.light 클래스 대비 변수 일부(강조색 배경, 그림자 글로우 등)가 누락돼 있어 OS 자동감지 라이트 모드에서도 뒤늦게 색이 보정되는 순간이 있었음 → 누락 변수 전부 보강. ③ manifest.json/theme-color 메타가 실제 배경색(#0c0c13)과 다른 색(#1a1a3e, #6c63ff)으로 따로 설정돼 있어 스플래시 화면→실제 화면 전환 시 색이 튀었음 → 실제 다크 배경색으로 통일하고, 라이트 모드 전환 시에도 theme-color 메타가 같이 갱신되도록 수정.</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v155</span>
                     <span class="changelog-desc">납품 등록 시 당일 중복 거래 검사 추가 — 같은 거래처·같은 날짜에 이미 등록된 품목이 있으면 납품확정 팝업을 열기 전에 어떤 품목이 겹치는지 알려주고 그대로 등록할지 확인합니다. 오전/오후로 나눠 같은 품목을 정상적으로 두 번 납품하는 경우까지 막으면 안 되므로 차단은 하지 않고, 확인 후 원하면 그대로 진행할 수 있습니다.</span>
                 </div>
                 <div class="changelog-item">
