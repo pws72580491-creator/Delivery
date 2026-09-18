@@ -10,6 +10,7 @@ function initSystemTheme() {
     const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
     document.body.classList.toggle('light', !isDark);
     document.getElementById('themeBtn').textContent = isDark ? '☀️' : '🌙';
+    _syncThemeColorMeta(!isDark);
 }
 
 // ─── 대시보드 렌더 후 sparklines & count-up 실행 ───

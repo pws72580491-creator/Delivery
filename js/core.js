@@ -102,6 +102,12 @@ function _toastNext() {
 
 // ─── 테마 ───
 
+// 상태바/시스템 UI용 theme-color 메타 태그를 실제 배경색과 맞춘다 (첫 페인트 이후에도 계속 동기화)
+function _syncThemeColorMeta(isLight) {
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', isLight ? '#f2f2fb' : '#0c0c13');
+}
+
 function applyTheme() {
     // 레거시 darkMode 키 마이그레이션
     const legacyDark = localStorage.getItem('darkMode');
@@ -116,6 +122,7 @@ function applyTheme() {
     // OS가 라이트모드일 때 사용자가 다크를 명시 선택한 경우 CSS 미디어쿼리 충돌 방지
     document.body.classList.toggle('theme-override-dark', isDarkOverride);
     document.getElementById('themeBtn').textContent = isLight ? '🌙' : '☀️';
+    if (theme) _syncThemeColorMeta(isLight); // 명시적 선택이 없으면 initSystemTheme()이 OS 기준으로 처리
 }
 
 function toggleTheme() {
@@ -124,6 +131,7 @@ function toggleTheme() {
     // 다크 선택 시 OS 라이트모드 CSS 미디어쿼리 충돌 방지 클래스 토글
     document.body.classList.toggle('theme-override-dark', !isLight);
     document.getElementById('themeBtn').textContent = isLight ? '🌙' : '☀️';
+    _syncThemeColorMeta(isLight);
 }
 
 // ─── 탭 ───
