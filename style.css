@@ -670,6 +670,8 @@ body.light .stat-card.orange .stat-value { color:#a07010; }
 .order-items { font-size:12px; color:var(--text2); margin-bottom:9px; line-height:1.65; }
 .order-bottom { display:flex; justify-content:space-between; align-items:center; }
 .order-total { font-family:'DM Mono',monospace; font-weight:700; font-size:15px; color:var(--accent); }
+.order-month-total { font-size:11px; color:var(--text3); white-space:nowrap; text-align:right; }
+.order-month-total b { font-family:'DM Mono',monospace; font-weight:700; font-size:12px; color:var(--text2); }
 .pay-badge { font-size:10px; padding:4px 10px; border-radius:99px; font-weight:700; cursor:pointer; }
 .pay-badge.paid   { background:var(--green-dim); color:var(--green); }
 .pay-badge.unpaid { background:var(--red-dim); color:var(--red); }
