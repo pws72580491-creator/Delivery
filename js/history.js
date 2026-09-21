@@ -248,6 +248,17 @@ function renderOrders() {
         return;
     }
 
+    // ── 거래처·월별 매출 합계 (카드 우측 "이번달 ○○원" 표시용) ──
+    // ★ v157: 현재 필터(기간·검색·수금상태)와 무관하게 해당 거래처의 그 달 전체 매출을 집계.
+    //   상단 요약(매출)과 같은 기준 — 타인거래(isVoid)·타인 대납 제외, 할인완납은 실청구액, 반품/회수는 음수로 상쇄.
+    const _monthTotalMap = {};
+    allOrders.forEach(o => {
+        if (o.isVoid || !_isMine(o) || !o.clientName || !o.date) return;
+        const k = o.clientName + '|' + o.date.slice(0, 7);
+        _monthTotalMap[k] = (_monthTotalMap[k] || 0) + _et(o);
+    });
+    const _curMonth = todayKST().slice(0, 7);
+
     // ── 전표 카드 HTML ──
     const orderCardHTML = o => {
         const cName = escapeAttr(o.clientName || '');
@@ -274,6 +285,12 @@ function renderOrders() {
                 : delegatedBadge
                     ? `<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">${delegatedBadge}${payBadge}</div>`
                     : payBadge;
+        // 이 전표가 속한 달의 거래처 총액 (현재 달이면 "이번달", 과거 달이면 "8월" 식으로 표시)
+        const _mon    = (o.date || '').slice(0, 7);
+        const _mKey   = (o.clientName && _mon) ? o.clientName + '|' + _mon : '';
+        const monthTotalHtml = (_mKey && (_mKey in _monthTotalMap))
+            ? `<div class="order-month-total">${_mon === _curMonth ? '이번달' : parseInt(_mon.slice(5, 7), 10) + '월'} <b>${fmt(_monthTotalMap[_mKey])}원</b></div>`
+            : '';
         const memoLabel = o.note ? '📝 메모수정' : '📝 메모';
         const memoPriority = memoPriorityLevel(o); // 1=낮음 2=보통(기본) 3=높음
         const memoClass = o.note ? `memo-btn has-memo priority-${memoPriority}` : 'memo-btn';
@@ -309,7 +326,7 @@ function renderOrders() {
             </div>
             <div class="order-items">${(o.items||[]).map(i=>`${highlight(i.name,q)} ${escapeHtml(Math.abs(i.qty))}개 × ${fmt(i.price)}원`).join('<br>')}</div>
             ${memoBodyHtml}
-            <div class="order-bottom"><div class="order-total">${fmt(o.total)}원</div></div>
+            <div class="order-bottom"><div class="order-total">${fmt(o.total)}원</div>${monthTotalHtml}</div>
             <div class="order-actions">
                 <button class="btn btn-ghost btn-sm" onclick="showOrderDetail('${oId}')">🔍<span class="btn-label">상세</span></button>
                 ${o._sharedWsId
