@@ -1,6 +1,8 @@
 // ╔══════════════════════════════════════════════════════════════╗
 // ║  § 14  Firebase 온라인 동기화  ⚠️ 절대 수정 금지                          ║
 // ║  온라인 동기화 코드는 원본과 100% 동일합니다                                  ║
+// ║  단, v158에서 진단 로그로 재현 확인 후 사용자 승인 받아 1건 예외 수정            ║
+// ║  (initialConnect.get 타임아웃 시 정상 소켓까지 끊던 버그 — 아래 ★v158 fix 참고)  ║
 // ╚══════════════════════════════════════════════════════════════╝
 
 // ─── 공유 납품 오프라인 큐 (v96 이식, v114 개선) ─────────────────────────────
@@ -988,21 +990,29 @@ function _doConnect(id, auto=false) {
             _connectGuard    = false; // 실패해도 리스너 차단 해제
             _initialLoadDone = true; // 실패해도 리스너는 활성화
             console.error('Firebase 연결 실패:', err);
-            isConnected = false;
-            // ★ v120: 핸들러 참조 먼저 정리 → workspaceRef=null 이전에 호출해야 ref 조건 통과
-            _detachFirebaseListeners();
-            if (workspaceRef) workspaceRef.off();
-            workspaceRef = null;
-            setSyncStatus('error');
-            document.getElementById('connectBtn').style.display    = 'block';
-            document.getElementById('disconnectBtn').style.display = 'none';
-            const isTimeout = String(err && err.message || '').startsWith('[timeout]');
-            const msg = err.code === 'PERMISSION_DENIED'
-                ? '❗ 권한 오류: Firebase 보안 규칙을 확인하세요'
-                : isTimeout
-                    ? '❗ 연결 시간 초과 — 네트워크 상태를 확인 후 다시 시도해주세요'
-                    : '❗ 연결 실패: ' + (err.message || '네트워크 오류');
-            toast(msg);
+            // ★ v158 fix: 이 조회는 로컬↔서버 중 뭐가 최신인지 판단하기 위한 1회성 조회일 뿐이다.
+            // .info/connected가 이미 true를 보고했다면(=소켓 자체는 정상) 이 조회 하나가 느렸다는
+            // 이유로 리스너를 해제하고 workspaceRef를 null로 만들면 안 된다 — 그렇게 하면
+            // _reconnectFromBackground()·window 'online' 핸들러 등 이후의 모든 재연결 경로가
+            // workspaceRef 존재를 전제로 하고 있어 다시는 자동으로 붙지 못하고, 앱을 완전히
+            // 재실행해야만 풀리는 문제가 있었다(재발 시 배너의 "재연결 시도 중"이 사실과 다르게 됨).
+            // → 리스너·workspaceRef는 그대로 두고, 아직 진짜로 연결도 안 된 경우에만 오류를 표시한다.
+            // 소켓이 이미 붙어 있었다면 그 상태 그대로 유지되고, 이후 실제로 끊기거나 재연결될 때는
+            // 기존 .info/connected 핸들러가 정상적으로 상태를 갱신한다.
+            if (!isConnected) {
+                setSyncStatus('error');
+                document.getElementById('connectBtn').style.display    = 'block';
+                document.getElementById('disconnectBtn').style.display = 'none';
+                const isTimeout = String(err && err.message || '').startsWith('[timeout]');
+                const msg = err.code === 'PERMISSION_DENIED'
+                    ? '❗ 권한 오류: Firebase 보안 규칙을 확인하세요'
+                    : isTimeout
+                        ? '❗ 연결 시간 초과 — 네트워크 상태를 확인 후 다시 시도해주세요'
+                        : '❗ 연결 실패: ' + (err.message || '네트워크 오류');
+                toast(msg);
+            } else {
+                diagLog('ℹ️ 최초 조회만 타임아웃', '소켓은 이미 연결됨 — 리스너 유지, 병합판단만 생략');
+            }
         });
 
     } catch(e) {
