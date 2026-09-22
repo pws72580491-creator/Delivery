@@ -11,7 +11,7 @@
     <meta name="apple-mobile-web-app-title" content="납품관리">
     <link rel="apple-touch-icon" href="./icon-192.png">
     <link rel="manifest" href="./manifest.json">
-    <title>납품 관리 Pro v157</title>
+    <title>납품 관리 Pro v158</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js" defer></script>
@@ -61,7 +61,7 @@
             <div class="logo-icon">📦</div>
             <div>
                 <div class="logo-text">납품 관리 Pro</div>
-                <div class="logo-sub">v157 · PWA 앱 설치 지원</div>
+                <div class="logo-sub">v158 · PWA 앱 설치 지원</div>
             </div>
         </div>
         <div class="header-btns">
@@ -651,7 +651,7 @@
     <div class="card">
         <div class="card-title">앱 정보</div>
         <div style="font-size:13px;color:var(--text2);line-height:2;margin-bottom:12px;">
-            버전: <strong style="color:var(--accent);">v157</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
+            버전: <strong style="color:var(--accent);">v158</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
             거래처: <span id="infoClients">0</span>개 &nbsp;·&nbsp;
             납품내역: <span id="infoOrders">0</span>건
         </div>
@@ -665,7 +665,11 @@
             <div id="changelogList" style="display:flex;flex-direction:column;gap:6px;">
                 <!-- 현재 버전 -->
                 <div class="changelog-item">
-                    <span class="changelog-ver" style="color:var(--green);">v157</span>
+                    <span class="changelog-ver" style="color:var(--green);">v158</span>
+                    <span class="changelog-desc">동기화 오류 고착 버그 수정 — 사용자가 제출한 동기화 진단 로그로 원인 재현: Firebase 소켓(.info/connected)은 1초 안에 정상 연결됐는데도, 접속 직후 한 번만 실행되는 로컬↔서버 비교용 조회(initialConnect.get, 15초 타임아웃)가 그 뒤로 응답을 못 받아 매번 타임아웃되는 상황이 반복 발생. 문제는 타임아웃 이후 처리: 이 조회 하나가 느렸다는 이유로 이미 정상이던 .info/connected 리스너까지 통째로 해제하고 workspaceRef를 null로 만들어버려서, 이후 포그라운드 복귀 재연결·브라우저 online 이벤트 등 모든 자동 재연결 경로가 workspaceRef 부재로 조용히 동작을 멈췄음(재연결 시도 로그 자체가 안 남았던 것으로 확인) — 결과적으로 화면엔 "재연결 시도 중"이라고 뜨지만 실제로는 아무 시도도 일어나지 않고, 앱을 완전히 종료 후 재실행해야만 복구됐음. 수정: 소켓이 이미 연결된 상태라면 이 1회 조회가 타임아웃돼도 리스너·workspaceRef를 그대로 유지하도록 변경 — 병합판단(로컬/서버 중 최신 비교)만 건너뛰고 실시간 리스너는 정상 동작하며, 이후 실제로 끊기거나 재연결될 때 기존 로직이 자동으로 상태를 갱신함. 동기화 코드(sync.js)는 원칙적으로 수정 금지 구역이나, 이번 건은 재현 로그 확인 후 사용자 승인 받아 해당 catch 블록 1곳만 예외적으로 수정.</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v157</span>
                     <span class="changelog-desc">납품 내역 카드에 거래처 월 총액 표시 추가 — 카드 하단 오른쪽, 오늘 납품금액 옆에 해당 거래처의 그 달 누적 매출을 작게 보여줍니다(현재 달이면 "이번달", 지난 달 전표면 "8월"처럼 표시). 기간·검색·수금상태 필터와 무관하게 그 달 전체를 집계하며, 상단 요약과 같은 기준(타인거래·타인 대납 제외, 할인완납은 실청구액, 반품/회수는 차감)입니다.</span>
                 </div>
                 <div class="changelog-item">
