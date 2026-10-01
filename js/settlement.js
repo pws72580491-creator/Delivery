@@ -704,7 +704,7 @@ async function showClientStatement(clientName, month) {
         </button>
         <button class="btn-bulk-pay" onclick="bulkPayClient('${escapeAttr(clientName)}','${escapeAttr(month)}')">
             💚 미수금 전체 완납 (${fmt(grandUnpaid)}원)
-        </button>` : `<div style="text-align:center;color:var(--green);font-weight:700;margin-top:10px;font-size:13px;">✅ 완납 완료</div>`}`;
+        </button>` : `<button onclick="bulkUnpayClient('${escapeAttr(clientName)}','${escapeAttr(month)}')" style="width:100%;text-align:center;color:var(--green);font-weight:700;margin-top:10px;font-size:13px;background:none;border:none;cursor:pointer;padding:6px 0;" title="탭하여 완납 전체 취소">✅ 완납 완료 <span style="font-size:11px;color:var(--text3);font-weight:600;">(탭하여 취소)</span></button>`}`;
     // 계산서 일괄 체크박스 — 현재 명세표에 보이는 전표 기준으로 전체/부분/전체해제 상태 반영
     const _invoiceTargets = [...carryOrders, ...filt];
     const _invoiceAllCb = document.getElementById('statementInvoiceAllCb');
@@ -1667,5 +1667,45 @@ async function _doBulkPay(selectedMethod) {
     toast(`💚 ${unpaidList.length}건 완납 처리 완료 · ${_methodLabel(selectedMethod)}`, 'var(--green)');
     // CRM 역방향 패치 (내 전표 + 공유 전표 모두 — wsId는 crm-sync가 _sharedWsId로 판단)
     unpaidList.forEach(o => _afterDlPayPatch(o.id, o));
+}
+
+// ★ v158: "✅ 완납 완료" 탭 → 해당 월(이 명세표에 보이는) 완납 전표를 전부 미수로 일괄 취소
+// 반품/회수(isReturn)는 완납 대상이 아니므로 제외. 단건 취소(togglePaid)와 동일한 필드를 되돌린다.
+async function bulkUnpayClient(clientName, month) {
+    const allOrdersForBulk = [...orders, ..._sharedOrdersCache];
+    const paidList = allOrdersForBulk.filter(o =>
+        o.clientName === clientName &&
+        o.date?.startsWith(month) &&
+        o.isPaid && !o.isReturn
+    );
+    if (!paidList.length) return toast('취소할 완납 내역이 없습니다');
+    const total = paidList.reduce((s,o)=>s+o.total,0);
+    if (!await customConfirm(`${clientName} · ${month} 완납 ${paidList.length}건(${fmt(total)}원)을 전부 취소하고 미수로 되돌릴까요?`)) return;
+
+    const patch = { isPaid: false, paidAmount: 0, paidAt: null, paidNote: null,
+                     paidMethod: null, discount: null, paidMethodDetail: null,
+                     crmControlled: null, dlControlled: null };
+    const fbBulk = {};
+    paidList.forEach(o => {
+        Object.assign(o, patch);
+        if (o._sharedWsId) {
+            const p = `workspaces/${o._sharedWsId}/orders/${o.id}`;
+            Object.keys(patch).forEach(k => { fbBulk[p + '/' + k] = patch[k]; });
+            fbBulk[p + '/updatedAt'] = new Date().toISOString();
+        } else {
+            _markDirtyOrder(o.id);
+        }
+    });
+    if (Object.keys(fbBulk).length && typeof firebase !== 'undefined' && firebase.apps.length) {
+        await firebase.database().ref('/').update(fbBulk).catch(e => console.warn('[공유전체완납취소]', e));
+    }
+    _saveAndFlush();
+    _safeRefresh(
+        () => showClientStatement(clientName, month),
+        renderOrders, renderDashboard, updateInfoCounts, updateNavBadges,
+        _refreshUnpaidIfActive, _refreshSettlementIfActive
+    );
+    toast(`🔴 ${paidList.length}건 완납 취소 · 미수로 변경`, 'var(--red)');
+    paidList.forEach(o => _afterDlPayPatch(o.id, o));
 }
 
