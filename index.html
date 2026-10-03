@@ -11,7 +11,7 @@
     <meta name="apple-mobile-web-app-title" content="납품관리">
     <link rel="apple-touch-icon" href="./icon-192.png">
     <link rel="manifest" href="./manifest.json">
-    <title>납품 관리 Pro v159</title>
+    <title>납품 관리 Pro v160</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js" defer></script>
@@ -61,7 +61,7 @@
             <div class="logo-icon">📦</div>
             <div>
                 <div class="logo-text">납품 관리 Pro</div>
-                <div class="logo-sub">v159 · PWA 앱 설치 지원</div>
+                <div class="logo-sub">v160 · PWA 앱 설치 지원</div>
             </div>
         </div>
         <div class="header-btns">
@@ -651,7 +651,7 @@
     <div class="card">
         <div class="card-title">앱 정보</div>
         <div style="font-size:13px;color:var(--text2);line-height:2;margin-bottom:12px;">
-            버전: <strong style="color:var(--accent);">v159</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
+            버전: <strong style="color:var(--accent);">v160</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
             거래처: <span id="infoClients">0</span>개 &nbsp;·&nbsp;
             납품내역: <span id="infoOrders">0</span>건
         </div>
@@ -665,7 +665,11 @@
             <div id="changelogList" style="display:flex;flex-direction:column;gap:6px;">
                 <!-- 현재 버전 -->
                 <div class="changelog-item">
-                    <span class="changelog-ver" style="color:var(--green);">v159</span>
+                    <span class="changelog-ver" style="color:var(--green);">v160</span>
+                    <span class="changelog-desc">내역 탭 날짜 네비 바(📅 ◀ 날짜 ▶ 오늘)에서 "오늘" 버튼이 카드 테두리 밖으로 삐져나오던 정렬 문제 수정 — 네이티브 날짜 입력칸(input[type=date])은 flex:1이어도 min-width가 기본값 auto라 자기 내용 최소폭 밑으로 줄어들지 않아, 좁은 화면에서 아이콘+버튼 4개를 다 넣으면 줄 전체가 카드 폭을 넘겨버렸던 게 원인. 날짜칸에 min-width:0을 줘서 필요시 줄어들게 하고, 아이콘·버튼들은 flex-shrink:0으로 고정해 글자가 찌그러지지 않게 함. 재고 탭의 동일한 날짜 네비 바(🔄 버튼 포함, 버튼 5개로 더 빡빡함)도 같은 구조라 함께 수정됨.</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v159</span>
                     <span class="changelog-desc">거래명세표에서 "✅ 완납 완료" 표시를 탭하면 그 달 완납 전체를 한 번에 미수로 되돌리는 일괄 취소 기능 추가(bulkUnpayClient). 기존엔 완납 전표를 건별로만 취소(togglePaid)할 수 있었는데, 전체 완납 전표를 한꺼번에 취소하고 싶을 때 하나씩 눌러야 했음 → "미수금 전체 완납" 버튼과 대칭되는 기능으로, 반품/회수 전표는 제외하고 그 달에 표시된 완납 전표만 대상으로 isPaid·결제정보(금액·일시·방법·할인 등)를 일괄 초기화. 공유 거래처 전표도 함께 처리.</span>
                 </div>
                 <div class="changelog-item">

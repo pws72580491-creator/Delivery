@@ -1505,23 +1505,30 @@ button, a, input, select, textarea,
    재고 탭 — 날짜 조회 / 과거 뷰 스타일
 ═══════════════════════════════════════ */
 .stock-date-bar {
-    display: flex; align-items: center; gap: 8px;
+    display: flex; align-items: center; gap: 6px;
     background: var(--surf2); border: 1px solid var(--border);
-    border-radius: var(--radius-s); padding: 10px 13px;
+    border-radius: var(--radius-s); padding: 10px 10px;
     margin-bottom: 12px;
 }
 .stock-date-bar label {
+    flex-shrink: 0;
     font-size: 11px; font-weight: 700; color: var(--text2);
     letter-spacing: .5px; white-space: nowrap;
 }
+/* ★ v160 fix: 날짜 네비 바의 아이콘·버튼은 찌그러지지 않게 고정, 폭이 가변인
+   날짜 input만 min-width:0으로 줄어들게 해서 "오늘" 버튼이 카드 밖으로 밀려
+   나가던 문제를 해결 (네이티브 date input은 min-width:auto가 기본이라
+   flex:1이어도 내용 최소폭 밑으로 안 줄어들어 전체 줄이 넘쳤었음) */
+.stock-date-bar > span { flex-shrink: 0; }
 .stock-date-input {
-    flex: 1; padding: 7px 10px;
+    flex: 1; min-width: 0; padding: 7px 6px;
     background: var(--surf3); border: 1px solid var(--border);
     border-radius: var(--radius-s); color: var(--text);
     font-size: 13px; outline: none; transition: border-color .2s;
 }
 .stock-date-input:focus { border-color: var(--accent); }
 .stock-date-today-btn {
+    flex-shrink: 0;
     padding: 7px 12px; border-radius: var(--radius-s);
     border: 1px solid var(--border); background: var(--surf3);
     color: var(--text2); font-size: 11px; font-weight: 700;
