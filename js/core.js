@@ -102,10 +102,15 @@ function _toastNext() {
 
 // ─── 테마 ───
 
-// 상태바/시스템 UI용 theme-color 메타 태그를 실제 배경색과 맞춘다 (첫 페인트 이후에도 계속 동기화)
+// 상태바/하단 시스템 내비게이션 바용 theme-color 메타 태그.
+// ★ v161: 라이트/다크 배경을 그대로 따라가게(#f2f2fb / #0c0c13) 했더니 라이트 모드에서
+// 내비 바가 다크 배경색 그대로 남아 검게 보이는 경우가 있었음(명시적 테마 선택 없이
+// OS 자동감지로만 라이트가 적용된 경로 등) — 애초에 배경색과 맞추는 대신 브랜드 퍼플로
+// 고정해 라이트/다크 어느 쪽이든 항상 같은 색으로 보이게 한다. isLight 매개변수는 기존
+// 호출부(applyTheme/toggleTheme/initSystemTheme)와의 호환을 위해 남겨두되 더는 사용하지 않음.
 function _syncThemeColorMeta(isLight) {
     const meta = document.querySelector('meta[name="theme-color"]');
-    if (meta) meta.setAttribute('content', isLight ? '#f2f2fb' : '#0c0c13');
+    if (meta) meta.setAttribute('content', '#6c63ff');
 }
 
 function applyTheme() {
