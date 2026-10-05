@@ -4,14 +4,16 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <!-- ─── PWA 메타태그 ─── -->
-    <meta name="theme-color" content="#0c0c13">
+    <!-- ★ v161: 하단 시스템 내비게이션 바를 실제 배경색(다크/라이트)이 아니라 브랜드 퍼플로
+         고정 — 라이트 모드에서도 내비 바가 검게/어색하게 보이지 않고 늘 이 색을 유지한다. -->
+    <meta name="theme-color" content="#6c63ff">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="납품관리">
     <link rel="apple-touch-icon" href="./icon-192.png">
     <link rel="manifest" href="./manifest.json">
-    <title>납품 관리 Pro v160</title>
+    <title>납품 관리 Pro v161</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js" defer></script>
@@ -29,18 +31,17 @@
 // 5번째·마지막)에서야 적용돼, 그 전까지는 기본(다크) 배경으로 먼저 그려졌다가 뒤늦게
 // 라이트로 바뀌는 순간이 있었음. 외부 스크립트가 하나도 로드되기 전인 지금 시점에
 // 동기적으로 먼저 적용해 첫 페인트부터 올바른 테마로 그려지게 한다.
-// (localStorage에 명시적 선택이 없으면 CSS의 prefers-color-scheme 미디어쿼리가 즉시
-// 알아서 처리하므로 여기서는 아무것도 하지 않는다 — core.js applyTheme()과 동일 로직)
+// ★ v161: theme-color는 더 이상 라이트/다크 배경을 따라가지 않고 브랜드 퍼플로 고정이라,
+// 여기서 더는 메타를 건드리지 않는다(테마 클래스만 그대로 적용). core.js _syncThemeColorMeta도
+// 동일하게 고정값을 쓰도록 수정됨.
 (function() {
     var legacyDark = localStorage.getItem('darkMode');
     if (legacyDark === '0' && localStorage.getItem('theme') === null) {
         localStorage.setItem('theme', 'light');
     }
     var theme = localStorage.getItem('theme');
-    var metaTheme = document.querySelector('meta[name="theme-color"]');
     if (theme === 'light') {
         document.body.classList.add('light');
-        if (metaTheme) metaTheme.setAttribute('content', '#f2f2fb');
     } else if (theme === 'dark') {
         document.body.classList.add('theme-override-dark');
     }
@@ -61,7 +62,7 @@
             <div class="logo-icon">📦</div>
             <div>
                 <div class="logo-text">납품 관리 Pro</div>
-                <div class="logo-sub">v160 · PWA 앱 설치 지원</div>
+                <div class="logo-sub">v161 · PWA 앱 설치 지원</div>
             </div>
         </div>
         <div class="header-btns">
@@ -651,7 +652,7 @@
     <div class="card">
         <div class="card-title">앱 정보</div>
         <div style="font-size:13px;color:var(--text2);line-height:2;margin-bottom:12px;">
-            버전: <strong style="color:var(--accent);">v160</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
+            버전: <strong style="color:var(--accent);">v161</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
             거래처: <span id="infoClients">0</span>개 &nbsp;·&nbsp;
             납품내역: <span id="infoOrders">0</span>건
         </div>
@@ -665,7 +666,11 @@
             <div id="changelogList" style="display:flex;flex-direction:column;gap:6px;">
                 <!-- 현재 버전 -->
                 <div class="changelog-item">
-                    <span class="changelog-ver" style="color:var(--green);">v160</span>
+                    <span class="changelog-ver" style="color:var(--green);">v161</span>
+                    <span class="changelog-desc">하단 시스템 내비게이션 바(안드로이드 3버튼/제스처 바 영역) 색상 변경 — v156에서 "실제 배경색과 통일"하도록 바꾼 뒤로 라이트 모드에서 이 영역이 거의 흰색(#f2f2fb)이어야 했는데 실제로는 검게 보이는 경우가 있었음(화면 UI는 라이트인데 내비 바만 다크 배경값에 머무는 경로가 있었던 것으로 보임). 배경색을 그대로 따라가게 하는 대신 라이트/다크 어느 쪽이든 항상 브랜드 퍼플(#6c63ff)로 고정 — theme-color 메타(index.html)·동기화 함수(core.js _syncThemeColorMeta)·manifest.json theme_color 세 곳을 모두 변경. 스플래시 화면용 background_color는 초기 미적용 상태(다크)와 맞아야 해서 그대로 둠. 참고: 이미 홈 화면에 추가해둔 아이콘은 설치 시점에 구워진 네이티브 색을 한동안 그대로 쓸 수 있어, 이번 변경이 바로 반영되지 않으면 홈 화면 아이콘을 삭제 후 다시 추가하면 새 색으로 갱신됨.</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v160</span>
                     <span class="changelog-desc">내역 탭 날짜 네비 바(📅 ◀ 날짜 ▶ 오늘)에서 "오늘" 버튼이 카드 테두리 밖으로 삐져나오던 정렬 문제 수정 — 네이티브 날짜 입력칸(input[type=date])은 flex:1이어도 min-width가 기본값 auto라 자기 내용 최소폭 밑으로 줄어들지 않아, 좁은 화면에서 아이콘+버튼 4개를 다 넣으면 줄 전체가 카드 폭을 넘겨버렸던 게 원인. 날짜칸에 min-width:0을 줘서 필요시 줄어들게 하고, 아이콘·버튼들은 flex-shrink:0으로 고정해 글자가 찌그러지지 않게 함. 재고 탭의 동일한 날짜 네비 바(🔄 버튼 포함, 버튼 5개로 더 빡빡함)도 같은 구조라 함께 수정됨.</span>
                 </div>
                 <div class="changelog-item">
