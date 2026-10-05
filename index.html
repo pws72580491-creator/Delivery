@@ -13,7 +13,7 @@
     <meta name="apple-mobile-web-app-title" content="납품관리">
     <link rel="apple-touch-icon" href="./icon-192.png">
     <link rel="manifest" href="./manifest.json">
-    <title>납품 관리 Pro v161</title>
+    <title>납품 관리 Pro v162</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js" defer></script>
@@ -62,7 +62,7 @@
             <div class="logo-icon">📦</div>
             <div>
                 <div class="logo-text">납품 관리 Pro</div>
-                <div class="logo-sub">v161 · PWA 앱 설치 지원</div>
+                <div class="logo-sub">v162 · PWA 앱 설치 지원</div>
             </div>
         </div>
         <div class="header-btns">
@@ -652,7 +652,7 @@
     <div class="card">
         <div class="card-title">앱 정보</div>
         <div style="font-size:13px;color:var(--text2);line-height:2;margin-bottom:12px;">
-            버전: <strong style="color:var(--accent);">v161</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
+            버전: <strong style="color:var(--accent);">v162</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
             거래처: <span id="infoClients">0</span>개 &nbsp;·&nbsp;
             납품내역: <span id="infoOrders">0</span>건
         </div>
@@ -666,7 +666,11 @@
             <div id="changelogList" style="display:flex;flex-direction:column;gap:6px;">
                 <!-- 현재 버전 -->
                 <div class="changelog-item">
-                    <span class="changelog-ver" style="color:var(--green);">v161</span>
+                    <span class="changelog-ver" style="color:var(--green);">v162</span>
+                    <span class="changelog-desc">앱 아이콘 교체 — 기존 브랜드 보라색 그라디언트 배경은 그대로 두고 그림만 "트럭 + 목적지 핀"으로 변경(icon-192.png, icon-512.png). 홈 화면/WebAPK에 이미 설치된 아이콘은 설치 시점에 구워진 이미지를 한동안 그대로 쓰므로, 새 아이콘이 바로 보이지 않으면 홈 화면에서 앱을 제거 후 다시 추가하면 갱신됨.</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v161</span>
                     <span class="changelog-desc">하단 시스템 내비게이션 바(안드로이드 3버튼/제스처 바 영역) 색상 변경 — v156에서 "실제 배경색과 통일"하도록 바꾼 뒤로 라이트 모드에서 이 영역이 거의 흰색(#f2f2fb)이어야 했는데 실제로는 검게 보이는 경우가 있었음(화면 UI는 라이트인데 내비 바만 다크 배경값에 머무는 경로가 있었던 것으로 보임). 배경색을 그대로 따라가게 하는 대신 라이트/다크 어느 쪽이든 항상 브랜드 퍼플(#6c63ff)로 고정 — theme-color 메타(index.html)·동기화 함수(core.js _syncThemeColorMeta)·manifest.json theme_color 세 곳을 모두 변경. 스플래시 화면용 background_color는 초기 미적용 상태(다크)와 맞아야 해서 그대로 둠. 참고: 이미 홈 화면에 추가해둔 아이콘은 설치 시점에 구워진 네이티브 색을 한동안 그대로 쓸 수 있어, 이번 변경이 바로 반영되지 않으면 홈 화면 아이콘을 삭제 후 다시 추가하면 새 색으로 갱신됨.</span>
                 </div>
                 <div class="changelog-item">
