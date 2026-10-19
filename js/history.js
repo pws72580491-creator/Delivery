@@ -884,6 +884,38 @@ function _oeditRecalc() {
     if (el) { el.textContent = fmt(total) + '원'; el.style.color = total < 0 ? 'var(--red)' : ''; }
 }
 
+// ★ v163: 납품 내역 수정 모달 — 입력란 탭/포커스 시 기존 값 전체 선택
+// (품목명/수량/단가 등 새 값을 바로 덮어쓸 수 있도록) — readonly인 거래처 칸은 제외.
+// 품목 행은 수정할 때마다 renderOeditItems()로 다시 그려지므로, 각 input에 직접 거는 대신
+// 모달 전체에 위임 리스너 하나만 걸어 새로 생기는 input에도 자동 적용되게 한다.
+(function _initOeditSelectAllOnFocus() {
+    const modal = document.getElementById('orderEditModal');
+    if (!modal) return;
+    function selectable(el) {
+        if (!el || el.readOnly || el.disabled) return false;
+        if (el.tagName === 'TEXTAREA') return true;
+        if (el.tagName === 'INPUT') {
+            const t = (el.type || 'text').toLowerCase();
+            return t === 'text' || t === 'number' || t === 'tel' || t === 'search';
+        }
+        return false;
+    }
+    let justFocused = null;
+    modal.addEventListener('focusin', function (e) {
+        const el = e.target;
+        if (!selectable(el)) return;
+        justFocused = el;
+        try { el.select(); } catch (err) {}
+    });
+    // 모바일(특히 iOS)에서 탭 직후 mouseup이 선택을 다시 커서 위치로 풀어버리는 것을 방지
+    modal.addEventListener('mouseup', function (e) {
+        if (e.target === justFocused) {
+            e.preventDefault();
+            justFocused = null;
+        }
+    });
+})();
+
 function oeditAddItem() {
     const name  = (document.getElementById('oeditNewName').value  || '').trim();
     const qty   = parseInt(document.getElementById('oeditNewQty').value)   || 0;
