@@ -13,7 +13,7 @@
     <meta name="apple-mobile-web-app-title" content="납품관리">
     <link rel="apple-touch-icon" href="./icon-192.png">
     <link rel="manifest" href="./manifest.json">
-    <title>납품 관리 Pro v163</title>
+    <title>납품 관리 Pro v164</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js" defer></script>
@@ -62,7 +62,7 @@
             <div class="logo-icon">📦</div>
             <div>
                 <div class="logo-text">납품 관리 Pro</div>
-                <div class="logo-sub">v163 · PWA 앱 설치 지원</div>
+                <div class="logo-sub">v164 · PWA 앱 설치 지원</div>
             </div>
         </div>
         <div class="header-btns">
@@ -153,14 +153,6 @@
         <input type="text" class="form-input" id="clientSearch" placeholder="🔍 거래처 검색… (초성 가능)" oninput="renderClients()" ondblclick="this.select()" enterkeyhint="search" inputmode="search">
         <button class="btn btn-ghost btn-sm" onclick="toggleClientList()" id="clientToggleBtn" style="white-space:nowrap;">숨기기</button>
         <button class="btn btn-ghost btn-sm" onclick="toggleShowHidden()" id="showHiddenBtn" style="white-space:nowrap;font-size:11px;" title="isHidden=true인 거래처 표시">숨김포함</button>
-    </div>
-    <!-- 그룹 뷰 토글 -->
-    <div id="groupViewBar" style="display:none;background:linear-gradient(135deg,rgba(108,99,255,.13),rgba(108,99,255,.06));border:1.5px solid rgba(108,99,255,.35);border-radius:var(--radius-s);padding:10px 13px;margin-bottom:10px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;">
-            <div>
-                <div style="font-size:13px;font-weight:700;color:var(--accent);">👥 그룹 합산 보기</div>
-            </div>
-        </div>
     </div>
     <div class="unpaid-alert-bar" id="unpaidAlertBar">
         <div class="unpaid-alert-title">💸 미수금 알림</div>
@@ -652,7 +644,7 @@
     <div class="card">
         <div class="card-title">앱 정보</div>
         <div style="font-size:13px;color:var(--text2);line-height:2;margin-bottom:12px;">
-            버전: <strong style="color:var(--accent);">v163</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
+            버전: <strong style="color:var(--accent);">v164</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
             거래처: <span id="infoClients">0</span>개 &nbsp;·&nbsp;
             납품내역: <span id="infoOrders">0</span>건
         </div>
@@ -666,7 +658,11 @@
             <div id="changelogList" style="display:flex;flex-direction:column;gap:6px;">
                 <!-- 현재 버전 -->
                 <div class="changelog-item">
-                    <span class="changelog-ver" style="color:var(--green);">v163</span>
+                    <span class="changelog-ver" style="color:var(--green);">v164</span>
+                    <span class="changelog-desc">v163 전체 코드 검수에서 나온 데이터 유실·동기화 문제 수정 모음. ① 반품/회수 플래그 복구 — _minifyOrder가 isReturn을 저장 대상에서 빠뜨려 v105부터 저장·동기화 때마다 반품 전표가 일반 미수 전표로 바뀌던 문제 수정, 이미 풀린 전표는 total<0·수량 전부 음수 조건으로 로드 때 자동 복구. ② 품목 덮어쓰기 방지 — 로컬 경량 저장이 완납 1개월 초과 전표의 품목을 지우던 것을 중단(3개월 초과 완납 전표는 기존대로 저장 제외), 이전 버전이 만든 품목 없는 경량 전표는 업로드 때 items를 건드리지 않고 필드 단위로만 갱신. ③ 서버 반영 정합성 — 백업 복원은 orders를 id 키로 올리고 사라질 전표를 서버에서도 삭제, JSON 가져오기·전체 초기화·오래된 전표 정리도 서버 전표를 함께 삭제(이전엔 재시작하면 되살아남), 예전 복원이 남긴 인덱스 키·중복 전표는 연결 직후 한 번 정리하고 같은 id가 중복으로 들어와도 하나로 합침. ④ 다른 기기 변경이 도착해도 아직 업로드 전인 내 전표 보존. ⑤ 백업 저장 위치를 실시간 리스너 범위 밖(workspaces/{id}__backups)으로 이전 — 연결·재연결 때마다 백업 최대 10개까지 같이 내려받던 부담 제거(기존 백업은 연결 후 자동 이동, 쓰기 권한이 없으면 기존 위치 유지). ⑥ flushSync가 변경된 전표만 업로드(20건 미만), 업로드 성공한 id만 추적에서 제거해 업로드 중 새로 생긴 변경이 누락되지 않게 하고, 실패 시 ws_version 원복. ⑦ 보안 — 수금 메모·품목명·백업 라벨의 HTML 이스케이프 누락 수정. ⑧ 기타 — 납품 확정 중복 클릭 방지(공유 거래처 경로), 대시보드 월 매출·6개월 차트도 타인거래 제외로 통일, 다른 기기에서 단가표(prices)만 바뀐 경우 로컬 저장 누락, 'YYYY-MM-DDTHH:MM' 시각을 9시간 어긋나게 읽던 문제(_parseTs). ⑨ 정리 — v89 거래처 그룹 잔재(index.html 인라인 스크립트·groupViewBar·appData, 오류를 내던 코드 포함)와 웹에서 동작하지 않는 setPersistenceEnabled 제거. ⑩ PWA — 서비스워커가 외부 CDN 스크립트(Firebase·xlsx·html2canvas)를 별도 캐시에 보관해 오프라인 첫 실행 대비, 사용설명서는 앱 도메인 파일 우선 사용(오프라인 열람), 매니페스트 아이콘의 any/maskable 분리.</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v163</span>
                     <span class="changelog-desc">납품 내역 수정 모달에서 입력란(품목명·수량·단가·새 품목 추가칸·메모)을 탭/포커스하면 기존 값 전체가 자동 선택되도록 변경. 기존엔 숫자 한 글자를 고치려 해도 커서만 생겨서 직접 다 지우고 다시 입력해야 했는데, 이제 탭하자마자 바로 새 값을 입력하면 기존 값이 통째로 덮어써짐. 읽기 전용인 거래처 칸은 대상에서 제외.</span>
                 </div>
                 <div class="changelog-item">
@@ -1897,101 +1893,6 @@
 </div>
 
 
-<script>
-/* ══════════════════════════════════════════════
-   v89 거래처 그룹 기능 헬퍼
-   ══════════════════════════════════════════════ */
-
-/* ── 그룹 목록 계산 ── */
-function getGroupList() {
-    const clients = (window.appData && window.appData.clients) ? window.appData.clients : [];
-    return [...new Set(clients.map(c => c.group).filter(Boolean))].sort();
-}
-
-/* ── 거래처 탭: 그룹뷰 토글 상태 ── */
-/* ── groupViewBar 표시 여부 갱신 ── */
-function updateGroupViewBar() {
-    const bar = document.getElementById('groupViewBar');
-    if (!bar) return;
-    const groups = getGroupList();
-    bar.style.display = groups.length ? '' : 'none';
-}
-
-/* ── 그룹 합산 카드 렌더 (거래처 탭) ── */
-
-
-/* ── 그룹 뷰 렌더 래퍼 (app.js의 renderClients를 패치) ── */
-
-
-/* ── saveClient 패치: group 필드 저장 ── */
-function _patchSaveClientForGroup() {
-    if (typeof saveClient !== 'function') return;
-    const _orig = saveClient;
-    window.saveClient = function() {
-        // group 필드 주입은 app.js의 saveClient가 client 객체를 만들 때 직접 읽도록
-        // 여기서는 _getClientFormData 패치 방식으로 처리
-        _orig.apply(this, arguments);
-    };
-}
-
-/* ── saveClientEditFromHistory 패치: group 필드 저장 ── */
-function _patchSaveClientEditForGroup() {
-    if (typeof saveClientEditFromHistory !== 'function') return;
-    const _orig = saveClientEditFromHistory;
-    window.saveClientEditFromHistory = function() {
-        const clientId = document.getElementById('histEditClientId') &&
-                         document.getElementById('histEditClientId').value;
-        if (clientId && window.appData && window.appData.clients) {
-            const c = window.appData.clients.find(x => x.id === clientId);
-            if (c) c.group = groupVal.trim();
-        }
-        _orig.apply(this, arguments);
-    };
-}
-
-/* ── 거래처 수정 모달 열릴 때 group 필드 채우기 패치 ── */
-function _patchOpenClientEditForGroup() {
-    // openClientEditFromHistory 또는 유사 함수 패치
-    const _tryPatch = (fnName) => {
-        if (typeof window[fnName] !== 'function') return;
-        const _orig = window[fnName];
-        window[fnName] = function(clientId) {
-            _orig.apply(this, arguments);
-            // 모달이 열린 후 그룹 필드 채우기
-            setTimeout(() => {
-                const clients = (window.appData && window.appData.clients) || [];
-                const c = clients.find(x => x.id === clientId);
-                if (c && inp) inp.value = c.group || '';
-            }, 80);
-        };
-    };
-    _tryPatch('openClientEditFromHistory');
-    _tryPatch('openClientEdit');
-}
-
-/* ── saveClient 시 group 값 자동 포함 패치 ── */
-function _patchSaveClientGroupField() {
-    if (typeof saveClient !== 'function') return;
-    const _origSave = saveClient;
-    window.saveClient = function() {
-        // clientGroup input 값을 window._pendingClientGroup에 저장해두고
-        // app.js가 client 객체를 push하기 전에 삽입하는 방식
-        window._pendingClientGroup = (document.getElementById('clientGroup') || {}).value || '';
-        _origSave.apply(this, arguments);
-    };
-}
-
-/* ── app.js 로드 후 모든 패치 일괄 적용 ── */
-document.addEventListener('DOMContentLoaded', () => {
-    // app.js가 defer로 로드되므로 DOMContentLoaded 이후 잠시 대기
-    setTimeout(() => {
-        _patchSaveClientGroupField();
-        _patchSaveClientEditForGroup();
-        _patchOpenClientEditForGroup();
-        updateGroupViewBar();
-    }, 300);
-});
-</script>
 <!-- ── 모듈 로드 순서: 의존성 순서 준수 ── -->
 <script src="./js/state.js"></script>
 <script src="./js/sync.js"></script>

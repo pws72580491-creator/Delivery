@@ -1,4 +1,16 @@
-const CACHE_NAME = 'delivery-pro-v163';
+const CACHE_NAME = 'delivery-pro-v164';
+// ★ v164: 외부 CDN 스크립트(Firebase / xlsx / html2canvas)는 버전이 URL에 박혀 있어 내용이 바뀌지 않으므로 별도 캐시에 보관.
+//   예전엔 SW가 외부 요청을 전혀 캐시하지 않아, 브라우저 HTTP 캐시가 비워진 상태에서 오프라인으로 앱을 열면
+//   Firebase SDK가 로드되지 않았다. 앱 버전이 바뀌어도 지워지지 않도록 CACHE_NAME과 분리했다.
+//   (index.html의 CDN 주소를 바꾸면 아래 목록도 같이 바꾸되, 목록에 없어도 런타임에 자동으로 캐시됨)
+const CDN_CACHE = 'delivery-pro-cdn-v1';
+const CDN_HOSTS = ['cdnjs.cloudflare.com', 'www.gstatic.com'];
+const CDN_PRELOAD = [
+  'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js',
+  'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js',
+  'https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js',
+  'https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js',
+];
 const ASSETS = [
   '/',
   '/index.html',
@@ -29,7 +41,7 @@ self.addEventListener('install', e => {
   // 즉 SW 자체는 새로 설치돼도, 그 안에 채워 넣는 내용이 여전히 브라우저 HTTP 캐시에 남아있던
   // "옛 버전" 바이트일 수 있음 (SW 입장에선 알 방법이 없음). cache:'reload'로 HTTP 캐시를
   // 완전히 건너뛰고 매번 네트워크에서 진짜 새 파일을 받아오도록 강제.
-  e.waitUntil(
+  e.waitUntil(Promise.all([
     caches.open(CACHE_NAME).then(cache =>
       Promise.all(ASSETS.map(path =>
         fetch(path, { cache: 'reload' }).then(res => {
@@ -37,25 +49,51 @@ self.addEventListener('install', e => {
           return cache.put(path, res);
         })
       ))
-    )
-  );
+    ),
+    // ★ v164: CDN 스크립트 미리 보관 — 실패해도(오프라인 설치 등) 설치 자체는 막지 않는다
+    caches.open(CDN_CACHE).then(cache =>
+      Promise.all(CDN_PRELOAD.map(u =>
+        cache.match(u).then(hit => hit || fetch(u, { mode: 'cors', credentials: 'omit' }).then(res => res.ok ? cache.put(u, res) : null))
+          .catch(() => null)
+      ))
+    ),
+  ]));
   self.skipWaiting();
 });
 
 self.addEventListener('activate', e => {
   e.waitUntil(
     caches.keys().then(keys =>
-      Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k)))
+      Promise.all(keys.filter(k => k !== CACHE_NAME && k !== CDN_CACHE).map(k => caches.delete(k)))
     )
   );
   self.clients.claim();
 });
 
 self.addEventListener('fetch', e => {
-  // Firebase / 외부 요청은 SW가 관여하지 않음
-  if (!e.request.url.startsWith(self.location.origin)) return;
   // POST / non-GET 요청은 캐시 대상 아님
   if (e.request.method !== 'GET') return;
+
+  // ★ v164: 외부 요청 — 허용된 CDN의 .js 파일만 cache-first로 처리, 나머지(Firebase 소켓/REST 등)는 SW가 관여하지 않음
+  if (!e.request.url.startsWith(self.location.origin)) {
+    let ext; try { ext = new URL(e.request.url); } catch (_) { return; }
+    if (CDN_HOSTS.includes(ext.hostname) && ext.pathname.endsWith('.js')) {
+      e.respondWith((async () => {
+        const cache = await caches.open(CDN_CACHE);
+        const hit = await cache.match(e.request.url);
+        if (hit) return hit;
+        try {
+          // CORS로 받아야 상태 코드를 확인할 수 있어 오류 응답이 캐시에 박히지 않음
+          const res = await fetch(e.request.url, { mode: 'cors', credentials: 'omit' });
+          if (res.ok) cache.put(e.request.url, res.clone());
+          return res;
+        } catch (_) {
+          return fetch(e.request); // CORS 미지원 등: 원래 요청 그대로 (캐시하지 않음)
+        }
+      })());
+    }
+    return;
+  }
 
   const url = new URL(e.request.url);
 
