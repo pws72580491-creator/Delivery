@@ -156,6 +156,31 @@ async function runBackupCloudOnly(label='가져오기전') {
     }
 }
 
+// ★ v164: 백업은 실시간 리스너 범위(workspaces/{id}) 밖인 workspaces/{id}__backups 에 저장한다.
+//   예전 위치(workspaces/{id}/backups)에 두면 리스너가 연결·재연결 때마다 백업(최대 10개)까지 함께 내려받아
+//   초기 .get() 타임아웃과 느린 재연결의 원인이 될 수 있었다. 새 경로에 쓸 수 없으면 기존 위치로 폴백한다.
+function _newBackupRef() {
+    const id = localStorage.getItem('workspaceId');
+    return id ? firebase.database().ref('workspaces/' + id + BACKUP_NODE_SUFFIX) : null;
+}
+async function _backupWrite(key, payload) {
+    const nref = _newBackupRef();
+    if (nref) {
+        try { await nref.child(key).set(payload); return nref; }
+        catch (e) { console.warn('백업 새 경로 쓰기 실패 → 기존 위치로 폴백:', e && e.message); }
+    }
+    await workspaceRef.child('backups').child(key).set(payload);
+    return workspaceRef.child('backups');
+}
+// 새 위치 + 기존 위치(아직 이전 전)의 백업을 합쳐서 읽는다 (같은 key면 새 위치 우선)
+async function _backupReadAll() {
+    const out = {};
+    try { const s = await workspaceRef.child('backups').once('value'); Object.assign(out, s.val() || {}); } catch(e) {}
+    const nref = _newBackupRef();
+    if (nref) { try { const s = await nref.orderByKey().once('value'); Object.assign(out, s.val() || {}); } catch(e) {} }
+    return out;
+}
+
 async function runBackup(label='수동', autoTrigger=false) {
     const { dateStr, key } = nowKST();
     const payload= { label, backupDate:dateStr, autoTrigger, clients, orders, prices, stockItems,
@@ -186,12 +211,12 @@ async function runBackup(label='수동', autoTrigger=false) {
     // 클라우드 저장
     if (isConnected && workspaceRef) {
         try {
-            await workspaceRef.child('backups').child(key).set(payload);
-            const snap=await workspaceRef.child('backups').orderByKey().once('value');
+            const bref = await _backupWrite(key, payload);
+            const snap=await bref.orderByKey().once('value');
             const keys=Object.keys(snap.val()||{}).sort();
             if (keys.length>10) {
                 const del={}; keys.slice(0,keys.length-10).forEach(k=>del[k]=null);
-                await workspaceRef.child('backups').update(del);
+                await bref.update(del);
             }
         } catch(e) { console.error('클라우드 백업 실패',e); }
     }
@@ -232,13 +257,12 @@ async function renderBackupTab() {
     const el=document.getElementById('backupList');
     el.innerHTML='<div class="empty"><div class="empty-text">⏳ 로딩 중...</div></div>';
     try {
-        const snap=await workspaceRef.child('backups').orderByKey().once('value');
-        const data=snap.val();
+        const data=await _backupReadAll();
         if (!data||!Object.keys(data).length) { el.innerHTML='<div class="empty"><div class="empty-icon">☁️</div><div class="empty-text">저장된 백업이 없습니다</div></div>'; return; }
         el.innerHTML = Object.entries(data).sort((a,b)=>b[0].localeCompare(a[0])).map(([key,b])=>`
             <div class="backup-item">
                 <div>
-                    <div class="backup-item-label">${b.backupDate}${b.autoTrigger?'<span class="auto-badge">자동</span>':''}${b.label?` <span style="font-size:10px;color:var(--text2);">[${b.label}]</span>`:''}</div>
+                    <div class="backup-item-label">${escapeHtml(b.backupDate)}${b.autoTrigger?'<span class="auto-badge">자동</span>':''}${b.label?` <span style="font-size:10px;color:var(--text2);">[${escapeHtml(b.label)}]</span>`:''}</div>
                     <div class="backup-item-meta">거래처 ${b.clientsCount}개 · 전표 ${b.ordersCount}건</div>
                 </div>
                 <div class="backup-item-actions">
@@ -253,8 +277,10 @@ async function restoreBackup(key) {
     if (!isConnected||!workspaceRef) return toast('❗ Firebase 연결 후 복원 가능합니다');
     if (!await customConfirm('이 백업으로 복원하면 현재 데이터가 덮어씌워집니다. 계속하시겠습니까?')) return;
     try {
-        const snap=await workspaceRef.child('backups').child(key).once('value');
-        const data=snap.val();
+        let data = null;
+        const _nref = _newBackupRef();
+        if (_nref) { try { data = (await _nref.child(key).once('value')).val(); } catch(e) {} }
+        if (!data) data = (await workspaceRef.child('backups').child(key).once('value')).val(); // 이전 전 백업
         if (!data) return toast('❗ 백업 데이터를 찾을 수 없습니다');
 
         // 복원 전 현재 데이터 클라우드 백업 (파일 다운로드 없이 클라우드만)
@@ -263,7 +289,7 @@ async function restoreBackup(key) {
             const bPayload={ label:'복원전_자동', backupDate: bDateStr,
                 autoTrigger:false, clients, orders, prices, stockItems,
                 clientsCount:clients.length, ordersCount:orders.length };
-            await workspaceRef.child('backups').child(bKey).set(bPayload);
+            await _backupWrite(bKey, bPayload);
         } catch(be) { console.warn('복원 전 백업 실패(무시):', be); }
 
         // ── 리스너 일시 중단 → 복원 데이터가 리스너로 덮어쓰이는 것 방지 ──
@@ -274,6 +300,7 @@ async function restoreBackup(key) {
 
         // ── 공통 정규화 함수로 복원 데이터 처리 ──
         const normalized = normalizeBackupData(data);
+        const prevOrderIds = orders.map(o => String(o.id)); // ★ v164: 복원 후 사라질 전표를 서버에서도 지우기 위해 보관
         clients    = normalized.clients;
         orders     = normalized.orders;
         if (data.prices)               prices     = data.prices;
@@ -289,11 +316,23 @@ async function restoreBackup(key) {
 
         // Firebase 즉시 업로드 (debounce 없이)
         const ch=dataHash(clients), oh=dataHash(orders), ph=dataHash(prices), sh=dataHash(stockItems);
-        await workspaceRef.update({
-            clients, orders, prices, stockItems,
+        // ★ v164: orders를 배열째 올리면 서버에 0..n 인덱스 키로 저장돼 orders/{id} 방식과 섞이고,
+        //   이후 삭제(orders/{id}=null)가 먹지 않거나 같은 전표가 중복되는 문제가 있었음.
+        //   → 다른 경로와 동일하게 orders/{id} 로 올리고, 복원으로 사라질 내 전표는 서버에서도 삭제한다.
+        //   (서버에만 있는 전표, 예: 공유거래처 대납으로 상대가 써넣은 것은 건드리지 않음)
+        const _restoreVersion = Date.now();
+        const upd = {
+            clients: clients.map(_minifyClient), prices, stockItems,
             lastUpdated: new Date().toISOString(),
-            writtenBy: SESSION_ID
-        });
+            writtenBy: SESSION_ID,
+            version: _restoreVersion
+        };
+        const _newIdSet = new Set(orders.map(o => String(o.id)));
+        orders.forEach(o => { _putOrderUpdate(upd, o, _minifyOrder(o)); });
+        prevOrderIds.forEach(id => { if (!_newIdSet.has(id)) upd['orders/' + id] = null; });
+        await workspaceRef.update(upd);
+        localStorage.setItem('ws_version', String(_restoreVersion));
+        _clearOrderDelta(); // 복원으로 전체가 서버와 일치 → 이전 추적 정보 폐기
         lastHash={clients:ch, orders:oh, prices:ph, stock:sh};
 
         // 리스너 재등록 — 공용 _fbValueHandler 사용
@@ -315,7 +354,11 @@ async function restoreBackup(key) {
 
 async function deleteBackup(key) {
     if (!await customConfirm('이 백업을 삭제하시겠습니까? 삭제 후 복구할 수 없습니다.')) return;
-    try { await workspaceRef.child('backups').child(key).remove(); showBackupBanner('🗑️ 삭제 완료','success'); renderBackupTab(); }
+    try {
+        await workspaceRef.child('backups').child(key).remove(); // 이전 위치
+        const _nref = _newBackupRef(); if (_nref) await _nref.child(key).remove(); // 새 위치
+        showBackupBanner('🗑️ 삭제 완료','success'); renderBackupTab();
+    }
     catch(e) { showBackupBanner('❌ 삭제 실패: '+e.message,'error'); }
 }
 

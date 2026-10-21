@@ -852,7 +852,7 @@ function renderOeditItems() {
             return `
             <div class="oedit-item-row">
                 <div class="oedit-item-name">
-                    <input class="oedit-item-input" type="text" value="${(it.name||'').replace(/"/g,'&quot;')}"
+                    <input class="oedit-item-input" type="text" value="${escapeHtml(it.name||'')}"
                         enterkeyhint="next"
                         oninput="_oeditItems[${i}].name=this.value;_oeditRecalc()"
                         onkeydown="if(event.key==='Enter'){event.preventDefault();this.closest('.oedit-item-row').querySelectorAll('.oedit-item-input')[1].focus();}"

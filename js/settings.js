@@ -100,6 +100,7 @@ async function trimOldOrders() {
     const targets = orders.filter(o => o.isPaid && o.date < cutoff);
     if (!targets.length) return toast(`✅ ${months}개월 이상 된 완납 전표가 없습니다`);
     if (!await customConfirm(`완납된 전표 중 ${months}개월 이상 된 ${targets.length}건을 삭제합니다.\n(미수금 전표는 보존됩니다)\n\n삭제 전 JSON 백업을 권장합니다.`)) return;
+    targets.forEach(o => _markDeletedOrder(o.id)); // ★ v164: 서버에서도 삭제 (안 하면 다음 동기화 때 되살아남)
     orders = orders.filter(o => !(o.isPaid && o.date < cutoff));
     invalidateOrdersCache();
     saveData();
@@ -226,11 +227,20 @@ function importJSON(e) {
             }
             // ── 공통 정규화 함수로 처리 ──
             const normalized = normalizeBackupData(data);
+            const _prevOrderIds = orders.map(o => String(o.id)); // ★ v164: 가져오기로 사라질 전표를 서버에서도 지우기 위해 보관
             clients    = normalized.clients;
             orders     = normalized.orders;
             if (data.prices)     prices     = data.prices;
             if (data.stockItems) stockItems = toArray(data.stockItems).map(normStock);
             lastHash = {clients:'',orders:'',prices:'',stock:''};
+            // ★ v164: 가져오기 = 기존 데이터를 덮어쓰기. 예전엔 서버의 기존 전표가 지워지지 않아 다음 로드 때 되살아났고,
+            //   가져온 전표는 delta 추적에 없어서 삭제 건수가 20 미만이면 업로드에서 빠질 수도 있었음.
+            //   → 사라질 id는 삭제 표시, 가져온 전표는 모두 dirty로 표시(updatedAt은 건드리지 않음)
+            {
+                const _newIds = new Set(orders.map(o => String(o.id)));
+                _prevOrderIds.forEach(id => { if (!_newIds.has(id)) _markDeletedOrder(id); });
+                orders.forEach(o => { const id = String(o.id); _deletedOrders.delete(id); _dirtyOrders.add(id); });
+            }
             // ★ v114: 가져오기 시 오프라인 큐 초기화 (구 데이터 잔류 방지)
             ['_sharedOrderQueue','_sharedOrderDeadQueue','_crmPatchFailQueue'].forEach(k => localStorage.removeItem(k));
             if (typeof _updateSharedQueueBadge === 'function') _updateSharedQueueBadge();
@@ -274,6 +284,7 @@ async function resetAllData() {
     try { await runBackup('전체초기화전',false); } catch(e) {
         if (!await customConfirm('백업 실패. 백업 없이 삭제하시겠습니까?')) return;
     }
+    orders.forEach(o => _markDeletedOrder(o.id)); // ★ v164: 서버에서도 삭제되도록 표시 (안 하면 재시작 때 전표가 되살아남)
     clients=[]; orders=[]; prices={}; stockItems=[];
     localStorage.removeItem('p_stock');
     // ★ v114: 초기화 시 오프라인 큐도 제거

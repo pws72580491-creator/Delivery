@@ -17,6 +17,7 @@ const FIREBASE_CONFIG = {
 };
 
 // ─── 사용설명서 URL (GitHub raw 주소 — 직접 수정하세요) ───
+// ★ v164: 기본은 앱과 같은 도메인의 ./manual.md(오프라인 열람 가능)를 먼저 읽고, 실패할 때만 이 주소로 폴백한다.
 // 예: 'https://raw.githubusercontent.com/YOUR_ID/YOUR_REPO/main/manual.md'
 const MANUAL_URL = 'https://raw.githubusercontent.com/pws72580491-creator/Delivery/main/manual.md';
 
@@ -27,7 +28,10 @@ const TAB_ORDER = ['dashboard','clients','unpaid','delivery','history','stock','
 let clients    = _loadJSON('p_clients')   || _loadJSON('clients')   || [];
 let orders     = (_loadJSON('p_orders') || _loadJSON('orders') || [])
     .map(o => {
-        if (o._noItems) { delete o._noItems; }
+        // ★ v164: 레거시 경량 저장 전표(_noItems)는 플래그를 유지한다.
+        //   예전에는 여기서 플래그를 지워서, 품목이 비어 있는 전표를 업로드할 때 서버의 품목까지 덮어쓰는 사고가 가능했음.
+        //   (업로드 경로는 _putOrderUpdate가 플래그를 보고 items 필드를 건드리지 않음)
+        if (o._noItems) { o._noItems = true; }
         if (!Array.isArray(o.items)) o.items = [];
         else o.items = o.items.map(it => ({
             ...it,
@@ -79,6 +83,7 @@ orders = orders.map(o => {
     if (!o.note && o.memo) o.note = o.memo;       // 구버전 백업 호환 (memo → note)
     if (!o.note) o.note = '';
     if (!o.isVoid) o.isVoid = false;              // isVoid 복원 (없으면 false)
+    _inferReturnFlag(o);                          // ★ v164: 유실된 반품/회수 플래그 복구
     return o;
 });
 
@@ -454,6 +459,8 @@ let _workspaceHandler = null;  // workspaceRef value 핸들러
 let _initialLoadDone = false;  // 전역 선언 — _fbValueHandler에서 접근 가능
 const SESSION_ID = Math.random().toString(36).slice(2);
 let lastHash = { clients:'', orders:'', prices:'', stock:'' };
+// ★ v164: 백업 저장 위치 — 실시간 리스너 대상(workspaces/{id}) 밖에 둔다. (backup.js, sync.js 공용)
+const BACKUP_NODE_SUFFIX = '__backups';
 
 // ─── Delta sync 트래킹 ───
 // 변경된 order id만 추적 → debouncedSync에서 건별 업로드 (payload 최소화)
@@ -468,6 +475,84 @@ function _markDirtyOrder(id) {
 }
 function _markDeletedOrder(id) { _deletedOrders.add(String(id)); _dirtyOrders.delete(String(id)); }
 function _clearOrderDelta()    { _dirtyOrders.clear(); _deletedOrders.clear(); }
+
+// ★ v164: 업로드가 성공한 시점의 스냅샷만 제거 — 업로드 중 새로 생긴 변경(dirty)은 지우지 않는다.
+//   예전엔 성공 후 _clearOrderDelta()로 전부 지워서, 업로드 진행 중에 편집한 전표가 다음 동기화까지 누락될 수 있었음.
+//   같은 전표를 업로드 도중 다시 고친 경우(updatedAt이 달라짐)에도 dirty를 유지한다.
+function _takeOrderDeltaSnapshot() {
+    const stamps = new Map();
+    _dirtyOrders.forEach(id => {
+        const o = orders.find(x => String(x.id) === id);
+        stamps.set(id, o ? (o.updatedAt || '') : null);
+    });
+    return { dirty: new Set(_dirtyOrders), deleted: new Set(_deletedOrders), stamps };
+}
+function _releaseOrderDeltaSnapshot(snap) {
+    if (!snap) return;
+    snap.dirty.forEach(id => {
+        const o = orders.find(x => String(x.id) === id);
+        const cur = o ? (o.updatedAt || '') : null;
+        if (cur === snap.stamps.get(id)) _dirtyOrders.delete(id);
+    });
+    snap.deleted.forEach(id => _deletedOrders.delete(id)); // 삭제 후 같은 id가 다시 생기면 _markDirtyOrder가 이미 deleted에서 뺐음
+}
+
+// ★ v164: 반품/회수 전표 플래그 복구
+//   v105~v163의 _minifyOrder가 isReturn을 저장 대상에서 빠뜨려, 저장·동기화 때마다 플래그가 사라졌음.
+//   반품 전표는 total<0 이고 품목 수량이 전부 음수이므로 그 특징으로 되살린다.
+function _inferReturnFlag(o) {
+    if (!o || o.isReturn) return o;
+    if (Number(o.total) < 0) {
+        const items = Array.isArray(o.items) ? o.items : [];
+        if (!items.length || items.every(it => Number(it.qty) < 0)) o.isReturn = true;
+    }
+    return o;
+}
+
+// ★ v164: 'YYYY-MM-DDTHH:MM'(Z 없음, _compactTs 결과)도 UTC로 해석 — Z가 없으면 기기 로컬(KST)로 읽혀 9시간 어긋남
+function _parseTs(ts) {
+    if (!ts) return 0;
+    let s = String(ts);
+    if (s.length === 10) s += 'T00:00:00Z';
+    else if (!/(?:Z|[+-]\d\d:?\d\d)$/.test(s)) s += 'Z';
+    const t = Date.parse(s);
+    return isNaN(t) ? 0 : t;
+}
+
+// ★ v164: 같은 id가 두 번 들어온 경우(예전 복원 기능이 남긴 인덱스 키 잔재 등) 최신 하나만 남긴다
+function _dedupeOrdersById(list) {
+    const m = new Map();
+    for (const o of list) {
+        const id = String(o.id);
+        const prev = m.get(id);
+        if (!prev || String(o.updatedAt || '') >= String(prev.updatedAt || '')) m.set(id, o);
+    }
+    return m.size === list.length ? list : [...m.values()];
+}
+function _orderListFromFb(raw) {
+    return _dedupeOrdersById(toArray(raw).map(_normOrderFromFb));
+}
+
+// ★ v164: 서버 스냅샷으로 orders를 교체하기 직전에, 아직 업로드되지 않은 로컬 변경(dirty/deleted)을 다시 얹는다.
+//   예전엔 다른 기기의 변경이 도착하면 오프라인에서 만든 전표가 통째로 사라질 수 있었음.
+function _overlayPendingOrders(list) {
+    if (!_dirtyOrders.size && !_deletedOrders.size) return list;
+    const out = list.filter(o => !_deletedOrders.has(String(o.id)));
+    const idx = new Map(out.map((o, i) => [String(o.id), i]));
+    for (const id of _dirtyOrders) {
+        const local = orders.find(x => String(x.id) === id);
+        if (!local) continue;
+        let o2 = local;
+        const srv = idx.has(id) ? out[idx.get(id)] : null;
+        // 레거시 경량 전표(품목 없음)가 서버의 완전한 전표를 덮지 않도록 품목은 서버 것을 유지
+        if (srv && local._noItems && !(local.items || []).length && (srv.items || []).length) {
+            o2 = { ...local, items: srv.items };
+            delete o2._noItems;
+        }
+        if (idx.has(id)) out[idx.get(id)] = o2; else { idx.set(id, out.length); out.push(o2); }
+    }
+    return out;
+}
 
 // ─── 동기화 가드 플래그 ───
 // _syncGuard: debouncedSync 업로드가 진행 중일 때 true
@@ -506,6 +591,7 @@ function _normOrderFromFb(o) {
     if (!o.date) o.date = '';
     // ★ CRM 우선권: crmControlled 플래그 유지
     if (o.crmControlled) o.crmControlled = true;
+    _inferReturnFlag(o); // ★ v164
     return o;
 }
 
@@ -539,7 +625,7 @@ function _fbValueHandler(snap) {
         // ★ v99 fix: 전체 교체 대신 개별 order merge — 다기기 동시 작업 시 내 데이터 보호
         if (typeof d.writtenBy === 'string' && d.writtenBy.startsWith('__shared_by__:')) {
             if (d.orders) {
-                const incoming = toArray(d.orders).map(_normOrderFromFb);
+                const incoming = _orderListFromFb(d.orders);
                 // 서버에서 온 orders map 기준으로 기존 orders를 개별 merge
                 const serverMap = {};
                 incoming.forEach(o => { serverMap[o.id] = o; });
@@ -558,11 +644,14 @@ function _fbValueHandler(snap) {
                 // 2) 로컬에는 있지만 서버 스냅샷에 없는 항목은 건드리지 않음
                 //    (공유 납품 writtenBy이므로 내 로컬 전표 삭제 위험 차단)
                 if (changed) {
-                    lastHash.orders = dataHash(orders);
+                    // ★ v164: 아직 올리지 못한 로컬 변경이 있으면 hash를 '동기화됨'으로 덮지 않는다(다음 업로드 판정 유지)
+                    const _pend = _dirtyOrders.size || _deletedOrders.size;
+                    lastHash.orders = _pend ? '' : dataHash(orders);
                     saveToLocal();
                     _fullRender();
                     setSyncStatus('online');
                     toast('📦 공유 납품이 등록됐습니다', 'var(--accent)', 2500);
+                    if (_pend) debouncedSync();
                 }
             }
             return;
@@ -572,7 +661,7 @@ function _fbValueHandler(snap) {
         // ★ v99 fix: 전체 교체 대신 개별 order merge — 내 로컬 전표 보호
         if (d.writtenBy === 'CRM_EXTERNAL') {
             if (d.orders) {
-                const incoming = toArray(d.orders).map(_normOrderFromFb);
+                const incoming = _orderListFromFb(d.orders);
                 let changed = false;
                 incoming.forEach(o => {
                     const idx = orders.findIndex(x => x.id === o.id);
@@ -585,10 +674,12 @@ function _fbValueHandler(snap) {
                     }
                 });
                 if (changed) {
-                    lastHash.orders = dataHash(orders);
+                    const _pend = _dirtyOrders.size || _deletedOrders.size; // ★ v164 (위와 동일)
+                    lastHash.orders = _pend ? '' : dataHash(orders);
                     saveToLocal();
                     _fullRender();
                     setSyncStatus('online');
+                    if (_pend) debouncedSync();
                     toast('💳 CRM에서 결제 처리됨 — 화면이 업데이트됐습니다', 'var(--green)', 3000);
                 }
             }
@@ -614,19 +705,28 @@ function _fbValueHandler(snap) {
         }
 
         let changed = false;
+        let _needUpload = false;
+        let _pricesChanged = false;
         if (d.clients) {
             const inc = toArray(d.clients).map(_normClientFromFb);
             const h = dataHash(inc);
             if (h !== lastHash.clients) { clients = inc; lastHash.clients = h; changed = true; }
         }
         if (d.orders) {
-            const inc = toArray(d.orders).map(_normOrderFromFb);
-            const h = dataHash(inc);
-            if (h !== lastHash.orders) { orders = inc; lastHash.orders = h; changed = true; }
+            const inc = _orderListFromFb(d.orders);
+            const h = dataHash(inc);                       // 서버 상태의 hash
+            if (h !== lastHash.orders) {
+                // ★ v164: 업로드 전인 로컬 변경(dirty/deleted)을 서버 데이터 위에 다시 얹는다
+                const merged = _overlayPendingOrders(inc);
+                _needUpload = merged !== inc;
+                orders = merged;
+                lastHash.orders = h;                       // 서버 기준 hash → 로컬과 달라져 다음 동기화에서 올라감
+                changed = true;
+            }
         }
         if (d.prices) {
             const h = dataHash(d.prices);
-            if (h !== lastHash.prices) { prices = d.prices; lastHash.prices = h; }
+            if (h !== lastHash.prices) { prices = d.prices; lastHash.prices = h; _pricesChanged = true; }
         }
         if (d.stockItems) {
             const inc = toArray(d.stockItems).map(normStock);
@@ -638,6 +738,9 @@ function _fbValueHandler(snap) {
             _fullRender();
             setSyncStatus('online');
             toast('🔄 다른 기기에서 변경된 내용이 반영됐습니다', 'var(--accent)', 2500);
+            if (_needUpload) debouncedSync();
+        } else if (_pricesChanged) {
+            saveToLocal(); // ★ v164: prices만 바뀐 경우에도 로컬에 반영 (예전엔 저장이 빠져 재시작 시 되돌아갔음)
         }
     } catch(e) {
         console.error('[_fbValueHandler] 처리 중 오류:', e);

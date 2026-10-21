@@ -10,7 +10,7 @@ function saveToLocal() {
     const hasWorkspace = !!(localStorage.getItem('workspaceId'));
     const useLightMode = isConnected || hasWorkspace;
     try {
-        const ordersToSave = useLightMode ? _getLightOrders() : orders.map(_minifyOrder);
+        const ordersToSave = useLightMode ? _getLightOrders() : orders.map(_minifyOrderLocal);
         const stockToSave  = useLightMode ? _getLightStock()  : stockItems;
         _cleanPrices();
         localStorage.setItem('p_clients', JSON.stringify(clients.map(_minifyClient)));
@@ -25,15 +25,12 @@ function saveToLocal() {
             localStorage.removeItem('p_orders');
             localStorage.removeItem('p_stock');
             // 2단계: 저장용 임시 배열만 필터링 — 메모리(orders/stockItems)는 절대 변경 안 함
+            // ★ v164: 품목(items) 제거는 하지 않는다 — 품목이 빠진 전표가 업로드되면 서버 품목을 덮어쓸 위험이 있었음.
+            //   용량 확보는 6개월 지난 완납 전표를 저장 대상에서 제외하는 것으로 충분(메모리·서버 데이터는 그대로).
             const cutoff = _kstMonthsAgo(6);
             const lightOrdersForSave = orders
                 .filter(o => !(o.isPaid && o.date < cutoff))
-                .map(o => {
-                    const m = _minifyOrder(o);
-                    const cutoff1m = _kstMonthsAgo(1);
-                    if (o.isPaid && o.date < cutoff1m) { delete m.items; m._noItems = 1; }
-                    return m;
-                });
+                .map(_minifyOrderLocal);
             const lightStockForSave = stockItems.map(si => ({
                 ...si,
                 log: _trimLogByDate(si.log)
@@ -108,12 +105,35 @@ function _minifyOrder(o) {
     if (o.paidNote)    r.paidNote   = o.paidNote;
     if (o.discount)    r.discount   = o.discount;  // 할인 완납 금액
     if (o.isVoid)      r.isVoid     = true;         // 타인거래
+    if (o.isReturn)    r.isReturn   = true;         // ★ v164: 반품/회수 전표 (v105~v163은 이 줄이 빠져 저장·동기화 때마다 플래그가 사라졌음)
     if (o.invoiceIssued) r.invoiceIssued = true;    // 계산서 발급 여부 (거래명세표 체크박스)
     if (o.delegatedBy) r.delegatedBy = o.delegatedBy; // 대납자 ID (A 앱에서 매출 제외용)
     if (o.crmControlled) r.crmControlled = true; // CRM 결제 우선권 플래그
     const ua = _compactTs(o.updatedAt);
     if (ua)            r.updatedAt  = ua;
     return r;
+}
+
+// ★ v164: 로컬 저장용 — 레거시 경량 전표(_noItems) 표시를 유지해야 재시작 후에도 '품목 없음'과 구분됨
+function _minifyOrderLocal(o) {
+    const m = _minifyOrder(o);
+    if (o._noItems && !(o.items || []).length) m._noItems = 1;
+    return m;
+}
+
+// ★ v164: Firebase 업로드 시 전표 노드를 쓰는 유일한 창구.
+//   품목이 비어 있는 레거시 경량 전표(_noItems)를 orders/{id} 통째로 쓰면 서버의 품목이 지워지므로,
+//   그런 전표는 items를 제외한 필드만 경로별로 갱신한다.
+const _ORDER_FIELD_KEYS = ['clientId','clientName','date','total','isPaid','note','notePriority',
+    'paidAmount','paidMethod','paidMethodDetail','paidAt','paidNote','discount','isVoid','isReturn',
+    'invoiceIssued','delegatedBy','crmControlled','createdAt','updatedAt'];
+function _putOrderUpdate(updates, o, m) {
+    if (o._noItems && !(o.items || []).length) {
+        updates[`orders/${o.id}/id`] = m.id;
+        _ORDER_FIELD_KEYS.forEach(k => { updates[`orders/${o.id}/${k}`] = (m[k] === undefined ? null : m[k]); });
+    } else {
+        updates[`orders/${o.id}`] = m;
+    }
 }
 
 /**
@@ -175,20 +195,12 @@ function _cleanPrices() {
 // Firebase 연결 중 로컬 저장용 경량 전표 (완납+3개월 이상 제외 + 필드 최소화)
 
 function _getLightOrders() {
+    // ★ v164: 완납 3개월 초과 전표는 저장에서 제외(서버에서 복원)하되, 남기는 전표의 items는 지우지 않는다.
+    //   (예전에는 완납 1개월 초과 전표의 items를 지웠는데, 그 전표가 업로드되면 서버 품목이 덮어써질 위험이 있었음)
     const cutoff = _kstMonthsAgo(3);
-    // 완납+1개월 이상 전표는 items 배열 제거 (Firebase에서 복원 가능)
-    const cutoff1m = _kstMonthsAgo(1);
     return orders
         .filter(o => !o.isPaid || o.date >= cutoff)
-        .map(o => {
-            const m = _minifyOrder(o);
-            // 완납 + 1개월 초과: items 제거 (합계는 total로 유지)
-            if (o.isPaid && o.date < cutoff1m) {
-                delete m.items;
-                m._noItems = 1; // 오프라인 시 UI에서 안내 표시용 플래그
-            }
-            return m;
-        });
+        .map(_minifyOrderLocal);
 }
 
 // Firebase 연결 중 로컬 저장용 경량 재고 (어제·오늘 이틀치 이력만 유지)
@@ -235,6 +247,7 @@ function normalizeBackupData(data) {
         if (!o.note && o.memo) o.note = o.memo;       // 구버전 백업 호환 (memo → note)
         if (!o.note) o.note = '';
         if (!o.isVoid) o.isVoid = false;              // isVoid 복원 (없으면 false)
+        _inferReturnFlag(o);                          // ★ v164: 유실된 반품/회수 플래그 복구
         return o;
     });
 
@@ -305,7 +318,7 @@ const debouncedSync = debounce(async () => {
                 // CRM과 연결된 적 없는 전표)일 때만 기존처럼 서버 값을 보존 — 그 외엔
                 // 납품앱에서 미수복귀를 해도 다음 동기화 때 CRM 값으로 조용히 되돌아갔음.
                 if (sv && o.crmControlled !== null) _mergeCrmPaymentFields(m, sv); // CRM 결제 필드 보존
-                updates[`orders/${id}`] = m;
+                _putOrderUpdate(updates, o, m); // ★ v164
             }
             for (const id of _deletedOrders) { updates[`orders/${id}`] = null; }
         } else {
@@ -330,7 +343,7 @@ const debouncedSync = debounce(async () => {
                 const m = _minifyOrder(o);
                 // ★ v132 fix: 위 delta 경로와 동일한 이유
                 if (serverOrders2 && serverOrders2[o.id] && o.crmControlled !== null) _mergeCrmPaymentFields(m, serverOrders2[o.id]);
-                updates[`orders/${o.id}`] = m;
+                _putOrderUpdate(updates, o, m); // ★ v164
             });
             for (const id of _deletedOrders) { updates[`orders/${id}`] = null; }
         }
@@ -339,6 +352,9 @@ const debouncedSync = debounce(async () => {
     }
     if (ph !== lastHash.prices)  { updates.prices     = prices;     changed = true; }
     if (sh !== lastHash.stock)   { updates.stockItems = _getLightStock(); changed = true; }
+    // ★ v164: orders 페이로드는 위 await(서버 조회) 이후 시점의 orders로 만들어지므로 hash도 그 시점 기준으로 맞춘다
+    //   (예전엔 await 이전 hash를 써서, 조회 중 변경이 있으면 다음 동기화가 불필요한 전체 업로드로 번졌음)
+    const ohFinal = ordersChanged ? dataHash(orders) : oh;
     if (!changed) { diagLog('⏭ 동기화 종료', '변경사항 없음 (업로드 불필요)'); _syncGuard = false; return; }
     // writtenBy / version 필드: 리스너 echo 식별 + 충돌 감지
     const nowIso = new Date().toISOString();
@@ -347,17 +363,25 @@ const debouncedSync = debounce(async () => {
     // ★ version: 업로드마다 단조 증가 (로컬 timestamp 기반)
     // _fbValueHandler에서 version이 로컬보다 작으면 서버 수신을 무시해 충돌 방지
     updates.version = Date.now();
+    // ★ v164: 업로드가 실패하면 version을 원래대로 되돌림 — 실패한 시도의 version이 남으면
+    //   다른 기기의 정상 변경이 '서버 version이 낮다'며 무시될 수 있었음
+    const _prevVer = localStorage.getItem('ws_version');
     localStorage.setItem('ws_version', String(updates.version));
+    const _restoreVer = () => {
+        if (localStorage.getItem('ws_version') !== String(updates.version)) return;
+        if (_prevVer === null) localStorage.removeItem('ws_version'); else localStorage.setItem('ws_version', _prevVer);
+    };
     // ★ Problem 3 수정: 업로드 전에 dirty set을 스냅샷으로 복사해 두고
     //   실패 시 해당 id들을 다시 dirty로 복원 → 재시도 시 누락 방지
-    const dirtySnap   = new Set(_dirtyOrders);
-    const deletedSnap = new Set(_deletedOrders);
+    const _deltaSnap  = _takeOrderDeltaSnapshot(); // ★ v164
+    const dirtySnap   = _deltaSnap.dirty;
+    const deletedSnap = _deltaSnap.deleted;
     // ★ Problem 2 수정: 업로드 진행 중에는 리스너가 echo를 덮어쓰지 못하도록 가드 설정
     _syncGuard = true;
     _syncGuardSetAt = Date.now();
     // ★ 업로드 직전 lastHash 선점 갱신 → 리스너 echo 수신 시 hash 일치로 무시
     if (updates.clients)    lastHash.clients = ch;
-    if (ordersChanged)      lastHash.orders  = oh;
+    if (ordersChanged)      lastHash.orders  = ohFinal;
     if (updates.prices)     lastHash.prices  = ph;
     if (updates.stockItems) lastHash.stock   = sh;
     setSyncStatus('syncing');
@@ -370,6 +394,7 @@ const debouncedSync = debounce(async () => {
         if (updates.stockItems) lastHash.stock   = '';
         dirtySnap.forEach(id   => _dirtyOrders.add(id));
         deletedSnap.forEach(id => _deletedOrders.add(id));
+        _restoreVer();
         _syncGuard = false;
         // ★ v145 fix: 즉시 🔴 대신 다른 끊김 감지와 동일하게 🟡 재연결 중 + 15초 유예.
         // 방금 입력한 전표는 바로 위에서 dirty set에 복원해 뒀으므로 재연결되면 자동 재시도된다 —
@@ -380,11 +405,14 @@ const debouncedSync = debounce(async () => {
     _withTimeout(workspaceRef.update(updates), 8000, 'orders.update')
         .then(() => {
             diagLog('✅ 동기화 성공');
-            _clearOrderDelta(); // 성공 시 delta 추적 초기화
+            // ★ v164: 이번에 올린 id만 추적에서 제거 — 업로드 중 새로 생긴 변경은 남겨 둔다
+            _releaseOrderDeltaSnapshot(_deltaSnap);
             _syncGuard = false;
             setSyncStatus('online');
             // ★ 업로드 중 보류됐던 타기기 변경 처리
             if (_pendingFbSnap) { const s = _pendingFbSnap; _pendingFbSnap = null; _fbValueHandler(s); }
+            // ★ v164: 업로드 중 생긴 변경이 남아 있으면 한 번 더 예약 (그 사이의 debouncedSync 호출은 _syncGuard로 건너뛰었음)
+            if (_dirtyOrders.size || _deletedOrders.size) debouncedSync();
         })
         .catch(e => {
             diagLog('❌ 동기화 실패', String(e && e.message || e));
@@ -396,6 +424,7 @@ const debouncedSync = debounce(async () => {
             // ★ Problem 3 수정: 스냅샷된 dirty/deleted id 복원
             dirtySnap.forEach(id   => _dirtyOrders.add(id));
             deletedSnap.forEach(id => _deletedOrders.add(id));
+            _restoreVer();
             _syncGuard = false;
             console.error('동기화 실패:', e);
             setSyncStatus('error');

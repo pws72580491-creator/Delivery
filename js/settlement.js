@@ -540,7 +540,7 @@ async function showClientStatement(clientName, month) {
                     <span style="font-size:12px;font-weight:800;color:#60a5fa;">${fmt(o.paidAmount)}원</span>
                     ${o.paidAt ? `<span style="font-size:10px;color:var(--text3);">${o.paidAt.slice(0,10)}</span>` : ''}
                     ${_methodBadgeHtml(o.paidMethod)}
-                    ${o.paidNote ? `<span style="font-size:10px;color:var(--text2);background:var(--surf3);padding:1px 6px;border-radius:4px;">📝 ${o.paidNote}</span>` : ''}
+                    ${o.paidNote ? `<span style="font-size:10px;color:var(--text2);background:var(--surf3);padding:1px 6px;border-radius:4px;">📝 ${escapeHtml(o.paidNote)}</span>` : ''}
                     <span style="margin-left:auto;font-size:10px;color:var(--red);font-weight:700;">잔여 ${fmt(carryRemain)}원</span>
                     <button onclick="openPayEdit('${o.id||''}','${escapeAttr(clientName)}','${escapeAttr(month)}')" style="padding:3px 8px;border-radius:6px;border:1px solid #60a5fa44;background:#60a5fa18;color:#60a5fa;font-size:10px;font-weight:700;cursor:pointer;">✏️ 수정</button>
                 </div>
@@ -588,7 +588,7 @@ async function showClientStatement(clientName, month) {
                     <span style="font-size:12px;font-weight:800;color:#60a5fa;">${fmt(o.paidAmount)}원</span>
                     ${o.paidAt ? `<span style="font-size:10px;color:var(--text3);">${o.paidAt.slice(0,10)}</span>` : ''}
                     ${_methodBadgeHtml(o.paidMethod)}
-                    ${o.paidNote ? `<span style="font-size:10px;color:var(--text2);background:var(--surf3);padding:1px 6px;border-radius:4px;">📝 ${o.paidNote}</span>` : ''}
+                    ${o.paidNote ? `<span style="font-size:10px;color:var(--text2);background:var(--surf3);padding:1px 6px;border-radius:4px;">📝 ${escapeHtml(o.paidNote)}</span>` : ''}
                     <span style="margin-left:auto;font-size:10px;color:var(--red);font-weight:700;">잔여 ${fmt(remain)}원</span>
                     <button onclick="openPayEdit('${o.id||''}','${escapeAttr(clientName)}','${escapeAttr(month)}')" style="padding:3px 8px;border-radius:6px;border:1px solid #60a5fa44;background:#60a5fa18;color:#60a5fa;font-size:10px;font-weight:700;cursor:pointer;">✏️ 수정</button>
                 </div>
@@ -654,14 +654,14 @@ async function showClientStatement(clientName, month) {
                 const oId = o.id || '';
                 return `<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border);flex-wrap:wrap;">
                     <div style="min-width:72px;font-size:11px;color:${isCarry?'var(--orange)':'var(--text2)'};">${o.date}${isCarry?' <span style="font-size:9px;">(이월)</span>':''}</div>
-                    <div style="flex:1;font-size:11px;color:var(--text2);min-width:80px;">${(o.items||[]).map(i=>i.name).join(', ')}</div>
+                    <div style="flex:1;font-size:11px;color:var(--text2);min-width:80px;">${escapeHtml((o.items||[]).map(i=>i.name).join(', '))}</div>
                     <div style="text-align:right;">
                         <div style="font-size:13px;font-weight:800;color:#60a5fa;">💳 ${fmt(o.paidAmount)}원 수금</div>
                         ${o.discount>0?`<div style="font-size:11px;color:var(--orange);font-weight:700;">✂️ 할인 ${fmt(o.discount)}원</div>`:''}
                         ${_methodBadgeHtml(o.paidMethod)}
                         ${o.paidMethod==='mixed'&&o.paidMethodDetail?`<div style="font-size:10px;color:var(--text2);">🏦${fmt(o.paidMethodDetail.transfer||0)}원 + 💵${fmt(o.paidMethodDetail.cash||0)}원</div>`:''}
                         ${o.paidAt?`<div style="font-size:10px;color:var(--text3);">${o.paidAt.slice(0,10)}</div>`:''}
-                        ${o.paidNote?`<div style="font-size:10px;color:var(--text2);">📝 ${o.paidNote}</div>`:''}
+                        ${o.paidNote?`<div style="font-size:10px;color:var(--text2);">📝 ${escapeHtml(o.paidNote)}</div>`:''}
                         ${!o.isPaid?`<div style="font-size:10px;color:var(--red);">잔여 ${fmt(o.total-(o.paidAmount||0))}원</div>`:`<div style="font-size:10px;color:var(--green);">✅ 완납</div>`}
                     </div>
                     <button onclick="openPayEdit('${oId}','${escapeAttr(clientName)}','${escapeAttr(month)}')" style="flex-shrink:0;padding:5px 10px;border-radius:7px;border:1px solid var(--border);background:var(--surf3);color:var(--text2);font-size:11px;font-weight:700;cursor:pointer;">✏️ 수정</button>

@@ -701,8 +701,8 @@ function _doConnect(id, auto=false) {
     try {
         if (!firebase.apps.length) {
             firebase.initializeApp(FIREBASE_CONFIG);
-            // RTDB 오프라인 지속성: 디스크 캐시로 초기 로드 속도 향상
-            try { firebase.database().setPersistenceEnabled(true); } catch(e) {}
+            // ★ v164: setPersistenceEnabled(true) 제거 — 웹용 Realtime Database SDK는 디스크 지속성을 지원하지 않아
+            //   (Android/iOS 전용) 예외가 try/catch로 삼켜지는 no-op이었음. 오프라인 데이터는 localStorage가 담당.
         }
         // ★ v120: 재연결 시 .info/connected + workspaceRef 리스너 먼저 해제 (중복 방지)
         _detachFirebaseListeners();
@@ -847,6 +847,7 @@ function _doConnect(id, auto=false) {
             );
             const localHasData = clients.length > 0 || orders.length > 0 || stockItems.length > 0;
 
+            let _pendingAfterLoad = false; // ★ v164: 서버 데이터 적용 후 로컬 미전송 변경이 남았는지
             if (serverHasData) {
                 // ── 서버·로컬 중 더 최신 데이터 판단 ──
                 // 서버의 lastUpdated vs 로컬의 최근 전표 createdAt 비교
@@ -855,8 +856,8 @@ function _doConnect(id, auto=false) {
                 // localStorage의 lastLocalUpdated도 포함 (오프라인 변경 대비)
                 const lastLocalUpdated = localStorage.getItem('lastLocalUpdated');
                 const localLatestOrder = orders.reduce((max, o) => {
-                    const t1 = o.createdAt  ? new Date(o.createdAt).getTime()  : 0;
-                    const t2 = o.updatedAt  ? new Date(o.updatedAt).getTime()  : 0;
+                    const t1 = _parseTs(o.createdAt); // ★ v164: 'YYYY-MM-DDTHH:MM'(Z 없음)을 로컬시간으로 읽던 9시간 오차 제거
+                    const t2 = _parseTs(o.updatedAt);
                     return Math.max(t1, t2, max);
                 }, lastLocalUpdated ? new Date(lastLocalUpdated).getTime() : 0);
                 const localIsNewer = localHasData && localLatestOrder > serverTime;
@@ -878,7 +879,7 @@ function _doConnect(id, auto=false) {
                             writtenBy:  SESSION_ID,
                             version:    ver,  // ★ v99 fix: 충돌 감지용 version 포함
                         };
-                        orders.forEach(o => { payload['orders/' + o.id] = _minifyOrder(o); });
+                        orders.forEach(o => { _putOrderUpdate(payload, o, _minifyOrder(o)); }); // ★ v164: 레거시 경량 전표는 items를 건드리지 않음
                         _deletedOrders.forEach(id => { payload['orders/' + id] = null; });
                         return payload;
                     };
@@ -913,7 +914,9 @@ function _doConnect(id, auto=false) {
                     }
                 }
                 const newClients = toArray(data.clients).map(_normClientFromFb);
-                const newOrders = toArray(data.orders).map(_normOrderFromFb);
+                const _rawOrders = _orderListFromFb(data.orders);        // ★ v164: 같은 id 중복 제거
+                const newOrders  = _overlayPendingOrders(_rawOrders);    // ★ v164: 업로드 전 로컬 변경 보존
+                _pendingAfterLoad = newOrders !== _rawOrders;
                 const newStock = toArray(data.stockItems || []).map(normStock);
 
                 clients    = newClients;
@@ -922,7 +925,7 @@ function _doConnect(id, auto=false) {
                 if (newStock.length)   stockItems = newStock;
 
                 lastHash.clients = dataHash(clients);
-                lastHash.orders  = dataHash(orders);
+                lastHash.orders  = _pendingAfterLoad ? dataHash(_rawOrders) : dataHash(orders); // 미전송 변경이 있으면 서버 기준 hash
                 lastHash.prices  = dataHash(prices);
                 lastHash.stock   = dataHash(stockItems);
                 if (data.lastUpdated) localStorage.setItem('lastLocalUpdated', data.lastUpdated);
@@ -964,6 +967,14 @@ function _doConnect(id, auto=false) {
             // 초기 로드 완료 → 이후부턴 실시간 리스너가 처리
             _connectGuard    = false; // ★ Problem 1: 초기 처리 완료, 리스너 차단 해제
             _initialLoadDone = true;
+            if (_pendingAfterLoad) debouncedSync(); // ★ v164: 남은 로컬 변경 업로드
+
+            // ★ v164: 서버 정리 작업 (연결 직후 부하를 피해 잠시 뒤에 1회)
+            setTimeout(() => {
+                if (!isConnected || _syncGuard) return;
+                _healGhostOrderKeys(data && data.orders);
+                _migrateLegacyBackups(data && data.backups);
+            }, 4000);
 
             // ★ 실시간 폴링 백업: 30초마다 서버 확인 (이벤트 유실 대비)
             // — 실시간 리스너(.on)와 중복 방지: hash 비교 후 실제 변경분만 처리
@@ -975,7 +986,7 @@ function _doConnect(id, auto=false) {
                     const d = snap.val();
                     if (!d) return;
                     // 서버 데이터가 로컬과 동일하면 핸들러 호출 생략 (불필요한 렌더링 방지)
-                    const serverOrdersHash  = dataHash(toArray(d.orders).map(_normOrderFromFb));
+                    const serverOrdersHash  = dataHash(_orderListFromFb(d.orders));
                     const serverClientsHash = dataHash(toArray(d.clients).map(_normClientFromFb));
                     if (serverOrdersHash === lastHash.orders &&
                         serverClientsHash === lastHash.clients) return;
@@ -1077,6 +1088,7 @@ async function deleteWorkspaceData(targetId) {
                 if (!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
                 const ref = firebase.database().ref('workspaces/' + id);
                 await ref.remove();
+                try { await firebase.database().ref('workspaces/' + id + BACKUP_NODE_SUFFIX).remove(); } catch(e) {} // ★ v164: 분리 보관된 백업도 삭제
 
                 toast(`🗑️ 워크스페이스 "${id}" Firebase 데이터 삭제 완료`, 'var(--green)');
 
@@ -1110,3 +1122,73 @@ async function deleteCurrentWorkspaceData() {
     await deleteWorkspaceData(id);
 }
 
+
+
+// ─── ★ v164: 서버 정리 헬퍼 ───────────────────────────────────────────────
+
+// v163 이하의 restoreBackup이 orders를 배열(0..n 인덱스 키)로 통째 올려서, 서버에 '키 ≠ 전표 id'인 항목이 남거나
+// 같은 전표가 두 번(인덱스 키 + id 키) 들어 있을 수 있다. 연결 직후 한 번 검사해서 id 키로 통일한다.
+// - 전표 내용은 그대로 옮기고(없는 id는 새로 만들고), 잘못된 키만 삭제한다.
+function _healGhostOrderKeys(rawOrders) {
+    try {
+        if (!rawOrders || !workspaceRef || !isConnected) return;
+        const entries = (Array.isArray(rawOrders)
+            ? rawOrders.map((v, i) => [String(i), v])
+            : Object.entries(rawOrders)
+        ).filter(([, v]) => v && typeof v === 'object');
+        if (!entries.some(([k, v]) => String(v.id) !== k)) return; // 정상(모든 키 = id)
+
+        // id별로 남길 항목 1개 선택: 키가 id와 같은 것 우선, 없으면 updatedAt이 최신인 것
+        const keep = new Map();
+        for (const [k, v] of entries) {
+            const id = String(v.id != null ? v.id : k);
+            const prev = keep.get(id);
+            const isCanon = (k === id);
+            if (!prev) { keep.set(id, { k, v, isCanon }); continue; }
+            if (isCanon && !prev.isCanon) keep.set(id, { k, v, isCanon });
+            else if (isCanon === prev.isCanon && String(v.updatedAt || '') >= String(prev.v.updatedAt || '')) keep.set(id, { k, v, isCanon });
+        }
+        const updates = {};
+        // ① 잘못된 키는 먼저 삭제 표시 → ② 남길 항목을 id 키로 기록(같은 경로면 ②가 ①을 덮어씀)
+        for (const [k] of entries) {
+            const kept = keep.get(k);
+            if (!(kept && kept.k === k)) updates['orders/' + k] = null;
+        }
+        for (const [id, { k, v }] of keep) {
+            if (k !== id) updates['orders/' + id] = v;
+        }
+        const n = Object.keys(updates).length;
+        if (!n) return;
+        diagLog('🧹 서버 전표 키 정리', `${n}개 경로`);
+        workspaceRef.update(updates)
+            .then(() => diagLog('✅ 서버 전표 키 정리 완료'))
+            .catch(e => diagLog('⚠️ 서버 전표 키 정리 실패', String(e && e.message || e)));
+    } catch (e) { console.warn('[_healGhostOrderKeys]', e); }
+}
+
+// v163 이하는 백업을 workspaces/{id}/backups 에 저장해서, 실시간 리스너(workspaces/{id})가
+// 연결·재연결 때마다 백업(최대 10개 = 전체 데이터 ×10)까지 함께 내려받았다.
+// 백업을 workspaces/{id}__backups 로 옮겨 리스너 범위 밖으로 분리한다. (이미 내려받은 데이터를 쓰므로 추가 다운로드 없음)
+async function _migrateLegacyBackups(rawBackups) {
+    try {
+        if (!rawBackups || typeof rawBackups !== 'object') return;
+        const id = localStorage.getItem('workspaceId');
+        if (!id || !isConnected) return;
+        const db = firebase.database();
+        const keys = Object.keys(rawBackups).sort();
+        let moved = 0;
+        for (const k of keys) {
+            if (!isConnected) break;
+            const up = {};
+            up[`workspaces/${id}${BACKUP_NODE_SUFFIX}/${k}`] = rawBackups[k];
+            up[`workspaces/${id}/backups/${k}`] = null;
+            // 백업 1개씩 원자적으로 이동 (한 번에 올리는 용량 제한)
+            await _withTimeout(db.ref().update(up), 20000, 'backup.migrate');
+            moved++;
+        }
+        if (moved) diagLog('📦 백업 이전 완료', `${moved}개 → ${id}${BACKUP_NODE_SUFFIX}`);
+    } catch (e) {
+        // 새 경로에 쓰기 권한이 없거나 실패하면 기존 위치를 그대로 둔다(백업 기능은 계속 동작)
+        diagLog('⚠️ 백업 이전 보류', String(e && e.message || e));
+    }
+}

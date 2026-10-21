@@ -96,9 +96,19 @@ async function openManual() {
 
     let raw = '';
     try {
-        const res = await fetch(MANUAL_URL + '?t=' + Date.now(), { cache: 'no-store' });
-        if (!res.ok) throw new Error('HTTP ' + res.status);
-        raw = await res.text();
+        // ★ v164: 앱과 같은 도메인의 manual.md를 먼저 읽는다(배포에 이미 포함돼 있고 SW가 캐시하므로 오프라인에서도 열림).
+        //   쿼리스트링(?t=)을 붙이면 SW 캐시 키가 매번 달라져 오프라인 때 못 읽으므로 붙이지 않는다.
+        //   없거나 HTML(존재하지 않는 경로를 index.html로 돌려주는 rewrite)이 오면 GitHub raw로 폴백.
+        try {
+            const r1 = await fetch('./manual.md', { cache: 'no-store' });
+            const ct = (r1.headers.get('content-type') || '').toLowerCase();
+            if (!r1.ok || ct.includes('text/html')) throw new Error('local manual unavailable');
+            raw = await r1.text();
+        } catch (_) {
+            const res = await fetch(MANUAL_URL + '?t=' + Date.now(), { cache: 'no-store' });
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            raw = await res.text();
+        }
     } catch(e) {
         // GitHub 접근 실패 시 안내 메시지
         content.innerHTML = `

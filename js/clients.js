@@ -63,7 +63,6 @@ function cancelClientEdit() {
     document.getElementById('clientPhone').value = '';
     document.getElementById('clientAddress').value = '';
     document.getElementById('clientNote').value = '';
-    if (document.getElementById('clientGroupSuggest')) document.getElementById('clientGroupSuggest').style.display = 'none';
     document.getElementById('dupWarn').style.display = 'none';
     document.getElementById('clientFormTitle').textContent = '거래처 등록';
     document.getElementById('clientCancelBtn').style.display = 'none';
@@ -134,9 +133,6 @@ function setClientSort(mode, btn) {
 }
 
 function renderClients() {
-    // window.appData 노출 (index.html 그룹 헬퍼에서 참조)
-    window.appData = { clients, orders, prices };
-
     const searchEl = document.getElementById('clientSearch');
     const q = searchEl ? searchEl.value : '';
     const statsMap = _buildClientStatsCache();

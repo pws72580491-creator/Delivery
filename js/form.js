@@ -546,7 +546,16 @@ function _updateDeliveryReturnToggle() {
 
 // (합계 표시는 _renderDeliveryConfirmSummary()에 통합됨)
 
+// ★ v164: 확정 버튼 중복 클릭 방지 — 공유 거래처 경로는 서버 쓰기를 await 하는 동안 tempGroups가 비워지지 않아
+//   빠르게 두 번 누르면 재고가 두 번 차감되고 전표가 중복 생성될 수 있었음.
+let _submitOrderBusy = false;
 async function submitOrder() {
+    if (_submitOrderBusy) return;
+    _submitOrderBusy = true;
+    try { await _submitOrderImpl(); }
+    finally { _submitOrderBusy = false; }
+}
+async function _submitOrderImpl() {
     const clientIdRaw = document.getElementById('selectedClientId').value;
     // 가상 ID(__shared__:wsId:name) 또는 일반 ID 처리
     let client;

@@ -907,6 +907,7 @@ async function _flushSync() {
     const sh = dataHash(stockItems);
     let changed = false;
     let ordersChanged = false; // ★ v122: orders는 orders/{id} 경로별 키로 기록되므로 별도 플래그로 추적
+    let _deltaSnap = null;     // ★ v164: 이번 업로드에 포함된 dirty/deleted id 스냅샷
     const updates = {};
     if (ch !== lastHash.clients) { updates.clients    = clients.map(_minifyClient); changed = true; }
     if (oh !== lastHash.orders)  {
@@ -929,17 +930,24 @@ async function _flushSync() {
         }
         // ★ await 중 isConnected가 끊겼으면 여기서 중단 (가드 해제 후 재시도는 다음 트리거에서)
         if (!isConnected) { diagLog('⚡ flushSync 중단', 'CRM 조회 중 연결 끊김'); _flushSyncInProgress = false; return; }
-        orders.forEach(o => {
+        // ★ v164: debouncedSync와 같은 기준으로 변경된 전표만 올린다(20건 미만).
+        //   예전엔 flushSync가 매번 전체 전표를 업로드했고, 납품 등록·수금처럼 중요한 저장(saveData(true))마다 실행돼
+        //   전표 수가 많을수록 느려지고 타임아웃 실패가 잦았음.
+        const _nd = _dirtyOrders.size + _deletedOrders.size;
+        const _targets = (_nd > 0 && _nd < 20) ? orders.filter(o => _dirtyOrders.has(String(o.id))) : orders;
+        _targets.forEach(o => {
             const m = _minifyOrder(o);
             // ★ v132 fix: o.crmControlled === null이면 "방금 납품앱에서 CRM 우선권을 명시적으로
             // 해제한 전표"라는 뜻이므로 서버의 CRM 값으로 되돌리지 않음. undefined(CRM과 무관한
             // 전표)일 때만 기존처럼 보존 — 안 그러면 미수복귀 같은 액션이 다음 동기화 때
             // CRM 값으로 조용히 되돌아갔음.
             if (serverOrdersForCrm && serverOrdersForCrm[o.id] && o.crmControlled !== null) _mergeCrmPaymentFields(m, serverOrdersForCrm[o.id]);
-            updates['orders/' + o.id] = m;
+            _putOrderUpdate(updates, o, m);
         });
         _deletedOrders.forEach(id => { updates['orders/' + id] = null; });
-        _clearOrderDelta();
+        // ★ v164: 업로드 전에 dirty를 지우지 않는다 — 실패해도 다음 동기화가 같은 전표를 다시 올릴 수 있도록
+        //   성공했을 때만 이번에 올린 id를 제거
+        _deltaSnap = _takeOrderDeltaSnapshot();
         changed = true;
         ordersChanged = true;
     }
@@ -951,9 +959,17 @@ async function _flushSync() {
     updates.writtenBy   = SESSION_ID;
     // ★ v99 fix: version 필드 포함 — _fbValueHandler의 stale 감지가 flushSync echo도 올바르게 처리
     updates.version = Date.now();
+    // ★ v164: 실패/중단 시 version 원복 (debouncedSync와 동일한 이유)
+    const _prevVer = localStorage.getItem('ws_version');
     localStorage.setItem('ws_version', String(updates.version));
+    const _restoreVer = () => {
+        if (localStorage.getItem('ws_version') !== String(updates.version)) return;
+        if (_prevVer === null) localStorage.removeItem('ws_version'); else localStorage.setItem('ws_version', _prevVer);
+    };
+    // ★ v164: orders 페이로드는 서버 조회(await) 이후 시점 기준이므로 hash도 그 시점 기준으로
+    const ohFinal = ordersChanged ? dataHash(orders) : oh;
     if (updates.clients)    lastHash.clients = ch;
-    if (ordersChanged)      lastHash.orders  = oh;
+    if (ordersChanged)      lastHash.orders  = ohFinal;
     if (updates.prices)     lastHash.prices  = ph;
     if (updates.stockItems) lastHash.stock   = sh;
     debouncedSync.cancel(); // 대기 중인 debounce 취소 (중복 방지)
@@ -964,6 +980,7 @@ async function _flushSync() {
             clearInterval(_flushAbortCheck);
             _flushSyncInProgress = false;
             diagLog('⚡ flushSync 조기 중단', 'isConnected=false 감지 → hash 롤백');
+            _restoreVer();
             if (updates.clients)    lastHash.clients = '';
             if (ordersChanged)      lastHash.orders  = '';
             if (updates.prices)     lastHash.prices  = '';
@@ -975,11 +992,14 @@ async function _flushSync() {
         _flushSyncInProgress = false;
         diagLog('✅ flushSync 성공');
         localStorage.setItem('lastLocalUpdated', nowIso);
+        _releaseOrderDeltaSnapshot(_deltaSnap); // ★ v164: 올린 id만 추적에서 제거
+        if (_dirtyOrders.size || _deletedOrders.size) debouncedSync(); // 업로드 중 생긴 변경이 남았으면 이어서 처리
     }).catch(e => {
         clearInterval(_flushAbortCheck);
         _flushSyncInProgress = false;
         diagLog('❌ flushSync 실패', String(e && e.message || e));
         // 롤백 — 다음 실행 시 재시도
+        _restoreVer();
         if (updates.clients)    lastHash.clients = '';
         if (ordersChanged)      lastHash.orders  = '';
         if (updates.prices)     lastHash.prices  = '';
