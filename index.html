@@ -13,7 +13,7 @@
     <meta name="apple-mobile-web-app-title" content="납품관리">
     <link rel="apple-touch-icon" href="./icon-192.png">
     <link rel="manifest" href="./manifest.json">
-    <title>납품 관리 Pro v164</title>
+    <title>납품 관리 Pro v165</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js" defer></script>
@@ -62,7 +62,7 @@
             <div class="logo-icon">📦</div>
             <div>
                 <div class="logo-text">납품 관리 Pro</div>
-                <div class="logo-sub">v164 · PWA 앱 설치 지원</div>
+                <div class="logo-sub">v165 · PWA 앱 설치 지원</div>
             </div>
         </div>
         <div class="header-btns">
@@ -644,7 +644,7 @@
     <div class="card">
         <div class="card-title">앱 정보</div>
         <div style="font-size:13px;color:var(--text2);line-height:2;margin-bottom:12px;">
-            버전: <strong style="color:var(--accent);">v164</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
+            버전: <strong style="color:var(--accent);">v165</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
             거래처: <span id="infoClients">0</span>개 &nbsp;·&nbsp;
             납품내역: <span id="infoOrders">0</span>건
         </div>
@@ -658,7 +658,11 @@
             <div id="changelogList" style="display:flex;flex-direction:column;gap:6px;">
                 <!-- 현재 버전 -->
                 <div class="changelog-item">
-                    <span class="changelog-ver" style="color:var(--green);">v164</span>
+                    <span class="changelog-ver" style="color:var(--green);">v165</span>
+                    <span class="changelog-desc">내역 탭 거래처 카드 우측 하단의 '이번달'(또는 해당 월) 합계 금액을 납품금액과 같은 크기(15px)로 키우고, 앞의 '이번달' 글자도 11→13px로 키워 잘 보이도록 개선.</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v164</span>
                     <span class="changelog-desc">v163 전체 코드 검수에서 나온 데이터 유실·동기화 문제 수정 모음. ① 반품/회수 플래그 복구 — _minifyOrder가 isReturn을 저장 대상에서 빠뜨려 v105부터 저장·동기화 때마다 반품 전표가 일반 미수 전표로 바뀌던 문제 수정, 이미 풀린 전표는 total<0·수량 전부 음수 조건으로 로드 때 자동 복구. ② 품목 덮어쓰기 방지 — 로컬 경량 저장이 완납 1개월 초과 전표의 품목을 지우던 것을 중단(3개월 초과 완납 전표는 기존대로 저장 제외), 이전 버전이 만든 품목 없는 경량 전표는 업로드 때 items를 건드리지 않고 필드 단위로만 갱신. ③ 서버 반영 정합성 — 백업 복원은 orders를 id 키로 올리고 사라질 전표를 서버에서도 삭제, JSON 가져오기·전체 초기화·오래된 전표 정리도 서버 전표를 함께 삭제(이전엔 재시작하면 되살아남), 예전 복원이 남긴 인덱스 키·중복 전표는 연결 직후 한 번 정리하고 같은 id가 중복으로 들어와도 하나로 합침. ④ 다른 기기 변경이 도착해도 아직 업로드 전인 내 전표 보존. ⑤ 백업 저장 위치를 실시간 리스너 범위 밖(workspaces/{id}__backups)으로 이전 — 연결·재연결 때마다 백업 최대 10개까지 같이 내려받던 부담 제거(기존 백업은 연결 후 자동 이동, 쓰기 권한이 없으면 기존 위치 유지). ⑥ flushSync가 변경된 전표만 업로드(20건 미만), 업로드 성공한 id만 추적에서 제거해 업로드 중 새로 생긴 변경이 누락되지 않게 하고, 실패 시 ws_version 원복. ⑦ 보안 — 수금 메모·품목명·백업 라벨의 HTML 이스케이프 누락 수정. ⑧ 기타 — 납품 확정 중복 클릭 방지(공유 거래처 경로), 대시보드 월 매출·6개월 차트도 타인거래 제외로 통일, 다른 기기에서 단가표(prices)만 바뀐 경우 로컬 저장 누락, 'YYYY-MM-DDTHH:MM' 시각을 9시간 어긋나게 읽던 문제(_parseTs). ⑨ 정리 — v89 거래처 그룹 잔재(index.html 인라인 스크립트·groupViewBar·appData, 오류를 내던 코드 포함)와 웹에서 동작하지 않는 setPersistenceEnabled 제거. ⑩ PWA — 서비스워커가 외부 CDN 스크립트(Firebase·xlsx·html2canvas)를 별도 캐시에 보관해 오프라인 첫 실행 대비, 사용설명서는 앱 도메인 파일 우선 사용(오프라인 열람), 매니페스트 아이콘의 any/maskable 분리.</span>
                 </div>
                 <div class="changelog-item">
