@@ -4,8 +4,9 @@
 
 function renderDashboard() {
     const month = todayKST().slice(0,7);
-    // ★ v164: 매출은 내역 탭 요약·주간 차트와 같은 기준(타인거래·타인 대납 제외). 예전엔 이 월 합계만 타인거래를 포함해 화면마다 숫자가 달랐음
-    const curr  = orders.filter(o=>o.date?.startsWith(month) && !o.delegatedBy && !o.isVoid);
+    // ★ v166 정책: 타인거래는 '당일 매출'(7일 차트·오늘 거래·내역 요약)에는 포함하지 않지만,
+    //   월 단위 집계(이번달 매출·거래처 월 매출·6개월 차트)에는 포함한다. (v164의 제외 변경을 원복)
+    const curr  = orders.filter(o=>o.date?.startsWith(month) && !o.delegatedBy);
     const _et   = o => o.isPaid && o.discount > 0 ? o.total - o.discount : o.total;
     const sales  = curr.reduce((s,o)=>s+_et(o),0);
     // 미수금: 전체 기간 누적 미수금
@@ -319,7 +320,7 @@ function renderSettleBarChart(monthKey) {
         while (m <= 0) { m += 12; y--; }
         while (m > 12) { m -= 12; y++; }
         const ym = `${y}-${String(m).padStart(2,'0')}`;
-        const mos = orders.filter(o => o.date?.startsWith(ym) && !o.delegatedBy && !o.isVoid); // ★ v164: 매출 기준 통일(타인거래 제외)
+        const mos = orders.filter(o => o.date?.startsWith(ym) && !o.delegatedBy); // ★ v166 정책: 월 단위 차트는 타인거래 포함
         const _et  = o => o.isPaid && o.discount > 0 ? o.total - o.discount : o.total;
         const total = mos.reduce((s, o) => s + _et(o), 0);
         const paid  = mos.reduce((s, o) => s + _actualPaid(o), 0);

@@ -250,10 +250,11 @@ function renderOrders() {
 
     // ── 거래처·월별 매출 합계 (카드 우측 "이번달 ○○원" 표시용) ──
     // ★ v157: 현재 필터(기간·검색·수금상태)와 무관하게 해당 거래처의 그 달 전체 매출을 집계.
-    //   상단 요약(매출)과 같은 기준 — 타인거래(isVoid)·타인 대납 제외, 할인완납은 실청구액, 반품/회수는 음수로 상쇄.
+    //   ★ v166 정책: 타인 대납은 제외하지만 타인거래(isVoid)는 '월 매출'에 포함한다
+    //   (타인거래가 빠지는 건 '당일 매출'뿐). 할인완납은 실청구액, 반품/회수는 음수로 상쇄.
     const _monthTotalMap = {};
     allOrders.forEach(o => {
-        if (o.isVoid || !_isMine(o) || !o.clientName || !o.date) return;
+        if (!_isMine(o) || !o.clientName || !o.date) return;
         const k = o.clientName + '|' + o.date.slice(0, 7);
         _monthTotalMap[k] = (_monthTotalMap[k] || 0) + _et(o);
     });
@@ -964,7 +965,9 @@ async function saveOrderEdit() {
         const ok = await _patchSharedOrder(foundEdit.sharedWsId, id, patch);
         if (ok) {
             // ── 자동 재고 보정 (수정 전후 수량 차이 반영) — 저장 성공 후에만 적용 ──
-            if (stockAutoDeduct && !newIsVoidShared) {
+            // ★ v166: '재고에 반영돼 있는 수량'을 기준으로 계산한다 — 내거래면 그 전표 수량만큼 차감돼 있고, 타인거래면 0.
+            //   수정 전 상태(oldMap)와 수정 후 상태(newMap)의 차이만큼만 보정하므로 내거래↔타인거래를 몇 번 왕복해도 재고가 어긋나지 않는다.
+            if (stockAutoDeduct && !(wasVoidShared && newIsVoidShared)) {
                 const oldMap = {};
                 if (!wasVoidShared) {
                     oldItemsShared.forEach(it => {
@@ -973,12 +976,14 @@ async function saveOrderEdit() {
                     });
                 }
                 const newMap = {};
-                items.forEach(it => {
-                    const key = normItemName(it.name);
-                    newMap[key] = (newMap[key]||0) + (Number(it.qty)||0);
-                });
+                if (!newIsVoidShared) {
+                    items.forEach(it => {
+                        const key = normItemName(it.name);
+                        newMap[key] = (newMap[key]||0) + (Number(it.qty)||0);
+                    });
+                }
                 const allKeys = new Set([...Object.keys(oldMap), ...Object.keys(newMap)]);
-                const reasonLabelShared = wasVoidShared ? '타인거래→내거래 전환반영' : '공유대납수정보정';
+                const reasonLabelShared = wasVoidShared ? '타인거래→내거래 전환반영' : (newIsVoidShared ? '내거래→타인거래 전환복구' : '공유대납수정보정');
                 allKeys.forEach(key => {
                     const oldQty = oldMap[key]||0;
                     const newQty = newMap[key]||0;
@@ -1019,11 +1024,12 @@ async function saveOrderEdit() {
     const wasVoid   = !!o.isVoid;
 
     // ── 자동 재고 보정 (수정 전후 수량 차이 반영) ──
-    // 분기는 "수정 후" 상태(newIsVoid) 기준: 최종적으로 타인거래가 되면 재고를 건드리지 않음
-    // (내거래→타인거래 전환 시 기존 차감분을 복구하지 않는 기존 정책과 동일하게 유지).
-    // 반대로 타인거래였다가 내거래로 전환되면, 그동안 재고에 전혀 반영된 적이 없으므로
-    // 수정 전 수량(oldMap)을 0으로 취급해 새 수량 전체를 차감한다.
-    if (stockAutoDeduct && !newIsVoid) {
+    // ★ v166: '재고에 반영돼 있는 수량'을 기준으로 계산한다.
+    //   · 내거래 전표 = 그 전표의 수량만큼 재고에서 차감돼 있음 / 타인거래 전표 = 차감된 수량 0
+    //   · 수정 전 상태(oldMap)와 수정 후 상태(newMap)의 차이만큼만 보정
+    //   → 내거래→타인거래: 차감분을 되돌려 복구, 타인거래→내거래: 새 수량 전체 차감, 몇 번 왕복해도 재고가 어긋나지 않음.
+    //   (예전엔 내거래→타인거래 때 복구를 안 해서, 왕복하면 두 번 차감됐음)
+    if (stockAutoDeduct && !(wasVoid && newIsVoid)) {
         // 수정 전 품목 맵 { 정규화된이름: qty } — 타인거래였다면 반영된 적 없으므로 비워둠
         const oldMap = {};
         if (!wasVoid) {
@@ -1032,15 +1038,17 @@ async function saveOrderEdit() {
                 oldMap[key] = (oldMap[key]||0) + (Number(it.qty)||0);
             });
         }
-        // 수정 후 품목 맵
+        // 수정 후 품목 맵 — 타인거래로 끝나면 재고에 반영되는 수량은 0
         const newMap = {};
-        _oeditItems.forEach(it => {
-            const key = normItemName(it.name);
-            newMap[key] = (newMap[key]||0) + (Number(it.qty)||0);
-        });
+        if (!newIsVoid) {
+            _oeditItems.forEach(it => {
+                const key = normItemName(it.name);
+                newMap[key] = (newMap[key]||0) + (Number(it.qty)||0);
+            });
+        }
         // 모든 품목명 합집합
         const allKeys = new Set([...Object.keys(oldMap), ...Object.keys(newMap)]);
-        const reasonLabel = wasVoid ? '타인거래→내거래 전환반영' : '납품수정보정';
+        const reasonLabel = wasVoid ? '타인거래→내거래 전환반영' : (newIsVoid ? '내거래→타인거래 전환복구' : '납품수정보정');
         allKeys.forEach(key => {
             const oldQty = oldMap[key]||0;
             const newQty = newMap[key]||0;
