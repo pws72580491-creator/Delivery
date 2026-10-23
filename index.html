@@ -13,7 +13,7 @@
     <meta name="apple-mobile-web-app-title" content="납품관리">
     <link rel="apple-touch-icon" href="./icon-192.png">
     <link rel="manifest" href="./manifest.json">
-    <title>납품 관리 Pro v165</title>
+    <title>납품 관리 Pro v166</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js" defer></script>
@@ -62,7 +62,7 @@
             <div class="logo-icon">📦</div>
             <div>
                 <div class="logo-text">납품 관리 Pro</div>
-                <div class="logo-sub">v165 · PWA 앱 설치 지원</div>
+                <div class="logo-sub">v166 · PWA 앱 설치 지원</div>
             </div>
         </div>
         <div class="header-btns">
@@ -644,7 +644,7 @@
     <div class="card">
         <div class="card-title">앱 정보</div>
         <div style="font-size:13px;color:var(--text2);line-height:2;margin-bottom:12px;">
-            버전: <strong style="color:var(--accent);">v165</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
+            버전: <strong style="color:var(--accent);">v166</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
             거래처: <span id="infoClients">0</span>개 &nbsp;·&nbsp;
             납품내역: <span id="infoOrders">0</span>건
         </div>
@@ -658,7 +658,11 @@
             <div id="changelogList" style="display:flex;flex-direction:column;gap:6px;">
                 <!-- 현재 버전 -->
                 <div class="changelog-item">
-                    <span class="changelog-ver" style="color:var(--green);">v165</span>
+                    <span class="changelog-ver" style="color:var(--green);">v166</span>
+                    <span class="changelog-desc">타인거래 재고·매출 정책 정리. ① 전표 수정에서 내거래↔타인거래를 전환할 때 재고가 왕복해도 어긋나지 않도록 수정 — 내거래→타인거래로 바꾸면 그 전표로 차감돼 있던 수량을 재고로 되돌리고(로그: '내거래→타인거래 전환복구'), 타인거래→내거래로 바꾸면 수정 후 수량 전체를 차감합니다. 전환과 수량 변경을 동시에 해도 '실제로 차감돼 있던 수량'을 기준으로 계산하며, 공유 대납 전표 수정에도 같은 규칙을 적용했습니다. (이전 버전에서 내거래→타인거래로 바꿔 둔 전표는 그때 차감분이 재고에 남아 있을 수 있으니, 다시 내거래로 바꾸기 전에 재고를 확인하세요.) ② 매출 기준 정리 — 타인거래는 당일 매출(7일 차트·오늘 거래·내역 요약)에는 넣지 않고, 거래처 월 매출(내역 카드의 '이번달 ○○원')·대시보드 이번달 매출·6개월 차트에는 포함합니다. v164에서 대시보드 월 매출과 6개월 차트를 타인거래 제외로 바꿨던 것을 원복했고, 내역 카드의 거래처 월 매출은 타인거래를 포함하도록 변경했습니다. ③ 타인거래 토글 설명 문구를 실제 동작에 맞게 수정.</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v165</span>
                     <span class="changelog-desc">내역 탭 거래처 카드 우측 하단의 '이번달'(또는 해당 월) 합계 금액을 납품금액과 같은 크기(15px)로 키우고, 앞의 '이번달' 글자도 11→13px로 키워 잘 보이도록 개선.</span>
                 </div>
                 <div class="changelog-item">
@@ -1822,7 +1826,7 @@
             onclick="toggleOeditVoid()">
             <div>
                 <div style="font-size:13px;font-weight:700;">👤 타인거래</div>
-                <div style="font-size:11px;color:var(--text2);margin-top:2px;">재고 차감 제외 · 매출은 정상 집계</div>
+                <div style="font-size:11px;color:var(--text2);margin-top:2px;">재고 차감 제외 · 당일 매출 제외 (월 매출·차트엔 포함)</div>
             </div>
             <div id="oeditVoidSwitch" style="
                 width:44px; height:24px; border-radius:12px;

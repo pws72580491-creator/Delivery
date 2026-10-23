@@ -1,4 +1,4 @@
-const CACHE_NAME = 'delivery-pro-v165';
+const CACHE_NAME = 'delivery-pro-v166';
 // ★ v164: 외부 CDN 스크립트(Firebase / xlsx / html2canvas)는 버전이 URL에 박혀 있어 내용이 바뀌지 않으므로 별도 캐시에 보관.
 //   예전엔 SW가 외부 요청을 전혀 캐시하지 않아, 브라우저 HTTP 캐시가 비워진 상태에서 오프라인으로 앱을 열면
 //   Firebase SDK가 로드되지 않았다. 앱 버전이 바뀌어도 지워지지 않도록 CACHE_NAME과 분리했다.
