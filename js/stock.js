@@ -97,6 +97,14 @@ function getStockAtDate(si, targetDateStr) {
     return Math.max(0, stock);
 }
 
+// ★ v167: 입고 합계 = 입고(in) + 입고 수정(in_adj, 부호 있음). 예전엔 in_adj 기록은 남기면서 합계에는 반영하지 않아
+//   '입고 수량을 고쳐도 입고 칸은 그대로, 이전재고만 역산돼 음수로 바뀌는' 문제가 있었음.
+function _netInQty(logs) {
+    const inSum = logs.filter(l => l.type === 'in').reduce((s, l) => s + Math.abs(l.qty || 0), 0);
+    const adj   = logs.filter(l => l.type === 'in_adj').reduce((s, l) => s + (Number(l.qty) || 0), 0);
+    return Math.max(0, inSum + adj);
+}
+
 // 특정 날짜의 입고/출고 합산
 
 function getInOutAtDate(si, targetDateStr) {
@@ -108,7 +116,7 @@ function getInOutAtDate(si, targetDateStr) {
         const t = l.at ? new Date(l.at).getTime() : 0;
         return t >= startUTC && t <= endUTC;
     });
-    const inQty  = dayLogs.filter(l => l.type === 'in').reduce((s, l) => s + Math.abs(l.qty), 0);
+    const inQty  = _netInQty(dayLogs); // ★ v167: 입고 수정(in_adj) 반영
     const restoreQty = dayLogs.filter(l => (l.type === 'restore' && (l.originalDate || l.date) === targetDateStr)
                                         || (l.type === 'edit_adj' && (l.qty||0) > 0)).reduce((s, l) => s + Math.abs(l.qty), 0);
     const logOutQty = Math.max(0, dayLogs.filter(l => l.type === 'out' || l.type === 'auto' || (l.type === 'edit_adj' && l.qty < 0)).reduce((s, l) => s + Math.abs(l.qty), 0) - restoreQty);
@@ -183,9 +191,7 @@ function getTodayInOut(si) {
         return t >= todayStartUTC && t < tomorrowStartUTC;
     });
     // 입고: type=in (carryover는 이전재고 이월이므로 입고로 보지 않음)
-    const inQty = todayLogs
-        .filter(l => l.type === 'in')
-        .reduce((s, l) => s + Math.abs(l.qty), 0);
+    const inQty = _netInQty(todayLogs); // ★ v167: 입고 수정(in_adj) 반영
     // 출고 상쇄: 납품삭제복구(restore) + 납품수정보정 증가(edit_adj>0)
     // restore는 originalDate가 오늘인 것만 상쇄 (이전 날짜 전표 삭제는 오늘 출고에 영향 없음)
     const restoreQty = todayLogs
@@ -701,9 +707,11 @@ function refreshStockCarryover(silent = false) {
             .filter(l => l.type === 'auto' || l.type === 'out' || (l.type === 'edit_adj' && l.qty < 0))
             .reduce((s, l) => s + Math.abs(l.qty), 0)
             - todayLogs.filter(l => l.type === 'restore' && (l.originalDate || l.date) === today).reduce((s, l) => s + Math.abs(l.qty), 0));
-        const todayIn = todayLogs
+        // ★ v167: 입고 수정(in_adj, 부호 있음)도 반영 — 빠뜨리면 이월 재계산이 입고 수정 전 수량으로 재고를 되돌림
+        const todayIn = Math.max(0, todayLogs
             .filter(l => l.type === 'in' || (l.type === 'edit_adj' && l.qty > 0))
-            .reduce((s, l) => s + Math.abs(l.qty), 0);
+            .reduce((s, l) => s + Math.abs(l.qty), 0)
+            + todayLogs.filter(l => l.type === 'in_adj').reduce((s, l) => s + (Number(l.qty) || 0), 0));
 
         // ⑤ 자동차감 OFF이면 납품 전표 기반 차감 제외 (차감 자체를 안 하는 것이므로)
         // ※ 이전 버전에서 OFF일 때도 포함했으나, 이중차감/이전재고 왜곡 원인이 됨
@@ -754,6 +762,24 @@ function openStockEdit(id) {
     document.getElementById('seLow').value   = si ? si.low   : 10;
     document.getElementById('seDanger').value= si ? si.danger: 3;
     document.getElementById('seNote').value  = si ? si.note  : '';
+
+    // ★ v167: 오늘 입고가 있으면 수량을 바꿨을 때의 처리 방식을 안내
+    const _hint = document.getElementById('seInHint');
+    if (_hint) {
+        let hintText = '';
+        if (si) {
+            const _s0 = new Date(todayKST() + 'T00:00:00+09:00').getTime();
+            const _inLogs = (si.log || []).filter(l => {
+                if (l.type !== 'in' && l.type !== 'in_adj') return false;
+                const t = l.at ? new Date(l.at).getTime() : 0;
+                return t >= _s0 && t < _s0 + 86400000;
+            });
+            const _net = _netInQty(_inLogs);
+            if (_net > 0) hintText = `📥 오늘 입고 ${fmt(_net)}${si.unit} — 재고 수량을 바꾸면 오늘 입고 수량이 함께 조정되고, 이전재고는 그대로 유지됩니다.`;
+        }
+        _hint.textContent = hintText;
+        _hint.style.display = hintText ? 'block' : 'none';
+    }
 
     // ── 이전재고 이월 표시 ──
     const bar = document.getElementById('sePrevQtyBar');
@@ -833,46 +859,56 @@ function saveStockItem() {
         if (!si) return toast('❗ 품목을 찾을 수 없습니다');
         const before = si.qty;
         Object.assign(si, { name, qty, unit, low, danger, note, updatedAt: new Date().toISOString() });
+        let _inAdjMsg = '';
         if (before !== qty) {
-            // 이월 적용 선택 시 carryover 로그, 아니면 수동 set 로그
-            const logType   = _carryMode ? 'carryover' : 'set';
-            const logReason = _carryMode ? '이전 재고 이월 적용' : '수동 재고 설정';
             const diff = qty - before;
-            (si.log = si.log||[]).unshift({
-                type: logType, qty: diff, before, after: qty,
-                reason: logReason, date: todayKST(), at: new Date().toISOString()
-            });
-            si.log = _trimLogByDate(si.log);
-
-            // ── 오늘 입고 로그가 있는데 수정으로 수량이 감소한 경우 →
-            //    입고 수량 표시도 보정 (in_adj 로그로 inQty 차감)
-            if (!_carryMode && diff < 0) {
-                const today = todayKST();
+            const today = todayKST();
+            const nowMs = Date.now();
+            si.log = si.log || [];
+            if (_carryMode) {
+                // 이월 적용 선택 시 carryover 로그
+                si.log.unshift({
+                    type: 'carryover', qty: diff, before, after: qty,
+                    reason: '이전 재고 이월 적용', date: today, at: new Date(nowMs).toISOString()
+                });
+            } else {
+                // ★ v167: 오늘 입고가 있으면 재고 수량 변경분을 '오늘 입고 수량 수정'으로 처리한다.
+                //   → 입고 칸만 바뀌고 이전재고는 그대로, 현재재고 = 이전재고 + 오늘 입고 - 오늘 출고 로 맞는다.
+                //   (예전엔 줄이는 경우만 기록하고 입고 칸에는 반영하지 않아 이전재고가 억지로 음수가 되었고,
+                //    늘리는 경우는 아예 처리되지 않았음)
                 const todayStartUTC = new Date(today + 'T00:00:00+09:00').getTime();
-                const tomorrowStartUTC = todayStartUTC + 86400000;
-                const todayInTotal = (si.log || []).filter(l => {
-                    if (l.type !== 'in') return false;
+                const todayEndUTC   = todayStartUTC + 86400000;
+                const todayInLogs = si.log.filter(l => {
+                    if (l.type !== 'in' && l.type !== 'in_adj') return false;
                     const t = l.at ? new Date(l.at).getTime() : 0;
-                    return t >= todayStartUTC && t < tomorrowStartUTC;
-                }).reduce((s, l) => s + Math.abs(l.qty), 0);
-                if (todayInTotal > 0) {
-                    // 이미 쌓인 in_adj 합산
-                    const todayInAdj = (si.log || []).filter(l => {
-                        if (l.type !== 'in_adj') return false;
-                        const t = l.at ? new Date(l.at).getTime() : 0;
-                        return t >= todayStartUTC && t < tomorrowStartUTC;
-                    }).reduce((s, l) => s + l.qty, 0);
-                    const canAdj = Math.min(Math.abs(diff), todayInTotal + todayInAdj);
-                    if (canAdj > 0) {
-                        si.log.unshift({
-                            type: 'in_adj', qty: -canAdj, before, after: qty,
-                            reason: '입고 수량 수정 보정', date: today, at: new Date().toISOString()
-                        });
-                    }
+                    return t >= todayStartUTC && t < todayEndUTC;
+                });
+                const todayNetIn = _netInQty(todayInLogs);
+                // 오늘 입고가 있을 때: 늘리면 전부 입고로, 줄이면 오늘 입고 수량까지만 입고에서 차감
+                let adjIn = 0;
+                if (todayNetIn > 0) adjIn = diff > 0 ? diff : -Math.min(-diff, todayNetIn);
+                let cursor = before, k = 0;
+                if (adjIn !== 0) {
+                    si.log.unshift({
+                        type: 'in_adj', qty: adjIn, before: cursor, after: cursor + adjIn,
+                        reason: `오늘 입고 수량 수정 (${fmt(todayNetIn)}→${fmt(todayNetIn + adjIn)})`,
+                        date: today, at: new Date(nowMs + k++).toISOString()
+                    });
+                    cursor += adjIn;
+                    _inAdjMsg = `오늘 입고 ${fmt(todayNetIn)}→${fmt(todayNetIn + adjIn)}${unit}`;
+                }
+                // 입고 수정으로 처리하고 남은 변화량(오늘 입고보다 더 줄인 경우 등)은 수동 설정으로 기록
+                const rest = diff - adjIn;
+                if (rest !== 0) {
+                    si.log.unshift({
+                        type: 'set', qty: rest, before: cursor, after: qty,
+                        reason: '수동 재고 설정', date: today, at: new Date(nowMs + k++).toISOString()
+                    });
                 }
             }
+            si.log = _trimLogByDate(si.log);
         }
-        toast('✅ 품목이 수정되었습니다', 'var(--green)');
+        toast(_inAdjMsg ? `✅ 품목 수정 완료 · ${_inAdjMsg} (이전재고는 그대로)` : '✅ 품목이 수정되었습니다', 'var(--green)');
     } else {
         // ── 신규 등록 시: 오늘 납품 전표에 동일 품목 출고가 있으면 자동 반영 ──
         const today = todayKST();
@@ -1002,8 +1038,8 @@ function openStockLog(id) {
     if (!si) return;
     document.getElementById('slName').textContent = si.name + '  현재: ' + fmt(si.qty) + ' ' + si.unit;
     const log = (si.log || []);
-    const typeLabel = { in:'📥 입고', out:'📤 출고', set:'✏️ 설정', auto:'🚚 납품차감', carryover:'🔄 이월', edit_adj:'✏️ 수정보정', restore:'↩ 납품삭제복구' };
-    const typeCls   = { in:'in', out:'out', set:'set', auto:'auto', carryover:'in', edit_adj:'set', restore:'in' };
+    const typeLabel = { in:'📥 입고', in_adj:'✏️ 입고수정', out:'📤 출고', set:'✏️ 설정', auto:'🚚 납품차감', carryover:'🔄 이월', edit_adj:'✏️ 수정보정', restore:'↩ 납품삭제복구' };
+    const typeCls   = { in:'in', in_adj:'set', out:'out', set:'set', auto:'auto', carryover:'in', edit_adj:'set', restore:'in' };
 
     if (!log.length) {
         document.getElementById('slList').innerHTML =
@@ -1030,7 +1066,7 @@ function openStockLog(id) {
         const lastLog = [...dayLogs].sort((a, b) =>
             (b.at || b.date || '').localeCompare(a.at || a.date || '')).find(l => l.after !== undefined);
         const dayClosing = lastLog ? lastLog.after : '?';
-        const inSum  = dayLogs.filter(l => l.type === 'in').reduce((s, l) => s + Math.abs(l.qty||0), 0);
+        const inSum  = _netInQty(dayLogs); // ★ v167: 입고 수정 반영
         const outSum = Math.max(0, dayLogs.filter(l => l.type === 'out' || l.type === 'auto' || (l.type === 'edit_adj' && (l.qty||0) < 0)).reduce((s, l) => s + Math.abs(l.qty||0), 0)
                      - dayLogs.filter(l => (l.type === 'restore' && (l.originalDate || l.date) === day) || (l.type === 'edit_adj' && (l.qty||0) > 0)).reduce((s, l) => s + Math.abs(l.qty||0), 0));
         return `
