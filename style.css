@@ -1171,11 +1171,12 @@ body.light .stat-card.orange .stat-value { color:#a07010; }
     background: var(--surf3);
     border-top: 1px solid var(--border);
     align-items: center; gap: 8px;
+    flex-wrap: wrap; /* v168: 미리보기 문구를 아래 줄에 표시 */
 }
 .eg-quick-bar.visible { display: flex; }
 .eg-quick-label { font-size: 12px; font-weight: 700; color: var(--text2); flex-shrink: 0; }
 .eg-quick-input {
-    flex: 1; padding: 8px 10px;
+    flex: 1; min-width: 0; padding: 8px 10px;
     background: var(--surf); border: 1.5px solid var(--border);
     border-radius: 8px; font-size: 16px; font-weight: 800;
     font-family: 'DM Mono',monospace; color: var(--text);
@@ -1193,6 +1194,11 @@ body.light .stat-card.orange .stat-value { color:#a07010; }
 }
 .eg-quick-confirm.in-type  { background: var(--green); color: #fff; }
 .eg-quick-confirm.out-type { background: var(--red);   color: #fff; }
+.eg-quick-confirm.set-type { background: var(--accent); color: #fff; }
+.eg-quick-hint { flex-basis: 100%; display: none; font-size: 12px; line-height: 1.45; color: var(--text2); }
+/* v168: 눌러서 바로 수정할 수 있는 숫자 표시 */
+.eg-col-val.tap-edit { cursor: pointer; text-decoration: underline dotted; text-underline-offset: 6px; -webkit-tap-highlight-color: transparent; }
+.eg-col-val.tap-edit:active { opacity: .55; }
 .eg-quick-cancel {
     padding: 8px 10px; border-radius: 8px;
     border: 1px solid var(--border); background: var(--surf2);

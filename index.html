@@ -13,7 +13,7 @@
     <meta name="apple-mobile-web-app-title" content="납품관리">
     <link rel="apple-touch-icon" href="./icon-192.png">
     <link rel="manifest" href="./manifest.json">
-    <title>납품 관리 Pro v167</title>
+    <title>납품 관리 Pro v168</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js" defer></script>
@@ -62,7 +62,7 @@
             <div class="logo-icon">📦</div>
             <div>
                 <div class="logo-text">납품 관리 Pro</div>
-                <div class="logo-sub">v167 · PWA 앱 설치 지원</div>
+                <div class="logo-sub">v168 · PWA 앱 설치 지원</div>
             </div>
         </div>
         <div class="header-btns">
@@ -644,7 +644,7 @@
     <div class="card">
         <div class="card-title">앱 정보</div>
         <div style="font-size:13px;color:var(--text2);line-height:2;margin-bottom:12px;">
-            버전: <strong style="color:var(--accent);">v167</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
+            버전: <strong style="color:var(--accent);">v168</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
             거래처: <span id="infoClients">0</span>개 &nbsp;·&nbsp;
             납품내역: <span id="infoOrders">0</span>건
         </div>
@@ -658,7 +658,11 @@
             <div id="changelogList" style="display:flex;flex-direction:column;gap:6px;">
                 <!-- 현재 버전 -->
                 <div class="changelog-item">
-                    <span class="changelog-ver" style="color:var(--green);">v167</span>
+                    <span class="changelog-ver" style="color:var(--green);">v168</span>
+                    <span class="changelog-desc">재고 탭: 팝업 없이 카드에서 바로 수정. ① 카드의 '입고' 숫자를 누르면 그 자리에서 오늘 입고 수량을 고칠 수 있음 — 입력하는 동안 '입고 90→80 · 현재재고 109→99' 미리보기가 보이고, 확정하면 이전재고·출고는 그대로 두고 오늘 입고만 바뀌어 현재재고가 계산됨(이력: 오늘 입고 수량 수정). 이미 출고된 수량보다 입고를 줄여 재고가 음수가 되는 경우는 막고 최소값을 안내. ② '현재재고' 숫자를 누르면 재고 실사처럼 현재 재고만 직접 수정(입고·출고 기록은 그대로, 이력: 현재재고 직접 수정). ③ 수정 가능한 숫자에는 점선 밑줄 표시, 소수 수량(kg 등) 지원, Enter로 확정·Esc로 취소. 자동 차감 OFF·과거 날짜 조회에서는 비활성. ④ ✏️ 수정 창은 품목명·단위·경고 기준·메모 전용으로 정리 — 기존 품목은 수량 칸을 숨기고(안내 문구 표시), 이 창에서는 수량이 바뀌지 않음. 신규 등록 때만 초기 재고 입력. ⑤ 사용하지 않는 '이월 적용 / 현재값 유지' 기능 제거.</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v167</span>
                     <span class="changelog-desc">재고 탭 입고 수정 오류 수정. 오늘 입고한 품목의 재고 수량을 [수정]으로 고치면 입고 칸은 그대로인 채 이전재고만 억지로 역산(예: 이전 0 → -1)되던 문제 해결. 원인: 입고 수정 기록(in_adj)을 남기면서도 입고 합계에 반영하지 않았고, 그마저 수량을 줄일 때만 기록했음. ① 오늘 입고가 있는 품목은 수정 창에서 재고 수량을 바꾸면 그 변화량을 '오늘 입고 수량 수정'으로 처리 — 입고 칸만 바뀌고 이전재고는 그대로, 현재재고 = 이전재고 + 오늘 입고 − 오늘 출고. 줄이는 경우와 늘리는 경우 모두 적용. ② 오늘 입고보다 더 많이 줄이면 입고는 0까지만 줄이고 나머지는 수동 설정으로 기록. 오늘 입고가 없으면 기존처럼 수동 설정만 기록. ③ 입고 칸·과거 날짜 조회·이력 화면의 날짜별 입고 합계·이월 재계산이 입고 수정을 반영(이월 재계산이 고친 재고를 입고 수정 전 수량으로 되돌리던 문제 포함). 이력에는 '✏️ 입고수정'으로 표시. ④ 수정 창에 오늘 입고가 있으면 처리 방식 안내 문구 표시. 이전에 이미 수정해서 -1 등으로 보이던 품목은 별도 작업 없이 올바르게 표시됩니다.</span>
                 </div>
                 <div class="changelog-item">
@@ -1393,28 +1397,8 @@
       <label class="form-label">품목명 *</label>
       <input type="text" class="form-input" id="seName" placeholder="예: 두부, 콩나물">
     </div>
-    <!-- 이전재고(어제 마감) 안내 -->
-    <div id="sePrevQtyBar" style="display:none;margin-bottom:12px;padding:10px 13px;background:var(--surf3);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:var(--radius-s);">
-      <div style="font-size:10px;font-weight:700;color:var(--text2);letter-spacing:.7px;text-transform:uppercase;margin-bottom:6px;">이전 재고 (어제 마감)</div>
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px;">
-        <span id="sePrevQtyVal" style="font-size:20px;font-weight:900;font-family:'DM Mono',monospace;color:var(--accent);"></span>
-        <div id="sePrevQtyDate" style="font-size:10px;color:var(--text3);text-align:right;"></div>
-      </div>
-      <div style="display:flex;gap:7px;">
-        <button type="button" id="btnApplyCarry" onclick="setPrevCarryMode(true)"
-          style="flex:1;padding:7px 0;border-radius:8px;border:2px solid var(--border);
-                 background:var(--surf2);color:var(--text2);font-size:12px;font-weight:700;cursor:pointer;transition:all .15s;">
-          ↩ 이월 적용
-        </button>
-        <button type="button" id="btnSkipCarry" onclick="setPrevCarryMode(false)"
-          style="flex:1;padding:7px 0;border-radius:8px;border:2px solid var(--accent);
-                 background:var(--accent);color:#fff;font-size:12px;font-weight:700;cursor:pointer;transition:all .15s;">
-          ✓ 현재값 유지
-        </button>
-      </div>
-    </div>
     <div style="display:flex;gap:8px;">
-      <div class="form-group" style="flex:1;">
+      <div class="form-group" id="seQtyGroup" style="flex:1;">
         <label class="form-label">오늘 재고 *</label>
         <input type="number" class="form-input" id="seQty" placeholder="0" min="0">
       </div>
@@ -1423,7 +1407,7 @@
         <input type="text" class="form-input" id="seUnit" placeholder="개·kg·박스" maxlength="6">
       </div>
     </div>
-    <div id="seInHint" style="display:none;font-size:12px;line-height:1.5;color:var(--accent);background:var(--surf2);border-radius:8px;padding:8px 10px;margin:-4px 0 10px;"></div>
+    <div id="seQtyNote" style="display:none;font-size:12px;line-height:1.5;color:var(--accent);background:var(--surf2);border-radius:8px;padding:8px 10px;margin:0 0 10px;">💡 재고 수량은 이 창이 아니라 카드의 <b>입고</b>·<b>현재재고</b> 숫자를 눌러서 바로 고칠 수 있어요.</div>
     <div style="display:flex;gap:8px;">
       <div class="form-group" style="flex:1;">
         <label class="form-label">부족 경고 기준 (⚠️)</label>
