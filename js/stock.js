@@ -249,6 +249,10 @@ function _egCardHTML(si) {
     const histLabel = isHistory ? `<span class="eg-history-badge">과거</span>` : '';
 
     const currLabel = isHistory ? `${stockViewDate} 재고` : '현재재고';
+    // ★ v168: 오늘 보기 + 자동차감 ON일 때만 입고·현재재고 숫자를 눌러 바로 수정할 수 있다
+    const canTapEdit = !isHistory && stockAutoDeduct;
+    const tapIn  = canTapEdit ? ` tap-edit" onclick="egQuickOpen('${id}','editin')" title="탭해서 오늘 입고 수량 수정` : '';
+    const tapQty = canTapEdit ? ` tap-edit" onclick="egQuickOpen('${id}','editqty')" title="탭해서 현재재고 직접 수정` : '';
 
     return `<div class="eg-card level-${lv}${histClass}" id="egcard-${safeId}" data-sid="${id}">
   <!-- 헤더: 품목명 -->
@@ -271,7 +275,7 @@ function _egCardHTML(si) {
     </div>
     <div class="eg-col col-in" id="egcol-in-${safeId}">
       <div class="eg-col-label">📥 입고</div>
-      <div class="eg-col-val">${inQty > 0 ? '+'+fmt(inQty) : '—'}</div>
+      <div class="eg-col-val${tapIn}">${inQty > 0 ? '+'+fmt(inQty) : '—'}</div>
       <div class="eg-col-unit">${si.unit}</div>
     </div>
     <div class="eg-col col-out" id="egcol-out-${safeId}">
@@ -281,18 +285,20 @@ function _egCardHTML(si) {
     </div>
     <div class="eg-col col-curr lv-${lv}">
       <div class="eg-col-label">${currLabel}</div>
-      <div class="eg-col-val">${fmt(displayQty)}</div>
+      <div class="eg-col-val${tapQty}">${fmt(displayQty)}</div>
       <div class="eg-col-unit">${si.unit}</div>
     </div>
   </div>
   <!-- 빠른 입고/출고 바 (과거 조회 모드에서는 비활성) -->
   ${isHistory || !stockAutoDeduct ? '' : `<div class="eg-quick-bar" id="eg-qbar-${safeId}">
     <span class="eg-quick-label" id="eg-qlabel-${safeId}">입고</span>
-    <input type="number" class="eg-quick-input" id="eg-qinput-${safeId}" placeholder="수량" min="1"
-      onkeydown="if(event.key==='Enter')egQuickConfirm('${id}')"
+    <input type="number" inputmode="decimal" class="eg-quick-input" id="eg-qinput-${safeId}" placeholder="수량" min="1"
+      oninput="egQuickPreview('${id}')"
+      onkeydown="if(event.key==='Enter')egQuickConfirm('${id}');if(event.key==='Escape')egQuickClose('${id}')"
       style="flex:1;">
     <button class="eg-quick-confirm in-type" id="eg-qconfirm-${safeId}" onclick="egQuickConfirm('${id}')">확인</button>
     <button class="eg-quick-cancel" onclick="egQuickClose('${id}')">✕</button>
+    <div class="eg-quick-hint" id="eg-qhint-${safeId}"></div>
   </div>`}
   <!-- 액션 버튼 -->
   <div class="eg-actions">
@@ -325,13 +331,91 @@ function egQuickOpen(id, type) {
     const input   = document.getElementById('eg-qinput-' + safeId);
     const confirm = document.getElementById('eg-qconfirm-' + safeId);
     if (!bar) return;
-    label.textContent = type === 'in' ? '📥 입고 수량' : '📤 출고 수량';
-    confirm.className = 'eg-quick-confirm ' + type + '-type';
-    confirm.textContent = type === 'in' ? '입고' : '출고';
-    input.value = '';
+    const isEdit = (type === 'editin' || type === 'editqty');
+    if (isEdit) {
+        // ★ v168: 카드에서 바로 수정 — 입고: 오늘 입고 수량(이전재고는 그대로), 현재재고: 재고 직접 수정
+        label.textContent = type === 'editin' ? '📥 오늘 입고' : '📦 현재재고';
+        confirm.className = 'eg-quick-confirm ' + (type === 'editin' ? 'in-type' : 'set-type');
+        confirm.textContent = '수정';
+        input.min = '0';
+        input.value = String(type === 'editin' ? getTodayInOut(si).inQty : si.qty);
+    } else {
+        label.textContent = type === 'in' ? '📥 입고 수량' : '📤 출고 수량';
+        confirm.className = 'eg-quick-confirm ' + type + '-type';
+        confirm.textContent = type === 'in' ? '입고' : '출고';
+        input.min = '1';
+        input.value = '';
+    }
     bar.classList.add('visible');
-    setTimeout(() => input.focus(), 80);
+    egQuickPreview(id);
+    setTimeout(() => { input.focus(); if (isEdit) { try { input.select(); } catch(e) {} } }, 80);
     if (navigator.vibrate) navigator.vibrate(6);
+}
+
+// ★ v168: 입력 중 결과 미리보기 (수정 모드에서만)
+function egQuickPreview(id) {
+    const type = _egQuickState[id];
+    const safeId = id.replace(/[^a-zA-Z0-9_-]/g,'_');
+    const hint  = document.getElementById('eg-qhint-' + safeId);
+    const input = document.getElementById('eg-qinput-' + safeId);
+    if (!hint || !input) return;
+    const si = stockItems.find(s => s.id === id);
+    if (!si || (type !== 'editin' && type !== 'editqty')) { hint.textContent = ''; hint.style.display = 'none'; return; }
+    const val = Number(input.value);
+    let msg = '';
+    if (input.value === '' || isNaN(val) || val < 0) {
+        msg = '수량을 입력하세요';
+    } else if (type === 'editin') {
+        const cur = getTodayInOut(si).inQty;
+        const after = si.qty + (val - cur);
+        const minIn = Math.max(0, cur - si.qty);
+        msg = after < 0
+            ? `⚠️ 이미 출고된 수량이 있어 입고를 ${fmt(minIn)}${si.unit} 미만으로 줄일 수 없어요`
+            : `입고 ${fmt(cur)}→${fmt(val)} · 현재재고 ${fmt(si.qty)}→${fmt(after)}${si.unit} (이전재고·출고는 그대로)`;
+    } else {
+        msg = `현재재고 ${fmt(si.qty)}→${fmt(val)}${si.unit} (입고·출고 기록은 그대로, 재고 직접 수정으로 기록)`;
+    }
+    hint.textContent = msg;
+    hint.style.display = 'block';
+}
+
+// ★ v168: 카드에서 바로 수정 확정
+function _egQuickEditApply(id, type, si, input) {
+    const val = Number(input.value);
+    if (input.value === '' || isNaN(val) || val < 0) { toast('❗ 0 이상의 수량을 입력하세요'); input.focus(); return; }
+    const before = si.qty;
+    const today  = todayKST();
+    let after, log;
+    if (type === 'editin') {
+        const cur   = getTodayInOut(si).inQty;
+        const delta = +(val - cur).toFixed(6);
+        if (delta === 0) { toast('❗ 변경된 수량이 없습니다'); return; }
+        after = +(before + delta).toFixed(6);
+        if (after < 0) {
+            toast(`❗ 이미 출고된 수량이 있어 입고를 ${fmt(Math.max(0, cur - before))}${si.unit} 미만으로 줄일 수 없습니다`, 'var(--red)');
+            return;
+        }
+        log = { type:'in_adj', qty: delta, before, after,
+                reason: `오늘 입고 수량 수정 (${fmt(cur)}→${fmt(val)})`, date: today, at: new Date().toISOString() };
+    } else {
+        const delta = +(val - before).toFixed(6);
+        if (delta === 0) { toast('❗ 변경된 수량이 없습니다'); return; }
+        after = val;
+        log = { type:'set', qty: delta, before, after,
+                reason: '현재재고 직접 수정(카드)', date: today, at: new Date().toISOString() };
+    }
+    si.qty = after;
+    si.updatedAt = new Date().toISOString();
+    (si.log = si.log || []).unshift(log);
+    si.log = _trimLogByDate(si.log);
+    saveData();
+    if (typeof _markDirty === 'function') _markDirty('stock');
+    egQuickClose(si.id);
+    renderStock();
+    if (navigator.vibrate) navigator.vibrate([10,20,10]);
+    toast(type === 'editin'
+        ? `📥 오늘 입고 수정 → 현재재고 ${fmt(before)} → ${fmt(after)} ${si.unit}`
+        : `📦 현재재고 수정: ${fmt(before)} → ${fmt(after)} ${si.unit}`, 'var(--green)');
 }
 
 function egQuickClose(id) {
@@ -348,6 +432,11 @@ async function egQuickConfirm(id) {
     const safeId = id.replace(/[^a-zA-Z0-9_-]/g,'_');
     const input = document.getElementById('eg-qinput-' + safeId);
     if (!input) return;
+    if (type === 'editin' || type === 'editqty') {
+        const _si = stockItems.find(s => s.id === id);
+        if (_si) _egQuickEditApply(id, type, _si, input);
+        return;
+    }
     const val = parseInt(input.value);
     if (!val || val <= 0) { toast('❗ 수량을 입력하세요'); input.focus(); return; }
     const si = stockItems.find(s => s.id === id);
@@ -602,52 +691,6 @@ function getYesterdayClosingQty(si) {
     return { qty: si.qty, date: today, isCurrent: true };
 }
 
-// ─── 이전재고 이월 토글 ───
-// carryMode: true=이월적용, false=현재값유지
-let _carryMode = false; // 모달 열릴 때마다 초기화
-
-function setPrevCarryMode(apply) {
-    _carryMode = apply;
-    const bar      = document.getElementById('sePrevQtyBar');
-    const btnApply = document.getElementById('btnApplyCarry');
-    const btnSkip  = document.getElementById('btnSkipCarry');
-    const prevQty  = bar?.dataset.prevQty;
-
-    if (apply) {
-        // 이력 없으면 이월 불가
-        if (bar?.dataset.hasHistory !== '1') {
-            toast('❗ 이전 납품 이력이 없어 이월할 수 없습니다');
-            return;
-        }
-        // 이월 적용: 이전 재고값을 seQty에 채움
-        if (prevQty !== undefined && prevQty !== '') {
-            document.getElementById('seQty').value = prevQty;
-        }
-        // 버튼 스타일 — 이월 적용 활성
-        btnApply.style.background   = 'var(--accent)';
-        btnApply.style.color        = '#fff';
-        btnApply.style.borderColor  = 'var(--accent)';
-        btnSkip.style.background    = 'var(--surf2)';
-        btnSkip.style.color         = 'var(--text2)';
-        btnSkip.style.borderColor   = 'var(--border)';
-        toast('↩ 이전 재고를 적용합니다');
-    } else {
-        // 현재값 유지: seQty를 원래 현재 재고값으로 복원
-        const origQty = bar?.dataset.origQty;
-        if (origQty !== undefined && origQty !== '') {
-            document.getElementById('seQty').value = origQty;
-        }
-        // 버튼 스타일 — 현재값 유지 활성
-        btnSkip.style.background    = 'var(--accent)';
-        btnSkip.style.color         = '#fff';
-        btnSkip.style.borderColor   = 'var(--accent)';
-        btnApply.style.background   = 'var(--surf2)';
-        btnApply.style.color        = 'var(--text2)';
-        btnApply.style.borderColor  = 'var(--border)';
-        toast('✓ 현재 재고값을 유지합니다');
-    }
-}
-
 // ─── 세션 내 자동 이월 실행 여부 (탭 전환마다 중복 실행 방지) ───
 let _carryoverDoneThisSession = false;
 
@@ -763,74 +806,12 @@ function openStockEdit(id) {
     document.getElementById('seDanger').value= si ? si.danger: 3;
     document.getElementById('seNote').value  = si ? si.note  : '';
 
-    // ★ v167: 오늘 입고가 있으면 수량을 바꿨을 때의 처리 방식을 안내
-    const _hint = document.getElementById('seInHint');
-    if (_hint) {
-        let hintText = '';
-        if (si) {
-            const _s0 = new Date(todayKST() + 'T00:00:00+09:00').getTime();
-            const _inLogs = (si.log || []).filter(l => {
-                if (l.type !== 'in' && l.type !== 'in_adj') return false;
-                const t = l.at ? new Date(l.at).getTime() : 0;
-                return t >= _s0 && t < _s0 + 86400000;
-            });
-            const _net = _netInQty(_inLogs);
-            if (_net > 0) hintText = `📥 오늘 입고 ${fmt(_net)}${si.unit} — 재고 수량을 바꾸면 오늘 입고 수량이 함께 조정되고, 이전재고는 그대로 유지됩니다.`;
-        }
-        _hint.textContent = hintText;
-        _hint.style.display = hintText ? 'block' : 'none';
-    }
-
-    // ── 이전재고 이월 표시 ──
-    const bar = document.getElementById('sePrevQtyBar');
-    _carryMode = false; // 모달 열 때마다 "현재값 유지" 기본값
-    if (si) {
-        try {
-            const prev = getYesterdayClosingQty(si);
-            const hasHistory = !prev.isCurrent; // 오늘 이전 이력 존재 여부
-
-            // 이력 유무와 관계없이 섹션은 항상 표시
-            bar.style.display    = 'block';
-            bar.dataset.prevQty  = String(prev.qty);
-            bar.dataset.origQty  = String(si.qty);
-            bar.dataset.hasHistory = hasHistory ? '1' : '0';
-
-            if (hasHistory) {
-                document.getElementById('sePrevQtyVal').textContent =
-                    `이전: ${fmt(prev.qty)} ${si.unit}　→　현재: ${fmt(si.qty)} ${si.unit}`;
-                document.getElementById('sePrevQtyDate').textContent =
-                    `기준일: ${prev.date} (어제 마감)`;
-            } else {
-                document.getElementById('sePrevQtyVal').textContent =
-                    `현재: ${fmt(si.qty)} ${si.unit}`;
-                document.getElementById('sePrevQtyDate').textContent =
-                    '이전 납품 이력 없음';
-            }
-
-            // 기본 상태: "현재값 유지" 활성 / 이력 없으면 이월 버튼 비활성
-            const btnApply = document.getElementById('btnApplyCarry');
-            const btnSkip  = document.getElementById('btnSkipCarry');
-            btnSkip.style.background   = 'var(--accent)';
-            btnSkip.style.color        = '#fff';
-            btnSkip.style.borderColor  = 'var(--accent)';
-            btnApply.style.background  = 'var(--surf2)';
-            btnApply.style.color       = hasHistory ? 'var(--text2)' : 'var(--text3)';
-            btnApply.style.borderColor = 'var(--border)';
-            btnApply.disabled          = !hasHistory;
-            btnApply.title             = hasHistory ? '' : '이전 납품 이력이 없어 이월할 수 없습니다';
-            btnSkip.disabled           = false;
-        } catch(e) {
-            // 계산 오류 시 섹션 숨김으로 안전 처리
-            console.warn('이전재고 계산 오류:', e);
-            bar.style.display   = 'none';
-            bar.dataset.prevQty = '';
-            bar.dataset.origQty = String(si.qty);
-        }
-    } else {
-        bar.style.display    = 'none';
-        bar.dataset.prevQty  = '';
-        bar.dataset.origQty  = '';
-    }
+    // ★ v168: 기존 품목은 이 창에서 수량을 고치지 않는다(카드의 입고·현재재고 숫자를 눌러 바로 수정).
+    //   수량 칸은 신규 등록(초기 재고)에만 보여준다. 이월 적용 기능은 사용하지 않아 제거.
+    const qtyGroup = document.getElementById('seQtyGroup');
+    const qtyNote  = document.getElementById('seQtyNote');
+    if (qtyGroup) qtyGroup.style.display = si ? 'none' : '';
+    if (qtyNote)  qtyNote.style.display  = si ? 'block' : 'none';
 
     openModal('stockEditModal');
     setTimeout(() => document.getElementById('seName').focus(), 80);
@@ -840,7 +821,9 @@ function saveStockItem() {
     const id     = document.getElementById('seId').value;
     const name   = document.getElementById('seName').value.trim();
     const qtyRaw = document.getElementById('seQty').value;
-    const qty    = qtyRaw === '' ? 0 : Number(qtyRaw);
+    // ★ v168: 기존 품목은 수량 칸을 쓰지 않는다(수량은 카드에서 직접 수정) — 이 창에서는 수량이 바뀌지 않음
+    const _existing = id ? stockItems.find(s => s.id === id) : null;
+    const qty    = _existing ? _existing.qty : (qtyRaw === '' ? 0 : Number(qtyRaw));
     const unit   = document.getElementById('seUnit').value.trim() || '개';
     const low    = Number(document.getElementById('seLow').value)    || 10;
     const danger = Number(document.getElementById('seDanger').value) || 3;
@@ -857,58 +840,8 @@ function saveStockItem() {
     if (id) {
         const si = stockItems.find(s => s.id === id);
         if (!si) return toast('❗ 품목을 찾을 수 없습니다');
-        const before = si.qty;
-        Object.assign(si, { name, qty, unit, low, danger, note, updatedAt: new Date().toISOString() });
-        let _inAdjMsg = '';
-        if (before !== qty) {
-            const diff = qty - before;
-            const today = todayKST();
-            const nowMs = Date.now();
-            si.log = si.log || [];
-            if (_carryMode) {
-                // 이월 적용 선택 시 carryover 로그
-                si.log.unshift({
-                    type: 'carryover', qty: diff, before, after: qty,
-                    reason: '이전 재고 이월 적용', date: today, at: new Date(nowMs).toISOString()
-                });
-            } else {
-                // ★ v167: 오늘 입고가 있으면 재고 수량 변경분을 '오늘 입고 수량 수정'으로 처리한다.
-                //   → 입고 칸만 바뀌고 이전재고는 그대로, 현재재고 = 이전재고 + 오늘 입고 - 오늘 출고 로 맞는다.
-                //   (예전엔 줄이는 경우만 기록하고 입고 칸에는 반영하지 않아 이전재고가 억지로 음수가 되었고,
-                //    늘리는 경우는 아예 처리되지 않았음)
-                const todayStartUTC = new Date(today + 'T00:00:00+09:00').getTime();
-                const todayEndUTC   = todayStartUTC + 86400000;
-                const todayInLogs = si.log.filter(l => {
-                    if (l.type !== 'in' && l.type !== 'in_adj') return false;
-                    const t = l.at ? new Date(l.at).getTime() : 0;
-                    return t >= todayStartUTC && t < todayEndUTC;
-                });
-                const todayNetIn = _netInQty(todayInLogs);
-                // 오늘 입고가 있을 때: 늘리면 전부 입고로, 줄이면 오늘 입고 수량까지만 입고에서 차감
-                let adjIn = 0;
-                if (todayNetIn > 0) adjIn = diff > 0 ? diff : -Math.min(-diff, todayNetIn);
-                let cursor = before, k = 0;
-                if (adjIn !== 0) {
-                    si.log.unshift({
-                        type: 'in_adj', qty: adjIn, before: cursor, after: cursor + adjIn,
-                        reason: `오늘 입고 수량 수정 (${fmt(todayNetIn)}→${fmt(todayNetIn + adjIn)})`,
-                        date: today, at: new Date(nowMs + k++).toISOString()
-                    });
-                    cursor += adjIn;
-                    _inAdjMsg = `오늘 입고 ${fmt(todayNetIn)}→${fmt(todayNetIn + adjIn)}${unit}`;
-                }
-                // 입고 수정으로 처리하고 남은 변화량(오늘 입고보다 더 줄인 경우 등)은 수동 설정으로 기록
-                const rest = diff - adjIn;
-                if (rest !== 0) {
-                    si.log.unshift({
-                        type: 'set', qty: rest, before: cursor, after: qty,
-                        reason: '수동 재고 설정', date: today, at: new Date(nowMs + k++).toISOString()
-                    });
-                }
-            }
-            si.log = _trimLogByDate(si.log);
-        }
-        toast(_inAdjMsg ? `✅ 품목 수정 완료 · ${_inAdjMsg} (이전재고는 그대로)` : '✅ 품목이 수정되었습니다', 'var(--green)');
+        Object.assign(si, { name, unit, low, danger, note, updatedAt: new Date().toISOString() });
+        toast('✅ 품목이 수정되었습니다', 'var(--green)');
     } else {
         // ── 신규 등록 시: 오늘 납품 전표에 동일 품목 출고가 있으면 자동 반영 ──
         const today = todayKST();
