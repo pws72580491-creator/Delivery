@@ -374,6 +374,47 @@ function onSettleSearch(q) {
 // ─── 거래명세표 공유 (카카오톡 / 시스템 공유 시트) ───
 
 let _statShareText = ''; // 현재 열린 명세표 공유 텍스트 (버튼에서 참조)
+let _statPngCache  = null; // ★ v169: 방금 만든 명세표 이미지 { key, file } — 공유 재시도 때 다시 만들지 않기 위함
+
+// ─── ★ v169: 명세표 이미지를 공유창(문자·카카오톡 등)으로 바로 보내기 ───
+// 문자 앱은 sms: 링크로는 이미지를 첨부할 수 없어서, 이미지 파일을 시스템 공유창에 넘긴다.
+// 공유창에서 '메시지'(문자) 앱을 고르면 이미지가 첨부된 상태로 열리고, 받는 사람만 고르면 된다.
+function _statPngKey(clientName, month) {
+    return clientName + '|' + month + '|' + (localStorage.getItem('showSupplierSeal') !== '0' ? 1 : 0);
+}
+
+async function shareStatementImage(clientName, month) {
+    // 이미 만들어 둔 이미지가 있으면 바로 공유 (사용자가 방금 버튼을 눌렀으므로 공유 권한이 가장 확실함)
+    if (_statPngCache && _statPngCache.key === _statPngKey(clientName, month)) {
+        return _shareStatementFile(_statPngCache.file);
+    }
+    saveStatementPNG(clientName, month, 'share');
+}
+
+async function _shareStatementFile(file) {
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        try {
+            // 일부 문자 앱은 text/url이 함께 있으면 첨부를 무시하므로 파일과 제목만 전달
+            await navigator.share({ files: [file], title: file.name.replace(/\.png$/i, '') });
+            return;
+        } catch (e) {
+            if (e && e.name === 'AbortError') return; // 사용자가 공유창을 닫음
+            if (e && e.name === 'NotAllowedError') {
+                // 이미지 생성이 오래 걸려 '버튼을 누른 직후'라는 조건이 지난 경우 → 만들어 둔 이미지로 한 번 더 누르게 함
+                toast('📨 이미지가 준비됐어요. "명세표 이미지 보내기"를 한 번 더 눌러 주세요.', 'var(--accent)', 4500);
+                return;
+            }
+            console.warn('[shareStatementImage]', e);
+        }
+    }
+    // 이미지 공유를 지원하지 않는 환경(일부 앱 내장 브라우저 등) → 저장하고 안내
+    const url = URL.createObjectURL(file);
+    const a = document.createElement('a');
+    a.href = url; a.download = file.name;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+    toast('📥 이 환경에서는 이미지를 바로 보낼 수 없어 저장했습니다. 문자 앱에서 [첨부 → 갤러리]로 선택하세요.', 'var(--orange)', 5000);
+}
 
 async function shareStatement() {
     const text = _statShareText;
@@ -521,6 +562,7 @@ async function showClientStatement(clientName, month) {
     const smsText = `[${clientName}님 ${_monthLabel} 거래명세표]\n기간: ${month}\n전월이월: ${fmt(carryAmt)}원\n당월매출: ${fmt(monthTotal)}원\n수금액: ${fmt(monthPaid)}원\n청구금액: ${fmt(grandUnpaid)}원\n\n입금계좌: 농협 916-02-055664 (이애경)`;
     // 공유 텍스트 빌더로 분리
     _statShareText = _buildStatShareText(clientName, month, { filt, carryAmt, monthTotal, monthPaid, grandUnpaid });
+    _statPngCache = null; // ★ v169: 명세표가 다시 그려지면(입금 처리 등) 이전에 만든 이미지는 폐기
     // ★ v120: 이월 행 누계 — carryOrders 기준 누적합을 carry_N 키로 _accumMap에 등록
     // (아직 window._accumMap 초기화 전이므로 여기서 임시 변수로 계산, 이후 merge)
     let _carryRunAcc = 0;
@@ -688,12 +730,13 @@ async function showClientStatement(clientName, month) {
         </div>
         <label style="display:flex;align-items:center;gap:6px;margin-top:12px;font-size:12px;font-weight:700;color:var(--text2);cursor:pointer;">
             <input type="checkbox" id="statementSealCb" ${localStorage.getItem('showSupplierSeal') !== '0' ? 'checked' : ''} onchange="localStorage.setItem('showSupplierSeal', this.checked ? '1' : '0')" style="width:16px;height:16px;cursor:pointer;">
-            🔖 PNG 저장 시 대표 도장 포함
+            🔖 이미지(PNG 저장·이미지 보내기)에 대표 도장 포함
         </label>
         <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;">
             ${phone?`<a href="sms:${phone}?body=${encodeURIComponent(smsText)}" class="btn btn-success" style="flex:1;min-width:80px;text-decoration:none;text-align:center;">💬 문자</a>`:''}
             <button class="btn btn-primary" style="flex:1;min-width:80px;" onclick="saveStatementPNG('${escapeAttr(clientName)}','${escapeAttr(month)}')">🖼️ PNG 저장</button>
         </div>
+        <button class="btn btn-primary" style="width:100%;margin-top:8px;padding:13px;font-size:14px;font-weight:800;" onclick="shareStatementImage('${escapeAttr(clientName)}','${escapeAttr(month)}')">📨 명세표 이미지 보내기 (문자·카톡)</button>
         <button onclick="shareStatement()" style="width:100%;margin-top:8px;padding:13px;border-radius:var(--radius-s);border:none;background:#FEE500;color:#191919;font-size:14px;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;letter-spacing:-.3px;">
             <svg width="20" height="20" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg"><ellipse cx="20" cy="18" rx="18" ry="14" fill="#191919"/><path fill="#FEE500" d="M11 18a2.5 2.5 0 1 0 5 0 2.5 2.5 0 0 0-5 0zm8.5 0a1 1 0 1 0 2 0 1 1 0 0 0-2 0zm3.5 0a2.5 2.5 0 1 0 5 0 2.5 2.5 0 0 0-5 0z"/><path fill="#191919" d="M15 25l-2 6 5-3"/></svg>
             카카오톡으로 보내기
@@ -742,7 +785,7 @@ async function toggleAllInvoiceIssued(clientName, month) {
 
 // ─── 거래처 명세표 JPG 저장 ───
 
-function saveStatementPNG(clientName, month) {
+function saveStatementPNG(clientName, month, mode) { // mode: 'share' = 저장 대신 공유창으로 보내기 (v169)
     // 공급자 정보 (거래명세표 이미지 상단에 표기)
     const SUPPLIER_NAME  = '이른아침';
     const SUPPLIER_REGNO = '615-91-44749';
@@ -1073,6 +1116,16 @@ function saveStatementPNG(clientName, month) {
             scrollY: 0
         }).then(canvas => {
             document.body.removeChild(iframe);
+            if (mode === 'share') {
+                // ★ v169: 파일로 만들어 공유창(문자·카카오톡 등)으로 전달
+                canvas.toBlob(blob => {
+                    if (!blob) { toast('❗ 이미지 생성에 실패했습니다. 다시 시도해주세요.'); return; }
+                    const file = new File([blob], `${clientName}_${month}_거래명세표.png`, { type: 'image/png' });
+                    _statPngCache = { key: _statPngKey(clientName, month), file };
+                    _shareStatementFile(file);
+                }, 'image/png');
+                return;
+            }
             const link = document.createElement('a');
             link.download = `${clientName}_${month}_거래명세표.png`;
             link.href = canvas.toDataURL('image/png');
