@@ -383,7 +383,21 @@ function _statPngKey(clientName, month) {
     return clientName + '|' + month + '|' + (localStorage.getItem('showSupplierSeal') !== '0' ? 1 : 0);
 }
 
+// ★ v170: 웹앱은 문자 앱에 '받는 사람 + 이미지'를 한꺼번에 넘길 수 없다(sms: 링크는 이미지 첨부 불가, 공유창은 받는 사람 지정 불가).
+//   그래서 거래처 번호를 클립보드에 복사해 두고, 문자 앱의 '받는 사람' 칸에 붙여넣게 한다.
+function _statPhoneDigits(clientName) {
+    const c = clients.find(x => x.name === clientName);
+    const raw = (c && c.phone) ? String(c.phone) : '';
+    return raw.replace(/(?!^\+)[^\d]/g, ''); // 숫자만(맨 앞 + 는 유지)
+}
+function _copyStatPhone(clientName) {
+    const num = _statPhoneDigits(clientName);
+    if (!num || !navigator.clipboard || !navigator.clipboard.writeText) return;
+    try { navigator.clipboard.writeText(num).catch(() => {}); } catch (e) {}
+}
+
 async function shareStatementImage(clientName, month) {
+    _copyStatPhone(clientName); // ★ v170: 버튼을 누르는 즉시(사용자 동작 중) 번호 복사
     // 이미 만들어 둔 이미지가 있으면 바로 공유 (사용자가 방금 버튼을 눌렀으므로 공유 권한이 가장 확실함)
     if (_statPngCache && _statPngCache.key === _statPngKey(clientName, month)) {
         return _shareStatementFile(_statPngCache.file);
@@ -737,6 +751,7 @@ async function showClientStatement(clientName, month) {
             <button class="btn btn-primary" style="flex:1;min-width:80px;" onclick="saveStatementPNG('${escapeAttr(clientName)}','${escapeAttr(month)}')">🖼️ PNG 저장</button>
         </div>
         <button class="btn btn-primary" style="width:100%;margin-top:8px;padding:13px;font-size:14px;font-weight:800;" onclick="shareStatementImage('${escapeAttr(clientName)}','${escapeAttr(month)}')">📨 명세표 이미지 보내기 (문자·카톡)</button>
+        ${phone ? `<div style="font-size:11px;line-height:1.5;color:var(--text2);margin-top:5px;text-align:center;">📋 누르면 받는 분 번호(${escapeHtml(phone)})가 복사됩니다 · 문자 앱 '받는 사람' 칸에 붙여넣으세요</div>` : ''}
         <button onclick="shareStatement()" style="width:100%;margin-top:8px;padding:13px;border-radius:var(--radius-s);border:none;background:#FEE500;color:#191919;font-size:14px;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;letter-spacing:-.3px;">
             <svg width="20" height="20" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg"><ellipse cx="20" cy="18" rx="18" ry="14" fill="#191919"/><path fill="#FEE500" d="M11 18a2.5 2.5 0 1 0 5 0 2.5 2.5 0 0 0-5 0zm8.5 0a1 1 0 1 0 2 0 1 1 0 0 0-2 0zm3.5 0a2.5 2.5 0 1 0 5 0 2.5 2.5 0 0 0-5 0z"/><path fill="#191919" d="M15 25l-2 6 5-3"/></svg>
             카카오톡으로 보내기
