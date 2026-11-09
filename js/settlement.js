@@ -380,7 +380,47 @@ let _statPngCache  = null; // ★ v169: 방금 만든 명세표 이미지 { key,
 // 문자 앱은 sms: 링크로는 이미지를 첨부할 수 없어서, 이미지 파일을 시스템 공유창에 넘긴다.
 // 공유창에서 '메시지'(문자) 앱을 고르면 이미지가 첨부된 상태로 열리고, 받는 사람만 고르면 된다.
 function _statPngKey(clientName, month) {
-    return clientName + '|' + month + '|' + (localStorage.getItem('showSupplierSeal') !== '0' ? 1 : 0);
+    return clientName + '|' + month + '|' + (localStorage.getItem('showSupplierSeal') !== '0' ? 1 : 0) + '|' + (_statExcludeCarry() ? 1 : 0);
+}
+
+// ─── ★ v172: 전월 이월 제외 옵션 ──────────────────────────────────────────
+// 저장·전송(PNG 저장 / 이미지 보내기 / 문자 / 카카오톡 텍스트)에 '당월 내역만' 담고 싶을 때 쓴다.
+// 화면의 명세표와 입금 처리(부분·전체 완납)는 전월 미수까지 그대로 보이고 처리된다.
+let _statCtx = null;        // 현재 열린 명세표의 집계값
+let _statSmsText = '';      // 현재 옵션이 반영된 문자 본문
+function _statExcludeCarry() { return localStorage.getItem('statExcludeCarry') === '1'; }
+
+function _buildStatSmsText(clientName, month, { carryAmt, monthTotal, monthPaid, grandUnpaid, showCarry }) {
+    const label = (() => { const p = month.split('-'); return p.length >= 2 ? `${parseInt(p[1])}월` : month; })();
+    return [
+        `[${clientName}님 ${label} 거래명세표]`,
+        `기간: ${month}`,
+        showCarry ? `전월이월: ${fmt(carryAmt)}원` : '',
+        `당월매출: ${fmt(monthTotal)}원`,
+        `수금액: ${fmt(monthPaid)}원`,
+        `청구금액: ${fmt(grandUnpaid)}원`,
+        '',
+        '입금계좌: 농협 916-02-055664 (이애경)',
+    ].filter((l, i) => l !== '' || i === 6).join('\n');
+}
+
+// 옵션(전월 이월 제외)을 반영해 공유 텍스트·문자 본문을 다시 만든다
+function _applyStatOutputs() {
+    const c = _statCtx; if (!c) return;
+    const excl  = _statExcludeCarry() && c.carryAmt > 0;
+    const carry = excl ? 0 : c.carryAmt;
+    const grand = excl ? c.monthUnpaid : c.grandUnpaid;
+    _statShareText = _buildStatShareText(c.clientName, c.month, { filt: c.filt, carryAmt: carry, monthTotal: c.monthTotal, monthPaid: c.monthPaid, grandUnpaid: grand });
+    _statSmsText   = _buildStatSmsText(c.clientName, c.month, { carryAmt: carry, monthTotal: c.monthTotal, monthPaid: c.monthPaid, grandUnpaid: grand, showCarry: !excl });
+    const a = document.getElementById('statSmsLink');
+    if (a) a.href = `sms:${c.phone}?body=${encodeURIComponent(_statSmsText)}`;
+    _statPngCache = null; // 옵션이 바뀌면 이전에 만든 이미지는 폐기
+}
+
+function toggleStatExcludeCarry(checked) {
+    localStorage.setItem('statExcludeCarry', checked ? '1' : '0');
+    _applyStatOutputs();
+    toast(checked ? '📅 전월 이월 제외 — 저장·전송에 당월 내역만 담깁니다' : '📅 전월 이월 포함 — 저장·전송에 전월 미수도 함께 담깁니다', 'var(--accent)', 2500);
 }
 
 async function shareStatementImage(clientName, month) {
@@ -559,10 +599,10 @@ async function showClientStatement(clientName, month) {
     const client = clients.find(c=>c.name===clientName);
     const phone  = client?.phone||'';
     const _monthLabel = (() => { const p = month.split('-'); return p.length >= 2 ? `${parseInt(p[1])}월` : month; })();
-    const smsText = `[${clientName}님 ${_monthLabel} 거래명세표]\n기간: ${month}\n전월이월: ${fmt(carryAmt)}원\n당월매출: ${fmt(monthTotal)}원\n수금액: ${fmt(monthPaid)}원\n청구금액: ${fmt(grandUnpaid)}원\n\n입금계좌: 농협 916-02-055664 (이애경)`;
-    // 공유 텍스트 빌더로 분리
-    _statShareText = _buildStatShareText(clientName, month, { filt, carryAmt, monthTotal, monthPaid, grandUnpaid });
-    _statPngCache = null; // ★ v169: 명세표가 다시 그려지면(입금 처리 등) 이전에 만든 이미지는 폐기
+    // ★ v172: 공유 텍스트·문자 본문은 '전월 이월 제외' 옵션을 반영해서 만든다 (화면 표시는 그대로)
+    _statCtx = { clientName, month, phone, filt, carryAmt, monthTotal, monthPaid, monthUnpaid, grandUnpaid };
+    _applyStatOutputs();  // _statShareText / _statSmsText 갱신, 이전에 만든 이미지(_statPngCache) 폐기
+    const smsText = _statSmsText;
     // ★ v120: 이월 행 누계 — carryOrders 기준 누적합을 carry_N 키로 _accumMap에 등록
     // (아직 window._accumMap 초기화 전이므로 여기서 임시 변수로 계산, 이후 merge)
     let _carryRunAcc = 0;
@@ -728,12 +768,16 @@ async function showClientStatement(clientName, month) {
             </tbody>
         </table>
         </div>
-        <label style="display:flex;align-items:center;gap:6px;margin-top:12px;font-size:12px;font-weight:700;color:var(--text2);cursor:pointer;">
+        ${carryAmt > 0 ? `<label style="display:flex;align-items:flex-start;gap:7px;margin-top:12px;font-size:13px;font-weight:800;color:var(--text);cursor:pointer;line-height:1.45;background:var(--surf2);border:1px solid var(--border);border-radius:10px;padding:10px 12px;">
+            <input type="checkbox" id="statExclCarryCb" ${_statExcludeCarry() ? 'checked' : ''} onchange="toggleStatExcludeCarry(this.checked)" style="width:18px;height:18px;cursor:pointer;margin-top:1px;flex-shrink:0;">
+            <span>📅 전월 이월 ${fmt(carryAmt)}원 제외하고 저장·전송<br><span style="font-weight:600;font-size:11px;color:var(--text2);">당월 내역만 담깁니다 · 청구금액 ${fmt(grandUnpaid)}원 → ${fmt(monthUnpaid)}원 (PNG 저장·이미지 보내기·문자·카카오톡 모두 적용)</span></span>
+        </label>` : ''}
+        <label style="display:flex;align-items:center;gap:6px;margin-top:10px;font-size:12px;font-weight:700;color:var(--text2);cursor:pointer;">
             <input type="checkbox" id="statementSealCb" ${localStorage.getItem('showSupplierSeal') !== '0' ? 'checked' : ''} onchange="localStorage.setItem('showSupplierSeal', this.checked ? '1' : '0')" style="width:16px;height:16px;cursor:pointer;">
             🔖 이미지(PNG 저장·이미지 보내기)에 대표 도장 포함
         </label>
         <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;">
-            ${phone?`<a href="sms:${phone}?body=${encodeURIComponent(smsText)}" class="btn btn-success" style="flex:1;min-width:80px;text-decoration:none;text-align:center;">💬 문자</a>`:''}
+            ${phone?`<a id="statSmsLink" href="sms:${phone}?body=${encodeURIComponent(smsText)}" class="btn btn-success" style="flex:1;min-width:80px;text-decoration:none;text-align:center;">💬 문자</a>`:''}
             <button class="btn btn-primary" style="flex:1;min-width:80px;" onclick="saveStatementPNG('${escapeAttr(clientName)}','${escapeAttr(month)}')">🖼️ PNG 저장</button>
         </div>
         <button class="btn btn-primary" style="width:100%;margin-top:8px;padding:13px;font-size:14px;font-weight:800;" onclick="shareStatementImage('${escapeAttr(clientName)}','${escapeAttr(month)}')">📨 명세표 이미지 보내기 (문자·카톡)</button>
@@ -800,7 +844,8 @@ function saveStatementPNG(clientName, month, mode) { // mode: 'share' = 저장 �
     const monthTotal  = filt.reduce((s, o) => s + _effectiveTotal(o), 0);
     const monthPaid   = filt.reduce((s,o)=>s+_actualPaid(o),0);
     const monthUnpaid = monthTotal - monthPaid;
-    const carryOrders = orders.filter(o => !o.delegatedBy && o.clientName === clientName && o.date < monthStart && !o.isPaid)
+    // ★ v172: '전월 이월 제외' 옵션이 켜져 있으면 전월 미수 전표를 이미지에 담지 않는다(이월 칸·행·청구금액에서 모두 빠짐)
+    const carryOrders = _statExcludeCarry() ? [] : orders.filter(o => !o.delegatedBy && o.clientName === clientName && o.date < monthStart && !o.isPaid)
                               .sort((a, b) => (a.date||"").localeCompare(b.date||""));
     const carryAmt    = carryOrders.reduce((s, o) => s + o.total - (o.paidAmount || 0), 0);
     const grandUnpaid = carryAmt + monthUnpaid;
