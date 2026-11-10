@@ -13,7 +13,7 @@
     <meta name="apple-mobile-web-app-title" content="납품관리">
     <link rel="apple-touch-icon" href="./icon-192.png">
     <link rel="manifest" href="./manifest.json">
-    <title>납품 관리 Pro v172</title>
+    <title>납품 관리 Pro v173</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js" defer></script>
@@ -62,7 +62,7 @@
             <div class="logo-icon">📦</div>
             <div>
                 <div class="logo-text">납품 관리 Pro</div>
-                <div class="logo-sub">v172 · PWA 앱 설치 지원</div>
+                <div class="logo-sub">v173 · PWA 앱 설치 지원</div>
             </div>
         </div>
         <div class="header-btns">
@@ -644,7 +644,7 @@
     <div class="card">
         <div class="card-title">앱 정보</div>
         <div style="font-size:13px;color:var(--text2);line-height:2;margin-bottom:12px;">
-            버전: <strong style="color:var(--accent);">v172</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
+            버전: <strong style="color:var(--accent);">v173</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
             거래처: <span id="infoClients">0</span>개 &nbsp;·&nbsp;
             납품내역: <span id="infoOrders">0</span>건
         </div>
@@ -658,7 +658,11 @@
             <div id="changelogList" style="display:flex;flex-direction:column;gap:6px;">
                 <!-- 현재 버전 -->
                 <div class="changelog-item">
-                    <span class="changelog-ver" style="color:var(--green);">v172</span>
+                    <span class="changelog-ver" style="color:var(--green);">v173</span>
+                    <span class="changelog-desc">재고 코드 전체 점검 후 수정. ① 재고 이력 정리 기준을 '납품 날짜'에서 '기록된 시각(KST)'으로 변경 — 2일 넘은 날짜로 납품을 등록하면 그 이력이 바로 지워져 다음 동기화 때 방금 차감한 재고가 원래대로 되돌아가던 문제 해결. ② 앱을 다시 켤 때 이월 처리 기록(lastCarryDate)이 버려져 이월 재계산이 매번 다시 실행되던 문제 해결. ③ 오늘 ⚖️ 설정·카드의 '현재재고 직접 수정'으로 맞춘 재고를 이월 재계산이 입고·출고 합계로 되돌리던 문제 해결(오늘 수동 설정이 있으면 그 값을 기준으로 유지). ④ '출고 누락 재계산'이 수량을 고친 전표(20→25), 타인거래→내거래로 바꾼 전표, 품목 등록 때 이미 반영된 납품을 한 번 더 차감하던 문제 해결 — 품목×거래처 단위로 전표가 요구하는 변화량과 이력에 반영된 양을 비교해 부족분만 보충하고, 새 이력은 최신순으로 기록. ⑤ 달걀·기타 품목 일괄 등록 때 오늘 납품이 있으면 재고가 음수(-5 등)로 등록되던 문제 해결(0으로 등록). ⑥ 재고 이력 화면과 어제 마감 계산의 날짜를 UTC가 아닌 한국 시간 기준으로 — 새벽 0~9시 입고가 전날로 묶여 보이던 문제 해결. ⑦ 품목 단위 문자열 HTML 이스케이프, 소수 수량 입고·출고 계산 오차(0.1+0.2) 제거.</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v172</span>
                     <span class="changelog-desc">거래명세표 '전월 이월 제외' 옵션. 월별 명세표를 저장·전송할 때 전월 미수(이월)까지 함께 담기던 문제를 해결 — 전월 이월이 있는 거래처의 명세표 화면에 '📅 전월 이월 ○○원 제외하고 저장·전송' 체크박스 추가(청구금액이 얼마에서 얼마로 바뀌는지 함께 표시). 체크하면 🖼️ PNG 저장·📨 이미지 보내기·💬 문자·카카오톡 텍스트 모두 당월 내역만 담기며, 이월 행과 '전월이월' 칸이 빠지고 청구금액은 당월 미수로 계산됨(요약 칸은 3칸으로 정리). 체크 상태는 기억되고, 전월 이월이 없는 거래처에는 체크박스가 나타나지 않음. 화면의 명세표와 입금 처리(부분·전체 완납)는 전월 미수까지 그대로 보이고 처리되며, 옵션을 바꾸면 이전에 만든 이미지는 폐기하고 새로 만듦.</span>
                 </div>
                 <div class="changelog-item">
