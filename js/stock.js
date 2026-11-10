@@ -271,22 +271,22 @@ function _egCardHTML(si) {
     <div class="eg-col col-prev">
       <div class="eg-col-label">이전재고</div>
       <div class="eg-col-val">${prevQty !== undefined ? fmt(prevQty) : '—'}</div>
-      <div class="eg-col-unit">${si.unit}</div>
+      <div class="eg-col-unit">${escapeHtml(si.unit)}</div>
     </div>
     <div class="eg-col col-in" id="egcol-in-${safeId}">
       <div class="eg-col-label">📥 입고</div>
       <div class="eg-col-val${tapIn}">${inQty > 0 ? '+'+fmt(inQty) : '—'}</div>
-      <div class="eg-col-unit">${si.unit}</div>
+      <div class="eg-col-unit">${escapeHtml(si.unit)}</div>
     </div>
     <div class="eg-col col-out" id="egcol-out-${safeId}">
       <div class="eg-col-label">📤 출고</div>
       <div class="eg-col-val">${outQty > 0 ? '-'+fmt(outQty) : '—'}</div>
-      <div class="eg-col-unit">${si.unit}</div>
+      <div class="eg-col-unit">${escapeHtml(si.unit)}</div>
     </div>
     <div class="eg-col col-curr lv-${lv}">
       <div class="eg-col-label">${currLabel}</div>
       <div class="eg-col-val${tapQty}">${fmt(displayQty)}</div>
-      <div class="eg-col-unit">${si.unit}</div>
+      <div class="eg-col-unit">${escapeHtml(si.unit)}</div>
     </div>
   </div>
   <!-- 빠른 입고/출고 바 (과거 조회 모드에서는 비활성) -->
@@ -669,7 +669,7 @@ function getYesterdayClosingQty(si) {
             //  → 합계상 마감재고가 0인데도 더 이른 납품차감 시점의 값이 마감으로 잘못 채택되는 문제 발생)
             const dateOf = l => l.type === 'auto'
                 ? (l.date || '1970-01-01')
-                : ((l.at || '').slice(0, 10) || l.date || '1970-01-01');
+                : (kstDateOfIso(l.at) || l.date || '1970-01-01'); // ★ v173: UTC가 아닌 KST 날짜
             const da = dateOf(a), db = dateOf(b);
             if (da !== db) return da < db ? 1 : -1; // 날짜가 다르면 최신 날짜 먼저
             // 같은 날짜면 실제 저장시각(at) 기준 — auto 타입도 실제 at으로 비교
@@ -683,7 +683,7 @@ function getYesterdayClosingQty(si) {
         const entry = prevLog[0];
         const qty   = entry.after !== undefined && entry.after !== null
                         ? Number(entry.after) : si.qty;
-        const date  = (entry.at || entry.date || '').slice(0, 10) || today;
+        const date  = kstDateOfIso(entry.at) || (entry.date || '').slice(0, 10) || today; // ★ v173: KST 날짜
         return { qty: isNaN(qty) ? si.qty : qty, date };
     }
 
@@ -746,6 +746,9 @@ function refreshStockCarryover(silent = false) {
             const t = l.at ? new Date(l.at).getTime() : 0;
             return t >= todayStartUTC && t < tomorrowStartUTC;
         });
+        // ★ v173: 오늘 '수동 설정(set)'이 있으면 그 값이 기준이다 — 입고·출고 합계로 다시 계산하면
+        //   ⚖️ 설정·카드의 '현재재고 직접 수정'으로 맞춘 재고가 계산값으로 되돌아간다.
+        if (todayLogs.some(l => l.type === 'set')) { si.lastCarryDate = today; return; }
         const todayDeduct = Math.max(0, todayLogs
             .filter(l => l.type === 'auto' || l.type === 'out' || (l.type === 'edit_adj' && l.qty < 0))
             .reduce((s, l) => s + Math.abs(l.qty), 0)
@@ -929,7 +932,7 @@ function previewAdj() {
     const diff = after - si.qty;
     const sign = diff >= 0 ? '+' : '';
     prev.innerHTML = val
-        ? `${fmt(si.qty)} → <strong style="color:${diff<0?'var(--red)':'var(--green)'};">${fmt(after)}</strong> ${si.unit} (${sign}${fmt(diff)})`
+        ? `${fmt(si.qty)} → <strong style="color:${diff<0?'var(--red)':'var(--green)'};">${fmt(after)}</strong> ${escapeHtml(si.unit)} (${sign}${fmt(diff)})`
         : '';
 }
 
@@ -945,9 +948,10 @@ async function applyAdj() {
 
     const before = si.qty;
     let after, logType;
-    if (_adjType === 'in')       { after = before + val;             logType = 'in'; }
-    else if (_adjType === 'out') { after = Math.max(0, before - val); logType = 'out'; }
-    else                         { after = val;                       logType = 'set'; }
+    // ★ v173: 소수 수량(kg 등)에서 0.1+0.2=0.30000000000000004 같은 오차가 쌓이지 않도록 반올림
+    if (_adjType === 'in')       { after = +(before + val).toFixed(6);             logType = 'in'; }
+    else if (_adjType === 'out') { after = Math.max(0, +(before - val).toFixed(6)); logType = 'out'; }
+    else                         { after = val;                                      logType = 'set'; }
 
     si.qty = after;
     si.updatedAt = new Date().toISOString();
@@ -985,9 +989,10 @@ function openStockLog(id) {
     const dayMap = {};
     log.forEach(l => {
         // auto(납품차감)는 납품 날짜 기준, 나머지는 등록 시각 기준
+        // ★ v173: 등록 시각은 UTC가 아니라 KST 날짜로 묶는다 (새벽 0~9시 기록이 전날로 보이던 문제)
         const d = l.type === 'auto'
-            ? (l.date || (l.at||'').slice(0,10) || '날짜미상')
-            : ((l.at || l.date || '').slice(0, 10) || '날짜미상');
+            ? (l.date || kstDateOfIso(l.at) || '날짜미상')
+            : (kstDateOfIso(l.at) || (l.date || '').slice(0, 10) || '날짜미상');
         if (!dayMap[d]) dayMap[d] = [];
         dayMap[d].push(l);
     });
@@ -1051,14 +1056,11 @@ function initEggItems() {
     EGG_ITEMS_DEFAULT.forEach(egg => {
         const exists = stockItems.some(s => normItemName(s.name) === normItemName(egg.name));
         if (!exists) {
-            const todayOut = stockAutoDeduct ? _calcTodayOut(egg.name) : 0;
+            // ★ v173: 새 품목의 시작 재고는 0이므로 오늘 납품을 '차감'하면 재고가 음수(예: -5)가 되었다.
+            //   (qty는 0으로 보정했지만 이력의 after가 -5라 normStock이 다시 -5로 덮어썼음) → 차감 이력 없이 0으로 등록
             const initLog = [];
-            if (stockAutoDeduct && todayOut > 0) {
-                initLog.push({ type:'auto', qty: -todayOut, before: 0, after: -todayOut,
-                    reason:'등록 시 오늘 납품 자동 반영', date: today, at: new Date().toISOString() });
-            }
             stockItems.push(normStock({
-                id: _uid(), name: egg.name, qty: Math.max(0, -todayOut),
+                id: _uid(), name: egg.name, qty: 0,
                 unit: egg.unit, low: egg.low, danger: egg.danger, note: egg.note,
                 log: initLog
             }));
@@ -1067,7 +1069,7 @@ function initEggItems() {
     });
     if (added > 0) {
         saveData(); _markDirty('stock'); renderStock();
-        toast(`🥚 달걀 ${added}종 등록 완료 (오늘 납품 자동 반영)`, 'var(--green)');
+        toast(`🥚 달걀 ${added}종 등록 완료 (재고 0 — 입고로 채워주세요)`, 'var(--green)');
     } else {
         toast('이미 모든 달걀 품목이 등록되어 있습니다');
     }
@@ -1100,14 +1102,11 @@ function initEtcItems() {
     ETC_ITEMS_DEFAULT.forEach(etc => {
         const exists = stockItems.some(s => normItemName(s.name) === normItemName(etc.name));
         if (!exists) {
-            const todayOut = stockAutoDeduct ? _calcTodayOut(etc.name) : 0;
+            // ★ v173: 새 품목의 시작 재고는 0이므로 오늘 납품을 '차감'하면 재고가 음수(예: -5)가 되었다.
+            //   (qty는 0으로 보정했지만 이력의 after가 -5라 normStock이 다시 -5로 덮어썼음) → 차감 이력 없이 0으로 등록
             const initLog = [];
-            if (stockAutoDeduct && todayOut > 0) {
-                initLog.push({ type:'auto', qty: -todayOut, before: 0, after: -todayOut,
-                    reason:'등록 시 오늘 납품 자동 반영', date: today, at: new Date().toISOString() });
-            }
             stockItems.push(normStock({
-                id: _uid(), name: etc.name, qty: Math.max(0, -todayOut),
+                id: _uid(), name: etc.name, qty: 0,
                 unit: etc.unit, low: etc.low, danger: etc.danger, note: etc.note || '',
                 log: initLog
             }));
@@ -1116,7 +1115,7 @@ function initEtcItems() {
     });
     if (added > 0) {
         saveData(); _markDirty('stock'); renderStock();
-        toast(`📦 기타 품목 ${added}종 등록 완료 (오늘 납품 자동 반영)`, 'var(--accent)');
+        toast(`📦 기타 품목 ${added}종 등록 완료 (재고 0 — 입고로 채워주세요)`, 'var(--accent)');
     } else {
         toast('이미 모든 기타 품목이 등록되어 있습니다');
     }

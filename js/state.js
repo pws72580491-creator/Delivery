@@ -95,6 +95,7 @@ let stockItems     = (_loadJSON('p_stock') || []).map(si => si ? {
     id: si.id || _uid(), name: (si.name || '').trim(), qty: Number(si.qty ?? 0),
     unit: si.unit || '개', low: Number(si.low ?? 10), danger: Number(si.danger ?? 3),
     note: si.note || '', log: Array.isArray(si.log) ? si.log : [],
+    lastCarryDate: si.lastCarryDate || undefined, // ★ v173: 예전엔 여기서 버려져 앱을 켤 때마다 이월 재계산이 다시 돌았음
     updatedAt: si.updatedAt || new Date().toISOString()
 } : null).filter(Boolean);
 let stockSortMode  = 'name';
@@ -127,13 +128,23 @@ function todayKST() {
     return new Date(d.getTime() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
 }
 
+// ISO(UTC) 시각 → 한국 시간(KST) 날짜 'YYYY-MM-DD' (잘못된 값이면 '')
+function kstDateOfIso(iso) {
+    const t = Date.parse(iso);
+    return isNaN(t) ? '' : new Date(t + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
 // 재고 이력을 어제·오늘(이틀)만 보관하고 그 이전 이력 삭제
 // — 재고 이월 계산은 어제 기준이므로 이틀이면 충분
+// ★ v173: 정리 기준을 '납품 날짜(date)'가 아니라 '기록된 시각(at, KST)'으로 한다.
+//   예전엔 2일 넘은 날짜로 납품을 등록하면 그 이력이 만들자마자 지워졌는데, 재고 수량 보정(normStock)은
+//   '가장 최근 이력의 after'를 기준으로 하므로 방금 차감한 수량이 다음 동기화 때 원래대로 되돌아갔다.
+//   이력은 기록 순서(at)대로 오래된 것부터 지워야 '가장 최근 이력'이 항상 남는다.
 function _trimLogByDate(log) {
     if (!Array.isArray(log)) return [];
     const yesterday = kstAddDays(todayKST(), -1);  // 어제 ~ 오늘만 유지
     return log.filter(l => {
-        const d = l.date || (l.at ? l.at.slice(0, 10) : null);
+        const d = (l.at ? kstDateOfIso(l.at) : '') || l.date || null;
         return d && d >= yesterday;
     });
 }

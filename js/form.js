@@ -15,43 +15,60 @@ function findStockByName(name) {
 
 // ── 재고 재계산 (수동 실행 전용 — 재고 탭 🔄 버튼에서 호출)
 // 오늘 납품 전표 기준으로 출고 누락된 품목을 보완. 자동 차감 ON 시에만 동작.
+// ★ v173: '품목 × 거래처' 단위로 '전표가 요구하는 재고 변화량'과 '이력에 이미 반영된 변화량'을 비교해 부족분만 보충한다.
+//   예전엔 이력의 수량이 전표 수량과 정확히 같을 때만 '이미 반영됨'으로 봐서, 수량을 고치거나(20→25)
+//   타인거래→내거래로 바꾼 전표(수정보정 이력)와 품목 등록 때 반영된 납품은 재계산 때마다 한 번 더 차감되었다.
 function recalcStockFromOrders(silent = false) {
     if (!stockAutoDeduct) return 0;
     let fixedCount = 0;
     const today = todayKST();
+
+    // ① 오늘 전표가 요구하는 재고 변화량 (일반 납품: 음수 차감 / 반품·회수: 양수 입고)
+    //   ★ 오늘 전표만 대상 — 재고 이력이 어제·오늘만 보관되므로 과거 전표는 매번 다시 차감되는 심각한 버그가 됨
+    //   ★ delegatedBy(대납 전표)는 남(B)이 자기 재고로 배송한 거래 — 내(A) 재고와 무관하므로 제외
+    const need = new Map();
     orders.forEach(o => {
-        // ★ 오늘 전표만 대상 — 재고 로그가 어제·오늘만 보관되므로(중복방지 체크 한계),
-        //   날짜 필터가 없으면 과거 전표가 매번 다시 차감되는 심각한 버그가 됨
         if (o.date !== today) return;
-        // ★ delegatedBy(대납 전표)는 남(B)이 자기 재고로 배송한 거래 — 내(A) 재고와 무관하므로 재계산 대상에서 제외
         if (o.isVoid || o.delegatedBy || !(o.items||[]).length) return;
+        const client = o.clientName || '';
         o.items.forEach(it => {
             const si = findStockByName(it.name);
             if (!si) return;
-            const qtyNum = Number(it.qty) || 0;
-            const deltaQty = -qtyNum; // 실제 적용될 재고 변화량 (일반 납품: 음수 차감 / 반품·회수: 양수 입고)
-            // ★ 반품/회수 품목은 qty가 음수로 저장되므로, 이미 반영됐는지 확인할 때도
-            //   부호를 그대로 비교해야 한다 (Math.abs로 비교하면 항상 불일치 → 매번 재적용되는 버그였음).
-            //   type도 'auto'(일반 차감)뿐 아니라 'in'(반품/회수 입고 — 등록 시점에 기록됨)도 함께 인정해야
-            //   정상 등록된 반품 전표를 재계산 버튼으로 또 적용해 중복 반영하는 것을 막을 수 있다.
-            const alreadyLogged = (si.log || []).some(l =>
-                (l.type === 'auto' || l.type === 'in') &&
-                l.date === o.date &&
-                l.reason && l.reason.includes(o.clientName) &&
-                l.qty === deltaQty
-            );
-            if (alreadyLogged) return;
-            const before = si.qty;
-            si.qty = Math.max(0, si.qty + deltaQty);
-            (si.log = si.log || []).push({
-                type: deltaQty >= 0 ? 'in' : 'auto', qty: si.qty - before, before, after: si.qty,
-                reason: (deltaQty >= 0 ? '반품/회수 입고(' : '납품차감(') + o.clientName + ') [재계산]',
-                date: o.date, at: new Date().toISOString()
-            });
-            si.log = _trimLogByDate(si.log);
-            fixedCount++;
+            const k = si.id + '\u0001' + client;
+            const cur = need.get(k) || { si, client, delta: 0 };
+            cur.delta += -(Number(it.qty) || 0);
+            need.set(k, cur);
         });
     });
+
+    // ② 이력에 이미 반영된 양과 비교해 부족분만 보충
+    need.forEach(({ si, client, delta }) => {
+        const logs = si.log || [];
+        // 품목 등록 때 오늘 납품이 이미 한꺼번에 반영된 품목은 건드리지 않음
+        if (logs.some(l => (l.reason || '').includes('등록 시 오늘 납품 자동 반영') && (l.originalDate || l.date) === today)) return;
+        const logged = logs.reduce((sum, l) => {
+            if (l.type !== 'auto' && l.type !== 'in' && l.type !== 'edit_adj' && l.type !== 'restore') return sum;
+            if ((l.originalDate || l.date) !== today) return sum;
+            const r = l.reason || '';
+            if (!(r.includes('(' + client + ')') || r.includes('(' + client + '·'))) return sum;
+            return sum + (Number(l.qty) || 0);
+        }, 0);
+        const missing = +(delta - logged).toFixed(6);
+        // 부호가 반대이거나 전표 합계보다 큰 보정은 하지 않는다 (삭제·수동 조정한 것을 되돌리지 않기 위해)
+        if (missing === 0 || Math.sign(missing) !== Math.sign(delta) || Math.abs(missing) > Math.abs(delta)) return;
+        const before = si.qty;
+        si.qty = Math.max(0, +(before + missing).toFixed(6));
+        const actual = +(si.qty - before).toFixed(6);
+        if (actual === 0) return; // 재고가 이미 0이라 더 차감할 수 없는 경우
+        (si.log = si.log || []).unshift({ // 이력은 최신순(맨 앞)으로 쌓는다
+            type: missing >= 0 ? 'in' : 'auto', qty: actual, before, after: si.qty,
+            reason: (missing >= 0 ? '반품/회수 입고(' : '납품차감(') + client + ') [재계산]',
+            date: today, at: new Date().toISOString()
+        });
+        si.log = _trimLogByDate(si.log);
+        fixedCount++;
+    });
+
     if (fixedCount > 0) {
         if (silent) {
             saveToLocal();
