@@ -13,7 +13,7 @@
     <meta name="apple-mobile-web-app-title" content="납품관리">
     <link rel="apple-touch-icon" href="./icon-192.png">
     <link rel="manifest" href="./manifest.json">
-    <title>납품 관리 Pro v173</title>
+    <title>납품 관리 Pro v179</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js" defer></script>
@@ -62,7 +62,7 @@
             <div class="logo-icon">📦</div>
             <div>
                 <div class="logo-text">납품 관리 Pro</div>
-                <div class="logo-sub">v173 · PWA 앱 설치 지원</div>
+                <div class="logo-sub">v179 · PWA 앱 설치 지원</div>
             </div>
         </div>
         <div class="header-btns">
@@ -644,7 +644,7 @@
     <div class="card">
         <div class="card-title">앱 정보</div>
         <div style="font-size:13px;color:var(--text2);line-height:2;margin-bottom:12px;">
-            버전: <strong style="color:var(--accent);">v173</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
+            버전: <strong style="color:var(--accent);">v179</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
             거래처: <span id="infoClients">0</span>개 &nbsp;·&nbsp;
             납품내역: <span id="infoOrders">0</span>건
         </div>
@@ -658,7 +658,31 @@
             <div id="changelogList" style="display:flex;flex-direction:column;gap:6px;">
                 <!-- 현재 버전 -->
                 <div class="changelog-item">
-                    <span class="changelog-ver" style="color:var(--green);">v173</span>
+                    <span class="changelog-ver" style="color:var(--green);">v179</span>
+                    <span class="changelog-desc">타인거래 처리 점검. 내역 카드의 "↩ 내거래로" 빠른 전환 버튼이 재고를 보정하지 않아, 전환한 전표를 나중에 삭제·수정하면 차감된 적 없는 수량이 재고에 더해지거나 이중 차감되던 문제 수정 — 수정 화면(v166)과 같은 기준으로 타인거래→내거래는 수량만큼 차감, 내거래→타인거래는 수량만큼 복구하고 이력(전환반영/전환복구)을 남김(자동 차감 OFF면 재고 변동 없음). 자동 차감 OFF일 때 "오늘 출고" 계산에서 대납 전표도 제외. (타인거래는 오늘 거래·7일 매출·재고에는 반영하지 않고 거래처 월 매출·정산·명세표·미수에는 포함 — 기존 정책 그대로 확인)</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v178</span>
+                    <span class="changelog-desc">① 수금일 표시를 한국 시간 기준으로 수정 — 수금 시각(UTC)의 날짜를 그대로 잘라 써서 한국 시간 새벽 0~9시에 받은 수금이 전날로 표시되던 문제(명세표 수금일 3곳, 내역 탭 "이 기간 회수된 과거 미수금" 기간 판정). ② 대납 전표 집계 기준 통일 — 남이 대납한 전표(delegatedBy)는 내 미수·수금에서 제외하는 정책에 맞춰, 대시보드 미수 거래처 현황·미수금 탭·입금처리/전체 완납/완납 취소/계산서 일괄 대상과 내역 탭의 현금·이체별 수금 집계에서 제외(내가 대납한 공유 전표는 그대로 포함). 대시보드 7일 추이선도 대납·타인거래를 제외하고 미수선은 부분 수금을 반영.</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v177</span>
+                    <span class="changelog-desc">CRM 연동 정리. ① CRM 연동 사용 스위치(crm-sync.js의 CRM_SYNC_USER_ON) 추가, 현재 꺼짐 — 입금 처리마다 외부 CRM DB를 조회하던 호출과 재시도 큐 적재가 멈춥니다(CRM 설정값은 그대로 보존, 연동을 시작할 때 true로 변경). ② CRM이 먼저 결제를 기록한 전표를 납품앱에서 입금 처리해도 다음 동기화 때 서버의 CRM 값으로 되돌아갈 수 있던 문제 수정 — 단일 입금 완납·혼합 입금·전체 완납·할인 완납에서 CRM 우선권을 해제하지 않던 것을 해제하도록 변경(부분 입금·수금 수정·미수 복귀는 기존에도 정상).</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v176</span>
+                    <span class="changelog-desc">명세표의 "완납 완료" 일괄 취소가 반품/회수 전표를 되돌리지 않아, 취소 뒤 미수가 반품 금액만큼 부풀던 문제 수정. 입금·일괄 완납은 반품 전표를 완납(순액 상쇄)으로 표시하므로, 일괄 취소도 같은 달 반품/회수 전표를 함께 미수로 되돌립니다(안내 문구의 건수는 기존처럼 납품 전표 기준, 반품은 "+ 반품/회수 N건"으로 따로 표시). 예: 납품 10,000 + 반품 −3,000이 모두 완납 상태에서 일괄 취소하면 미수 7,000원(이전 버전은 10,000원).</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v175</span>
+                    <span class="changelog-desc">정산·동기화 검수에서 나온 문제 4건 수정. ① 할인 완납 때 반품/회수 전표를 건너뛰어, 할인액이 부풀고 반품이 미수로 남아 거래처 미수가 음수로 어긋나던 문제 해결 — 반품 전표를 먼저 순액으로 상쇄한 뒤 납품 전표에 실수령액을 배분(예: 납품 10,000 − 반품 3,000을 7,000원 받고 할인 완납하면 할인 0원, 둘 다 완납). ② 거래명세표 화면과 이미지·문자·카톡의 전표 구성을 통일 — 다른 사람이 대납한 전표는 내 명세표에서 제외(정산·대시보드·내역과 같은 기준), 내가 대납한 공유 전표는 이미지에도 포함. ③ 일반 입금(단일·혼합)과 입금 미리보기에서도 반품 전표를 먼저 상쇄해, 반품 전표 날짜가 납품보다 뒤여도 미완납으로 남지 않음. ④ 공유 납품 오프라인 큐 — 연결 직후 업로드가 두 번 동시에 돌아 같은 전표를 중복 업로드하던 것을 막고, 업로드 중 새로 큐에 들어온 항목이 큐 저장 때 사라지던 문제 해결.</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v174</span>
+                    <span class="changelog-desc">v173 검수에서 나온 재고 문제 5건 수정. ① 그날 재고 탭을 열기 전에 오늘 납품을 등록하고 이어서 '어제 날짜' 납품을 등록하면, 첫 이월 때 오늘 변동이 한 번 더 반영돼 재고가 줄던 문제 해결(어제 날짜·미래 날짜 납품을 오늘 기록한 이력은 어제 마감 계산에서 빼고 오늘 차감으로 계산). ② 새 품목 등록 때 오늘 납품을 반영할 때 타인거래·대납 전표는 제외(재고 재계산·출고 표시와 같은 기준). ③ 납품 수정 보정 이력에 전표 날짜를 함께 기록 — 어제 이전 전표를 수정한 뒤 🔄 재고 재계산을 눌러도 오늘 납품이 추가로 차감되지 않음(이 버전 이전에 만든 수정 이력은 전표 날짜가 없어 이전과 같이 동작). ④ 빠른 입고·출고에서 소수 수량(0.5, 1.5 등)을 쓸 수 있게 하고 계산 오차 제거. ⑤ 품목의 부족·위험 경고 기준에 0을 입력해도 10·3으로 바뀌던 문제 해결(빈 칸일 때만 기본값).</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v173</span>
                     <span class="changelog-desc">재고 코드 전체 점검 후 수정. ① 재고 이력 정리 기준을 '납품 날짜'에서 '기록된 시각(KST)'으로 변경 — 2일 넘은 날짜로 납품을 등록하면 그 이력이 바로 지워져 다음 동기화 때 방금 차감한 재고가 원래대로 되돌아가던 문제 해결. ② 앱을 다시 켤 때 이월 처리 기록(lastCarryDate)이 버려져 이월 재계산이 매번 다시 실행되던 문제 해결. ③ 오늘 ⚖️ 설정·카드의 '현재재고 직접 수정'으로 맞춘 재고를 이월 재계산이 입고·출고 합계로 되돌리던 문제 해결(오늘 수동 설정이 있으면 그 값을 기준으로 유지). ④ '출고 누락 재계산'이 수량을 고친 전표(20→25), 타인거래→내거래로 바꾼 전표, 품목 등록 때 이미 반영된 납품을 한 번 더 차감하던 문제 해결 — 품목×거래처 단위로 전표가 요구하는 변화량과 이력에 반영된 양을 비교해 부족분만 보충하고, 새 이력은 최신순으로 기록. ⑤ 달걀·기타 품목 일괄 등록 때 오늘 납품이 있으면 재고가 음수(-5 등)로 등록되던 문제 해결(0으로 등록). ⑥ 재고 이력 화면과 어제 마감 계산의 날짜를 UTC가 아닌 한국 시간 기준으로 — 새벽 0~9시 입고가 전날로 묶여 보이던 문제 해결. ⑦ 품목 단위 문자열 HTML 이스케이프, 소수 수량 입고·출고 계산 오차(0.1+0.2) 제거.</span>
                 </div>
                 <div class="changelog-item">
