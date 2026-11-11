@@ -174,7 +174,7 @@ function renderOrders() {
     const unpaidAmt   = Math.max(0, totalAmt - paidAmt);
     // 수금방법별 집계 (paidMethodDetail 우선, 없으면 paidMethod 기준)
     let cashAmt = 0, transferAmt = 0, mixedAmt = 0, otherPaidAmt = 0;
-    filtered.filter(o=>!o.isVoid).forEach(o => {
+    filtered.filter(o=>!o.isVoid && _isMine(o)).forEach(o => { // ★ v178: 수금 합계와 같이 남이 대납한 전표 제외
         const got = _actualPaid(o);
         if (got <= 0) return;
         if (o.paidMethod === 'mixed') {
@@ -215,7 +215,7 @@ function renderOrders() {
         if (got <= 0 || !o.paidAt) return;
         const orderDateInRange = (!start||o.date>=start) && (!end||o.date<=end);
         if (orderDateInRange) return; // 이미 위 수금액에 포함됨
-        const paidDate = o.paidAt.slice(0,10);
+        const paidDate = kstDateOfIso(o.paidAt) || o.paidAt.slice(0,10); // ★ v178: paidAt은 UTC 시각 — 한국 시간 새벽(0~9시) 수금이 전날로 잡히던 문제
         const paidInRange = (!start||paidDate>=start) && (!end||paidDate<=end);
         if (!paidInRange) return;
         if (!(matchSearch(o.clientName||'',q) || (o.items||[]).some(i=>matchSearch(i.name,q)))) return;
@@ -585,11 +585,49 @@ async function confirmQuickPay(method) {
 function toggleVoidOrder(id) {
     const o = orders.find(o => o.id === id);
     if (!o) return;
-    o.isVoid = !o.isVoid;
+    const wasVoid   = !!o.isVoid;
+    const newIsVoid = !wasVoid;
+
+    // ★ v179: 재고 보정 — 수정 화면의 전환 로직(v166)과 같은 기준.
+    //   내거래 전표 = 그 수량만큼 재고에서 차감돼 있음 / 타인거래 전표 = 재고에 반영된 수량 0.
+    //   예전엔 이 버튼이 재고를 건드리지 않아, '내거래로' 전환한 전표가 차감 없이 내거래가 되고
+    //   그 뒤 삭제·수정하면 차감된 적 없는 수량이 재고에 더해지거나 이중 차감됐다.
+    let stockAdjusted = false;
+    if (stockAutoDeduct && !o.isReturn && !o.delegatedBy) {
+        const qtyMap = {};
+        (o.items || []).forEach(it => {
+            const key = normItemName(it.name);
+            qtyMap[key] = (qtyMap[key] || 0) + (Number(it.qty) || 0);
+        });
+        const reasonLabel = wasVoid ? '타인거래→내거래 전환반영' : '내거래→타인거래 전환복구';
+        Object.keys(qtyMap).forEach(key => {
+            const qty = qtyMap[key];
+            if (!qty) return;
+            const itemName = ((o.items || []).find(it => normItemName(it.name) === key) || {}).name || key;
+            const si = findStockByName(itemName);
+            if (!si) return;
+            const before = si.qty;
+            // 타인거래 → 내거래: 수량만큼 차감 / 내거래 → 타인거래: 수량만큼 복구
+            si.qty = Math.max(0, +(before + (newIsVoid ? qty : -qty)).toFixed(6));
+            const actual = +(si.qty - before).toFixed(6);
+            if (actual === 0) return;
+            (si.log = si.log || []).unshift({
+                type: 'edit_adj', qty: actual, before, after: si.qty,
+                reason: reasonLabel + '(' + (o.clientName || '') + ')',
+                date: todayKST(), originalDate: o.date, at: new Date().toISOString()
+            });
+            si.log = _trimLogByDate(si.log);
+            stockAdjusted = true;
+        });
+    }
+
+    o.isVoid = newIsVoid;
+    o.updatedAt = new Date().toISOString();
     _markDirtyOrder(id); // delta sync 마킹
     saveData();
     _safeRefresh(renderOrders, renderDashboard, updateInfoCounts, updateNavBadges, _refreshUnpaidIfActive, _refreshSettlementIfActive);
-    toast(o.isVoid ? '👤 타인거래로 변경 — 재고 차감 미반영' : '↩ 내 거래로 변경 — 재고는 수동 확인 필요', o.isVoid ? 'var(--orange)' : 'var(--green)');
+    if (newIsVoid) toast(stockAdjusted ? '👤 타인거래로 변경 — 차감했던 재고 복구' : '👤 타인거래로 변경 — 재고 영향 없음', 'var(--orange)');
+    else           toast(stockAdjusted ? '↩ 내 거래로 변경 — 재고 차감 반영' : '↩ 내 거래로 변경 — 재고는 수동 확인 필요', 'var(--green)');
 }
 
 async function deleteOrder(id) {
@@ -998,7 +1036,7 @@ async function saveOrderEdit() {
                     (si.log = si.log||[]).unshift({
                         type: 'edit_adj', qty: actual, before, after: si.qty,
                         reason: reasonLabelShared + '(' + (o.clientName||'') + ')',
-                        date: todayKST(), at: new Date().toISOString()
+                        date: todayKST(), originalDate: date, at: new Date().toISOString() // ★ v174: 전표 날짜 기록(재고 재계산이 과거 전표 수정분을 오늘 것으로 오인하지 않도록)
                     });
                     si.log = _trimLogByDate(si.log);
                 });
@@ -1068,7 +1106,7 @@ async function saveOrderEdit() {
             (si.log = si.log||[]).unshift({
                 type: logType, qty: actual, before, after: si.qty,
                 reason: reasonLabel + '(' + (o.clientName||'') + ')',
-                date: todayKST(), at: new Date().toISOString()
+                date: todayKST(), originalDate: date, at: new Date().toISOString() // ★ v174: 전표 날짜 기록(재고 재계산이 과거 전표 수정분을 오늘 것으로 오인하지 않도록)
             });
             si.log = _trimLogByDate(si.log);
         });

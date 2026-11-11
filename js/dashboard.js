@@ -53,6 +53,7 @@ function renderDashboard() {
     const clientUnpaidMap = {};
     orders.forEach(o => {
         if (o.isPaid) return;
+        if (o.delegatedBy) return; // ★ v178: 대납 전표는 미수 집계에서 제외(상단 미수 합계와 같은 기준)
         const key = o.clientId || o.clientName;
         if (!clientUnpaidMap[key]) clientUnpaidMap[key] = { name: o.clientName||'(없음)', amt: 0, oldestDate: o.date, phone: '' };
         // ★ 반품/회수(음수 total)도 그대로 합산해 같은 거래처 미수금과 상쇄
@@ -156,6 +157,7 @@ function renderUnpaid() {
     const clientMap = {};
     orders.forEach(o => {
         if (o.isPaid) return;
+        if (o.delegatedBy) return; // ★ v178: 대납 전표는 미수금 탭에서 제외(대시보드 미수 합계와 같은 기준)
         // ★ 주문별로 0 이상 자르지 않고 그대로(음수 가능) 합산 → 반품/회수가 같은
         //   거래처의 다른 미수금을 정확히 상쇄. 최종 amt는 아래에서 0 이상만 노출.
         const remain = o.total - (o.paidAmount || 0);
@@ -288,11 +290,12 @@ function getLast7DaysData(type) {
         days.push(d);
     }
     return days.map(d => {
-        const dayOrders = orders.filter(o => o.date === d);
+        // ★ v178: 대납(delegatedBy)은 제외, 매출은 7일 막대차트와 같이 타인거래(isVoid)도 제외, 미수는 부분 수금 반영
+        const dayOrders = orders.filter(o => o.date === d && !o.delegatedBy);
         const _et = o => o.isPaid && o.discount > 0 ? o.total - o.discount : o.total;
-        if (type === 'sales') return dayOrders.reduce((s, o) => s + _et(o), 0);
+        if (type === 'sales') return dayOrders.filter(o => !o.isVoid).reduce((s, o) => s + _et(o), 0);
         if (type === 'paid')  return dayOrders.reduce((s, o) => s + _actualPaid(o), 0);
-        if (type === 'unpaid') return dayOrders.filter(o => !o.isPaid).reduce((s, o) => s + o.total, 0);
+        if (type === 'unpaid') return dayOrders.filter(o => !o.isPaid).reduce((s, o) => s + o.total - (o.paidAmount || 0), 0);
         return 0;
     });
 }

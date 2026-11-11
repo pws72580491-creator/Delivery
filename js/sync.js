@@ -23,7 +23,12 @@ function _saveDeadQueue(dead) {
 }
 
 /** 오프라인 시 공유 납품을 큐에 저장 (★ v114: order.id 기준 중복 방지) */
+// ★ v175: 큐 플러시 동시 실행 방지 + 플러시 중 새로 들어온 항목 보존
+let _flushingSharedQueue = false;   // 플러시 진행 중
+let _flushSharedAgain    = false;   // 진행 중에 새 호출·새 항목이 생겼으면 끝난 뒤 한 번 더
+
 function _enqueueSharedOrder(wsId, ordersToQueue) {
+    if (_flushingSharedQueue) _flushSharedAgain = true;
     const queue = _getSharedOrderQueue();
     ordersToQueue.forEach(order => {
         // ★ v114: 이미 같은 order.id가 큐에 있으면 덮어쓰기 (중복 방지)
@@ -51,6 +56,22 @@ const _QUEUE_RETRY_DELAYS = [5000, 15000, 60000, 300000, 600000]; // 5회 백오
 
 /** Firebase 재연결 시 오프라인 큐 일괄 업로드 */
 async function _flushSharedOrderQueue() {
+    // ★ v175: 연결 직후 첫 .get()과 .info/connected 두 곳에서 동시에 호출돼 같은 항목을 중복 업로드하고
+    //   완료 안내가 두 번 뜨던 문제 — 진행 중이면 '끝난 뒤 한 번 더'만 예약하고 돌아간다.
+    if (_flushingSharedQueue) { _flushSharedAgain = true; return; }
+    _flushingSharedQueue = true;
+    try {
+        await _flushSharedOrderQueueOnce();
+    } finally {
+        _flushingSharedQueue = false;
+    }
+    if (_flushSharedAgain) {
+        _flushSharedAgain = false;
+        return _flushSharedOrderQueue();
+    }
+}
+
+async function _flushSharedOrderQueueOnce() {
     const queue = _getSharedOrderQueue();
     if (!queue.length) return;
     if (typeof firebase === 'undefined' || !firebase.apps.length) return;
@@ -115,7 +136,19 @@ async function _flushSharedOrderQueue() {
         }
     }
 
-    _saveSharedOrderQueue(failed);
+    // ★ v175: 예전엔 '실패한 것만'으로 큐 전체를 덮어써서, 업로드하는 동안 새로 큐에 들어온 항목이 사라졌다.
+    //   → 업로드 시작 때 본 항목은 결과(failed)로 대체하고, 그 사이 새로 들어온(또는 같은 전표로 다시 들어온) 항목은 그대로 보존.
+    const _qKey = it => (it._delete ? 'd:' : 's:') + it.wsId + '|' + (it.order?.id || it.orderId || '');
+    const _snap = new Map(queue.map(it => [_qKey(it), it.queuedAt]));
+    const _merged = [];
+    const _seen = new Set();
+    _getSharedOrderQueue().forEach(it => {
+        const k = _qKey(it);
+        if (_snap.has(k) && _snap.get(k) === it.queuedAt) return; // 이번에 처리한 항목 — 아래 failed로 대체
+        _merged.push(it); _seen.add(k);
+    });
+    failed.forEach(it => { if (!_seen.has(_qKey(it))) _merged.push(it); });
+    _saveSharedOrderQueue(_merged);
 
     if (successCnt > 0) {
         _safeRefresh(renderOrders, updateInfoCounts, updateNavBadges, renderDashboard, () => toast(`📤 오프라인 중 작성한 공유 납품 ${successCnt}건이 업로드되었습니다`, 'var(--green)', 4000));

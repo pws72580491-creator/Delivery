@@ -208,7 +208,7 @@ function getTodayInOut(si) {
     // ※ 이력이 전혀 없는 품목은 재고 관리 미시작 상태이므로 표시하지 않음
     if (!stockAutoDeduct && (si.log || []).length > 0) {
         const deliveryOut = orders
-            .filter(o => o.date === today && !o.isVoid)
+            .filter(o => o.date === today && !o.isVoid && !o.delegatedBy) // ★ v179: 대납 전표도 내 재고와 무관(재고 재계산·신규 품목 등록과 같은 기준)
             .flatMap(o => o.items || [])
             .filter(item => normItemName(item.name) === normItemName(si.name))
             .reduce((sum, item) => sum + Number(item.qty || 0), 0);
@@ -437,8 +437,9 @@ async function egQuickConfirm(id) {
         if (_si) _egQuickEditApply(id, type, _si, input);
         return;
     }
-    const val = parseInt(input.value);
-    if (!val || val <= 0) { toast('❗ 수량을 입력하세요'); input.focus(); return; }
+    // ★ v174: parseInt는 1.5→1, 0.5→0으로 소수 수량을 잘라냈음 (kg 등 소수 단위 품목)
+    const val = Number(input.value);
+    if (input.value === '' || isNaN(val) || val <= 0) { toast('❗ 수량을 입력하세요'); input.focus(); return; }
     const si = stockItems.find(s => s.id === id);
     if (!si) return;
     const before = si.qty;
@@ -453,8 +454,9 @@ async function egQuickConfirm(id) {
     }
 
     let after, logType;
-    if (type === 'in')  { after = before + val; logType = 'in'; }
-    else                { after = Math.max(0, before - val); logType = 'out'; }
+    // ★ v174: 소수 계산 오차(0.1+0.2) 방지 — applyAdj와 같은 방식으로 반올림
+    if (type === 'in')  { after = +(before + val).toFixed(6); logType = 'in'; }
+    else                { after = Math.max(0, +(before - val).toFixed(6)); logType = 'out'; }
 
     // 실제 변동이 없으면 처리 안 함
     if (after === before) { toast('❗ 변동 수량이 없습니다'); return; }
@@ -657,7 +659,12 @@ function getYesterdayClosingQty(si) {
         .filter(l => {
             if (l.type === 'auto') {
                 // 납품차감은 납품날짜(date)가 오늘 이전인 것만 포함
-                return (l.date || '') < today;
+                // ★ v174: 단, 기록 시각(at)이 오늘 0시 이후인 것은 제외 — 오늘 어제 날짜로 납품을 등록하면
+                //   그 이력의 after에는 오늘 변동이 이미 섞여 있어, 마감으로 쓰면 이월 때 오늘 변동이 한 번 더 반영됐다.
+                //   (제외된 이력은 refreshStockCarryover에서 '오늘 차감'으로 계산된다)
+                if ((l.date || '') >= today) return false;
+                const ta = l.at ? new Date(l.at).getTime() : 0;
+                return !(ta >= todayStartUTC);
             }
             const t = l.at ? new Date(l.at).getTime() : 0;
             return t > 0 && t < todayStartUTC;
@@ -742,8 +749,9 @@ function refreshStockCarryover(silent = false) {
         const todayStartUTC    = new Date(today + 'T00:00:00+09:00').getTime();
         const tomorrowStartUTC = todayStartUTC + 86400000;
         const todayLogs = (si.log || []).filter(l => {
-            if (l.type === 'auto') return l.date === today; // 납품차감은 납품날짜 기준
             const t = l.at ? new Date(l.at).getTime() : 0;
+            // ★ v174: 납품차감은 납품날짜가 오늘이거나, 오늘 기록된 것(어제 날짜·미래 날짜 납품 등록)도 오늘 차감에 포함
+            if (l.type === 'auto') return l.date === today || (t >= todayStartUTC && t < tomorrowStartUTC);
             return t >= todayStartUTC && t < tomorrowStartUTC;
         });
         // ★ v173: 오늘 '수동 설정(set)'이 있으면 그 값이 기준이다 — 입고·출고 합계로 다시 계산하면
@@ -828,12 +836,15 @@ function saveStockItem() {
     const _existing = id ? stockItems.find(s => s.id === id) : null;
     const qty    = _existing ? _existing.qty : (qtyRaw === '' ? 0 : Number(qtyRaw));
     const unit   = document.getElementById('seUnit').value.trim() || '개';
-    const low    = Number(document.getElementById('seLow').value)    || 10;
-    const danger = Number(document.getElementById('seDanger').value) || 3;
+    // ★ v174: '|| 기본값'은 0을 입력해도 10/3으로 바꿔버렸음 — 빈 칸일 때만 기본값 사용
+    const _numOr = (id, def) => { const raw = document.getElementById(id).value; const n = Number(raw); return (raw === '' || isNaN(n)) ? def : n; };
+    const low    = _numOr('seLow', 10);
+    const danger = _numOr('seDanger', 3);
     const note   = document.getElementById('seNote').value.trim();
 
     if (!name) return toast('❗ 품목명을 입력하세요');
     if (isNaN(qty) || qty < 0) return toast('❗ 재고는 0 이상이어야 합니다');
+    if (low < 0 || danger < 0) return toast('❗ 경고 기준은 0 이상이어야 합니다');
     if (low < danger) return toast('❗ 부족 경고 기준은 위험 기준보다 커야 합니다');
 
     // 정규화된 이름으로 중복 체크
@@ -848,8 +859,9 @@ function saveStockItem() {
     } else {
         // ── 신규 등록 시: 오늘 납품 전표에 동일 품목 출고가 있으면 자동 반영 ──
         const today = todayKST();
+        // ★ v174: 타인거래(isVoid)·대납(delegatedBy) 전표는 내 재고와 무관 — 재고 재계산·오늘 출고 표시와 같은 기준으로 제외
         const todayAutoOut = orders
-            .filter(o => o.date === today)
+            .filter(o => o.date === today && !o.isVoid && !o.delegatedBy)
             .flatMap(o => o.items || [])
             .filter(item => normItemName(item.name) === normItemName(name))
             .reduce((sum, item) => sum + Number(item.qty || 0), 0);

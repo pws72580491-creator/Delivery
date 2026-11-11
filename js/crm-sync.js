@@ -15,8 +15,12 @@ const CRM_FIREBASE_CFG = {
     appId:             "1:329588634587:web:ebf56826605b7263486dfe",
 };
 
-// CRM 연동 활성화 여부 (databaseURL이 있으면 자동 활성화)
-const CRM_SYNC_ENABLED = !!(CRM_FIREBASE_CFG.databaseURL);
+// ★ v177: CRM 연동 사용 스위치. CRM 연동을 시작하기 전까지는 false — 입금 처리마다 외부 CRM DB를 조회하던 호출과
+//   재시도 큐 적재를 모두 끈다. 연동을 시작할 때 true로 바꾸면 된다(위 CRM_FIREBASE_CFG 설정값은 그대로 보존).
+const CRM_SYNC_USER_ON = false;
+
+// CRM 연동 활성화 여부 (스위치가 켜져 있고 databaseURL이 있을 때만)
+const CRM_SYNC_ENABLED = CRM_SYNC_USER_ON && !!(CRM_FIREBASE_CFG.databaseURL);
 
 // ─── CRM Firebase Named Instance 확보 ────────────────────────────────────────
 function _getCrmApp() {
@@ -270,7 +274,7 @@ function _findOrderAnywhere(id) {
  */
 async function resyncAllPaymentsToCrm() {
     if (!CRM_SYNC_ENABLED) {
-        toast('❗ CRM 연동이 설정되지 않았습니다 (CRM_FIREBASE_CFG 확인)', 'var(--red)');
+        toast('❗ CRM 연동이 꺼져 있습니다 (crm-sync.js의 CRM_SYNC_USER_ON · CRM_FIREBASE_CFG 확인)', 'var(--red)');
         return;
     }
     if (typeof firebase === 'undefined' || !firebase.apps.length || !isConnected) {
