@@ -2,7 +2,7 @@
       "relation": ["delegate_permission/common.handle_all_urls"],
       "target": {
         "namespace": "android_app",
-        "package_name": "app.vercel.delivery_u8j0z4x04_pws72580491_creators_projects.twa",
-        "sha256_cert_fingerprints": ["27:68:D9:37:57:6D:25:B8:EE:57:37:E6:93:F3:AB:42:58:C3:24:B7:21:E2:17:82:A4:7D:45:36:D0:91:8A:59"]
+        "package_name": "app.vercel.delivery_lvspxhk3r_pws72580491_creators_projects.twa",
+        "sha256_cert_fingerprints": ["A7:35:D4:C1:3C:F9:A3:BB:23:11:C3:F4:26:B3:89:1A:E8:ED:39:46:EB:5D:F6:B3:AC:17:51:41:A2:AB:54:4E"]
       }
     }]
