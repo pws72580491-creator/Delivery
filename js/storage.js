@@ -362,7 +362,9 @@ const debouncedSync = debounce(async () => {
     updates.writtenBy   = SESSION_ID;
     // ★ version: 업로드마다 단조 증가 (로컬 timestamp 기반)
     // _fbValueHandler에서 version이 로컬보다 작으면 서버 수신을 무시해 충돌 방지
-    updates.version = Date.now();
+    // ★ v180: 기기 시계가 달라도 다른 기기가 내 변경을 '낡은 데이터'로 무시하지 않도록, 마지막으로 본 version보다 항상 크게 한다.
+    //   (예전엔 Date.now()만 써서, 시계가 빠른 기기가 쓴 version보다 느린 기기의 version이 작으면 빠른 기기가 느린 기기의 변경을 시계 차이만큼 무시했다)
+    updates.version = Math.max(Date.now(), (parseInt(localStorage.getItem('ws_version') || '0', 10) || 0) + 1);
     // ★ v164: 업로드가 실패하면 version을 원래대로 되돌림 — 실패한 시도의 version이 남으면
     //   다른 기기의 정상 변경이 '서버 version이 낮다'며 무시될 수 있었음
     const _prevVer = localStorage.getItem('ws_version');
