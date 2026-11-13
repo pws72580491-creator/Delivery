@@ -13,7 +13,7 @@
     <meta name="apple-mobile-web-app-title" content="납품관리">
     <link rel="apple-touch-icon" href="./icon-192.png">
     <link rel="manifest" href="./manifest.json">
-    <title>납품 관리 Pro v179</title>
+    <title>납품 관리 Pro v180</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js" defer></script>
@@ -62,7 +62,7 @@
             <div class="logo-icon">📦</div>
             <div>
                 <div class="logo-text">납품 관리 Pro</div>
-                <div class="logo-sub">v179 · PWA 앱 설치 지원</div>
+                <div class="logo-sub">v180 · PWA 앱 설치 지원</div>
             </div>
         </div>
         <div class="header-btns">
@@ -644,7 +644,7 @@
     <div class="card">
         <div class="card-title">앱 정보</div>
         <div style="font-size:13px;color:var(--text2);line-height:2;margin-bottom:12px;">
-            버전: <strong style="color:var(--accent);">v179</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
+            버전: <strong style="color:var(--accent);">v180</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
             거래처: <span id="infoClients">0</span>개 &nbsp;·&nbsp;
             납품내역: <span id="infoOrders">0</span>건
         </div>
@@ -658,7 +658,11 @@
             <div id="changelogList" style="display:flex;flex-direction:column;gap:6px;">
                 <!-- 현재 버전 -->
                 <div class="changelog-item">
-                    <span class="changelog-ver" style="color:var(--green);">v179</span>
+                    <span class="changelog-ver" style="color:var(--green);">v180</span>
+                    <span class="changelog-desc">동기화 재검수. ① 기기마다 시계가 다르면(예: 한 대가 몇 분 빠름) 시계가 빠른 기기가 느린 기기의 변경을 "낡은 데이터"로 보고 시계 차이만큼 무시하던 문제 수정 — 업로드할 때 version을 마지막으로 본 값보다 항상 크게 올림(업로드 두 경로 모두). 한 번 시계가 크게 틀린 기기가 큰 version을 남긴 경우에도 다음 업로드부터 스스로 복구. ② 공유 거래처(대납) 리스너가 등록 때의 공개 거래처 목록을 계속 써서, 상대가 거래처를 새로 공개해도 앱을 완전히 다시 켜기 전까지 그 거래처의 대납 전표가 보이지 않고 공개를 해제해도 계속 보이던 문제 수정 — 앱 시작·백그라운드 복귀·연결 때 목록이 바뀌었으면 리스너를 다시 등록(목록 읽기에 실패한 경우는 기존 유지).</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v179</span>
                     <span class="changelog-desc">타인거래 처리 점검. 내역 카드의 "↩ 내거래로" 빠른 전환 버튼이 재고를 보정하지 않아, 전환한 전표를 나중에 삭제·수정하면 차감된 적 없는 수량이 재고에 더해지거나 이중 차감되던 문제 수정 — 수정 화면(v166)과 같은 기준으로 타인거래→내거래는 수량만큼 차감, 내거래→타인거래는 수량만큼 복구하고 이력(전환반영/전환복구)을 남김(자동 차감 OFF면 재고 변동 없음). 자동 차감 OFF일 때 "오늘 출고" 계산에서 대납 전표도 제외. (타인거래는 오늘 거래·7일 매출·재고에는 반영하지 않고 거래처 월 매출·정산·명세표·미수에는 포함 — 기존 정책 그대로 확인)</span>
                 </div>
                 <div class="changelog-item">
