@@ -21,9 +21,13 @@
     --blue:       #3b82f6;
     --blue-dim:   rgba(59,130,246,.12);
     --text:       #eaeaf4;
-    --text2:      #7878a0;
-    --text3:      #3e3e58;
+    /* ★ v181: 다크모드 보조 글자색 상향 — 카드 배경(#1a1a25) 기준 대비율 text2 4.1→8.0, text3 1.7→5.0 (WCAG AA 4.5 이상) */
+    --text2:      #adadd0;
+    --text3:      #8888ad;
     --text4:      #28283c;
+    --dim-fill:   #3e3e58;   /* ★ v181: 예전 text3 값 — 글자가 아닌 채움(비활성 버튼·타인거래 테두리·스위치 손잡이)용 */
+    --paid-opacity: .94;     /* ★ v181: 완납 카드 흐림 .82→.94 (다크). 라이트는 아래에서 기존값 유지 */
+    --void-opacity: .82;     /* ★ v181: 타인거래 카드 흐림 .65→.82 (다크). 라이트는 아래에서 기존값 유지 */
     --radius:     16px;
     --radius-s:   10px;
     --radius-xs:  7px;
@@ -48,6 +52,9 @@ body.light {
     --text:       #18182e;
     --text2:      #5050a0;
     --text3:      #aaaac8;
+    --dim-fill:   #aaaac8;
+    --paid-opacity: .82;
+    --void-opacity: .65;
     --text4:      #d0d0e8;
     --shadow:     0 8px 32px rgba(0,0,0,.10);
     --shadow-s:   0 2px 12px rgba(0,0,0,.07);
@@ -458,8 +465,8 @@ body.light .stat-card.orange .stat-value { color:#a07010; }
 
 /* 타인거래(재고 차감만 제외) 전표 */
 .order-card.voided {
-    opacity: .65;
-    border-left-color: var(--text3) !important;
+    opacity: var(--void-opacity);
+    border-left-color: var(--dim-fill) !important;
     border-style: solid;
     border-left-style: dashed;
 }
@@ -549,7 +556,7 @@ body.light .stat-card.orange .stat-value { color:#a07010; }
     box-shadow:0 4px 14px rgba(32,192,92,.3);
 }
 .btn-bulk-pay:hover { box-shadow:0 6px 20px rgba(32,192,92,.4); }
-.btn-bulk-pay:disabled { background:var(--text3); cursor:default; box-shadow:none; }
+.btn-bulk-pay:disabled { background:var(--dim-fill); cursor:default; box-shadow:none; }
 
 /* ═══════════════════════════════════════
    납품 등록 — v58
@@ -657,7 +664,7 @@ body.light .stat-card.orange .stat-value { color:#a07010; }
     box-shadow:var(--shadow-xs);
 }
 .order-card:hover { box-shadow:var(--shadow-s); border-color:var(--border-s); }
-.order-card.paid   { border-left-color:var(--green); opacity:.82; }
+.order-card.paid   { border-left-color:var(--green); opacity:var(--paid-opacity); }
 .order-card.unpaid { border-left-color:var(--red); }
 .order-top { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:6px; }
 .order-client-name {
@@ -1483,6 +1490,9 @@ button, a, input, select, textarea,
         --text:       #18182e;
         --text2:      #5050a0;
         --text3:      #aaaac8;
+        --dim-fill:   #aaaac8;
+        --paid-opacity: .82;
+        --void-opacity: .65;
         --text4:      #d0d0e8;
         --shadow:     0 8px 32px rgba(0,0,0,.10);
         --shadow-s:   0 2px 12px rgba(0,0,0,.07);
