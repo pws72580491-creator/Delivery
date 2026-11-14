@@ -13,7 +13,7 @@
     <meta name="apple-mobile-web-app-title" content="납품관리">
     <link rel="apple-touch-icon" href="./icon-192.png">
     <link rel="manifest" href="./manifest.json">
-    <title>납품 관리 Pro v179</title>
+    <title>납품 관리 Pro v183</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js" defer></script>
@@ -62,7 +62,7 @@
             <div class="logo-icon">📦</div>
             <div>
                 <div class="logo-text">납품 관리 Pro</div>
-                <div class="logo-sub">v179 · PWA 앱 설치 지원</div>
+                <div class="logo-sub">v183 · PWA 앱 설치 지원</div>
             </div>
         </div>
         <div class="header-btns">
@@ -644,7 +644,7 @@
     <div class="card">
         <div class="card-title">앱 정보</div>
         <div style="font-size:13px;color:var(--text2);line-height:2;margin-bottom:12px;">
-            버전: <strong style="color:var(--accent);">v179</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
+            버전: <strong style="color:var(--accent);">v183</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
             거래처: <span id="infoClients">0</span>개 &nbsp;·&nbsp;
             납품내역: <span id="infoOrders">0</span>건
         </div>
@@ -658,7 +658,23 @@
             <div id="changelogList" style="display:flex;flex-direction:column;gap:6px;">
                 <!-- 현재 버전 -->
                 <div class="changelog-item">
-                    <span class="changelog-ver" style="color:var(--green);">v179</span>
+                    <span class="changelog-ver" style="color:var(--green);">v183</span>
+                    <span class="changelog-desc">리뷰 반영 + 통합. ① 공유(대납) 리스너: 목록 갱신이 같은 순간에 두 번 겹쳐 불리면(앱 시작·백그라운드 복귀·연결이 겹칠 때) 리스너가 중복 등록돼, 해제되지 않은 쪽이 옛 공개 목록으로 대납 전표를 계속 덮어쓸 수 있던 문제 수정 — 이미 읽은 목록을 그대로 쓰고 등록 직전에 다시 확인해 한 번만 등록, 재등록 때 목록을 한 번 더 읽다 실패해 리스너가 사라지던 경우와 목록 비교 시 중복 이름 때문에 재등록이 반복되던 경우도 해소. ② version을 항상 "마지막으로 본 값보다 크게" 올리는 규칙을 나머지 업로드에도 적용 — 백업 복원, 연결 직후 업로드 2곳(예전엔 Date.now()로 ws_version을 더 낮은 값으로 덮어쓸 수 있었음). ③ 백업 만들기·복원 때도 undefined/NaN 값을 보정해 올림(v182 업로드 보정과 동일). ④ 다크모드: 타인거래 스위치를 껐다 켜면 손잡이 색이 달라지던 곳(글자색을 직접 지정한 1곳)을 채움색으로 통일.</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v182</span>
+                    <span class="changelog-desc">재고 탭에서 동기화가 "동기화 중…"에 멈추던 문제 수정. 원인: 올릴 데이터에 값이 없는 항목(undefined)이나 숫자가 아닌 값(NaN)이 하나라도 섞이면 Firebase가 업로드를 즉시 거부하는데, 이 오류를 앱이 받지 못해 상태 표시가 "동기화 중…"에 머물고 업로드 잠금이 풀리지 않아 이후 모든 동기화(전표 포함)가 멈췄음. ① 업로드 직전에 문제 값을 찾아 제거한 사본을 올리고, 어떤 항목이 문제였는지 진단 로그(🩺 동기화 진단 로그 보기)에 "업로드 데이터 보정"으로 경로를 남김(업로드 3곳: 일반 저장·백그라운드 직전 저장·연결 직후 업로드). ② 동기화 준비 중 예상 못한 오류가 나도 잠금을 풀고 오류 상태로 표시한 뒤 최대 3회 자동 재시도. ③ 업로드 잠금이 풀리지 않을 때 앱을 켜 둔 채로도 20초 후 자동 해제(예전엔 백그라운드에서 돌아올 때만 해제). ④ 재고 수량·부족·위험 기준에 숫자가 아닌 값이 들어오면 0/기본값으로 보정.</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v181</span>
+                    <span class="changelog-desc">다크모드 글자 시인성 개선. 보조 글자색(날짜·메모·"이번달"·품목 줄·버튼 라벨·안내 문구 등)이 어두운 카드 배경에서 흐리게 보이던 것을 밝게 조정 — 카드 배경 기준 대비율 text2 4.1→8.0, text3 1.7→5.0(접근성 기준 4.5 이상). 완납 카드(흐림 .82→.94)와 타인거래 카드(.65→.82)의 투명도도 다크모드에서 완화. 글자가 아닌 용도(비활성 버튼·타인거래 점선 테두리·스위치 손잡이)는 기존 색을 유지하도록 별도 변수로 분리. 라이트 모드는 변경 없음.</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v180</span>
+                    <span class="changelog-desc">동기화 재검수. ① 기기마다 시계가 다르면(예: 한 대가 몇 분 빠름) 시계가 빠른 기기가 느린 기기의 변경을 "낡은 데이터"로 보고 시계 차이만큼 무시하던 문제 수정 — 업로드할 때 version을 마지막으로 본 값보다 항상 크게 올림(업로드 두 경로 모두). 한 번 시계가 크게 틀린 기기가 큰 version을 남긴 경우에도 다음 업로드부터 스스로 복구. ② 공유 거래처(대납) 리스너가 등록 때의 공개 거래처 목록을 계속 써서, 상대가 거래처를 새로 공개해도 앱을 완전히 다시 켜기 전까지 그 거래처의 대납 전표가 보이지 않고 공개를 해제해도 계속 보이던 문제 수정 — 앱 시작·백그라운드 복귀·연결 때 목록이 바뀌었으면 리스너를 다시 등록(목록 읽기에 실패한 경우는 기존 유지).</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v179</span>
                     <span class="changelog-desc">타인거래 처리 점검. 내역 카드의 "↩ 내거래로" 빠른 전환 버튼이 재고를 보정하지 않아, 전환한 전표를 나중에 삭제·수정하면 차감된 적 없는 수량이 재고에 더해지거나 이중 차감되던 문제 수정 — 수정 화면(v166)과 같은 기준으로 타인거래→내거래는 수량만큼 차감, 내거래→타인거래는 수량만큼 복구하고 이력(전환반영/전환복구)을 남김(자동 차감 OFF면 재고 변동 없음). 자동 차감 OFF일 때 "오늘 출고" 계산에서 대납 전표도 제외. (타인거래는 오늘 거래·7일 매출·재고에는 반영하지 않고 거래처 월 매출·정산·명세표·미수에는 포함 — 기존 정책 그대로 확인)</span>
                 </div>
                 <div class="changelog-item">
@@ -1864,7 +1880,7 @@
                 <div id="oeditVoidKnob" style="
                     position:absolute; top:2px; left:2px;
                     width:18px; height:18px; border-radius:50%;
-                    background:var(--text3); transition:transform .2s, background .2s;">
+                    background:var(--dim-fill); transition:transform .2s, background .2s;">
                 </div>
             </div>
         </div>
