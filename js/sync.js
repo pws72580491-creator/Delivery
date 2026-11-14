@@ -352,11 +352,13 @@ async function _loadSharedClientsFromWs() {
         return;
     }
     const result = [];
+    const _fetchedOk = new Set(); // ★ v180: 공유 거래처 목록을 정상적으로 읽은 워크스페이스(읽기 실패와 '목록 없음'을 구분)
     await Promise.all(wsArr.map(async item => {
         const wsId    = item.wsId || item;
         const wsLabel = item.label || wsId;
         try {
             const snap = await firebase.database().ref(`workspaces/${wsId}/sharedClients`).get();
+            _fetchedOk.add(wsId);
             if (!snap.exists()) return;
             // sharedClients: string[] (공개 허용 거래처 이름 목록)
             const rawList = snap.val() || [];
@@ -388,16 +390,40 @@ async function _loadSharedClientsFromWs() {
     await Promise.all(wsArr.map(async item => {
         const wsId    = item.wsId || item;
         const wsLabel = item.label || wsId;
-        if (_sharedOrdersListeners[wsId]) return; // 이미 등록됨
+        // ★ v180: 이미 등록된 리스너도 상대(A)가 공개하는 거래처 목록이 바뀌었으면 다시 등록한다.
+        //   예전엔 등록 때의 allowedNames를 계속 써서, A가 거래처를 새로 공개해도 앱을 완전히 다시 켜기 전까지
+        //   그 거래처의 대납 전표가 B에게 보이지 않았고, 공개를 해제해도 계속 보였다.
+        // ★ v182: 목록 비교는 중복 이름을 제거하고 한다 — 같은 이름이 두 번 들어 있어도 '변경됨'으로 오판해 재등록을 반복하지 않도록.
+        const _norm = arr => [...new Set(arr)].sort().join('|');
+        const _existing = _sharedOrdersListeners[wsId];
+        if (_existing) {
+            if (!_fetchedOk.has(wsId)) return; // 이번에 목록을 못 읽었으면 기존 리스너 유지
+            const _now = _norm(result.filter(r => r.wsId === wsId).map(r => r.name));
+            const _old = _norm(_existing.allowedNames || []);
+            if (_now === _old) return;          // 변경 없음
+            if (_existing.ref && _existing.cb) _existing.ref.off('value', _existing.cb);
+            delete _sharedOrdersListeners[wsId];
+            _sharedOrdersCache = _sharedOrdersCache.filter(o => o._sharedWsId !== wsId);
+        }
 
         try {
             // 공개된 거래처 이름 목록 확인
-            const scSnap = await firebase.database().ref(`workspaces/${wsId}/sharedClients`).get();
             const myWsId2 = (localStorage.getItem('workspaceId') || '').toLowerCase();
             let allowedNames = [];
-            if (scSnap.exists()) {
-                const rawSc = scSnap.val() || [];
-                allowedNames = rawSc.map(item => typeof item === 'string' ? item : item.name);
+            if (_fetchedOk.has(wsId)) {
+                // ★ v182: 위에서 이미 정상적으로 읽은 목록을 그대로 쓴다.
+                //   (1) 재등록 때 같은 목록을 한 번 더 읽다 실패해 기존 리스너만 지우고 새 리스너는 못 만드는 경우를 없애고,
+                //   (2) 위의 '이미 등록됨' 확인과 아래 등록 사이에 await가 없어, 동시에 불린 두 호출이 둘 다 등록하는 일이 없다.
+                allowedNames = result.filter(r => r.wsId === wsId).map(r => r.name);
+            } else {
+                // 첫 읽기에 실패한 신규 등록만 한 번 더 시도
+                const scSnap = await firebase.database().ref(`workspaces/${wsId}/sharedClients`).get();
+                // ★ v182: 대기 중에 다른 호출이 먼저 등록했다면 중복 등록하지 않는다
+                if (_sharedOrdersListeners[wsId]) return;
+                if (scSnap.exists()) {
+                    const rawSc = scSnap.val() || [];
+                    allowedNames = rawSc.map(item => typeof item === 'string' ? item : item.name);
+                }
             }
             // ★ allowedNames가 비어있어도 orders 리스너를 등록해 둠
             const ordersRef = firebase.database().ref(`workspaces/${wsId}/orders`);
@@ -902,7 +928,7 @@ function _doConnect(id, auto=false) {
                     // 재접속 시 통째로 지워버리는 버그가 있었음.
                     // → orders만 경로별(orders/{id}) 키로 풀어서, 서버에만 있는 항목은 건드리지 않는다.
                     const _buildUploadPayload = () => {
-                        const ver = Date.now();
+                        const ver = Math.max(Date.now(), (parseInt(localStorage.getItem('ws_version') || '0', 10) || 0) + 1); // ★ v183: 마지막으로 본 version보다 항상 크게
                         localStorage.setItem('ws_version', String(ver));
                         const payload = {
                             clients:    clients.map(_minifyClient),
@@ -920,7 +946,7 @@ function _doConnect(id, auto=false) {
                         // 자동 연결에서 로컬이 더 최신 → 조용히 로컬 데이터를 서버에 업로드
                         // (오프라인 중 작업한 데이터 유실 방지)
                         const ch=dataHash(clients),oh=dataHash(orders),ph=dataHash(prices),sh=dataHash(stockItems);
-                        workspaceRef.update(_buildUploadPayload())
+                        Promise.resolve().then(() => workspaceRef.update(_fbSanitize(_buildUploadPayload(), 'connect')))
                             .then(()=>{ lastHash.clients=ch;lastHash.orders=oh;lastHash.prices=ph;lastHash.stock=sh; _clearOrderDelta(); setSyncStatus('online'); toast('🟢 자동 연결 완료 (로컬→서버 업로드)', 'var(--green)'); })
                             .catch(e=>{ console.error('업로드 실패:',e); setSyncStatus('error'); });
                         _connectGuard    = false; // ★ 업로드 트리거 후 리스너 해제
@@ -936,7 +962,7 @@ function _doConnect(id, auto=false) {
                         );
                         if (useLocal) {
                             const ch=dataHash(clients),oh=dataHash(orders),ph=dataHash(prices),sh=dataHash(stockItems);
-                            workspaceRef.update(_buildUploadPayload())
+                            Promise.resolve().then(() => workspaceRef.update(_fbSanitize(_buildUploadPayload(), 'connect')))
                                 .then(()=>{ lastHash.clients=ch;lastHash.orders=oh;lastHash.prices=ph;lastHash.stock=sh; _clearOrderDelta(); setSyncStatus('online'); toast('☁️ 로컬 데이터를 서버에 업로드했습니다','var(--green)'); })
                                 .catch(e=>{ console.error('업로드 실패:',e); setSyncStatus('error'); });
                             _connectGuard    = false;
@@ -974,9 +1000,9 @@ function _doConnect(id, auto=false) {
                 // ★ v99 fix: _minifyOrder 적용 + version 포함
                 const ordersMap = {};
                 orders.forEach(o => { ordersMap[o.id] = _minifyOrder(o); });
-                const ver = Date.now();
+                const ver = Math.max(Date.now(), (parseInt(localStorage.getItem('ws_version') || '0', 10) || 0) + 1); // ★ v183: 마지막으로 본 version보다 항상 크게
                 localStorage.setItem('ws_version', String(ver));
-                workspaceRef.update({
+                Promise.resolve().then(() => workspaceRef.update(_fbSanitize({
                     clients:    clients.map(_minifyClient),
                     orders:     ordersMap,
                     prices,
@@ -984,7 +1010,7 @@ function _doConnect(id, auto=false) {
                     lastUpdated: new Date().toISOString(),
                     writtenBy:  SESSION_ID,
                     version:    ver,
-                }).then(() => {
+                }, 'initialUpload'))).then(() => {
                     lastHash.clients = ch; lastHash.orders = oh; lastHash.prices = ph; lastHash.stock = sh;
                     setSyncStatus('online');
                     toast('☁️ 로컬 데이터를 서버에 업로드했습니다', 'var(--green)');

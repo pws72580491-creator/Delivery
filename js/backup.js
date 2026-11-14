@@ -147,7 +147,7 @@ async function runBackupCloudOnly(label='가져오기전') {
     const payload= { label, backupDate:dateStr, autoTrigger:false, clients, orders, prices, stockItems,
                      clientsCount:clients.length, ordersCount:orders.length,
                      writtenBy: SESSION_ID };
-    await workspaceRef.child('backups').child(key).set(payload);
+    await workspaceRef.child('backups').child(key).set(_fbSanitize(payload, 'backup'));
     const snap=await workspaceRef.child('backups').orderByKey().once('value');
     const keys=Object.keys(snap.val()||{}).sort();
     if (keys.length>10) {
@@ -166,10 +166,10 @@ function _newBackupRef() {
 async function _backupWrite(key, payload) {
     const nref = _newBackupRef();
     if (nref) {
-        try { await nref.child(key).set(payload); return nref; }
+        try { await nref.child(key).set(_fbSanitize(payload, 'backup')); return nref; }
         catch (e) { console.warn('백업 새 경로 쓰기 실패 → 기존 위치로 폴백:', e && e.message); }
     }
-    await workspaceRef.child('backups').child(key).set(payload);
+    await workspaceRef.child('backups').child(key).set(_fbSanitize(payload, 'backup'));
     return workspaceRef.child('backups');
 }
 // 새 위치 + 기존 위치(아직 이전 전)의 백업을 합쳐서 읽는다 (같은 key면 새 위치 우선)
@@ -320,7 +320,8 @@ async function restoreBackup(key) {
         //   이후 삭제(orders/{id}=null)가 먹지 않거나 같은 전표가 중복되는 문제가 있었음.
         //   → 다른 경로와 동일하게 orders/{id} 로 올리고, 복원으로 사라질 내 전표는 서버에서도 삭제한다.
         //   (서버에만 있는 전표, 예: 공유거래처 대납으로 상대가 써넣은 것은 건드리지 않음)
-        const _restoreVersion = Date.now();
+        // ★ v183: 업로드와 같은 기준 — 마지막으로 본 version보다 항상 크게(시계가 빠른 기기가 남긴 version보다 작으면 복원본이 무시될 수 있음)
+        const _restoreVersion = Math.max(Date.now(), (parseInt(localStorage.getItem('ws_version') || '0', 10) || 0) + 1);
         const upd = {
             clients: clients.map(_minifyClient), prices, stockItems,
             lastUpdated: new Date().toISOString(),
@@ -330,7 +331,7 @@ async function restoreBackup(key) {
         const _newIdSet = new Set(orders.map(o => String(o.id)));
         orders.forEach(o => { _putOrderUpdate(upd, o, _minifyOrder(o)); });
         prevOrderIds.forEach(id => { if (!_newIdSet.has(id)) upd['orders/' + id] = null; });
-        await workspaceRef.update(upd);
+        await workspaceRef.update(_fbSanitize(upd, 'restore')); // ★ v183: undefined/NaN 보정
         localStorage.setItem('ws_version', String(_restoreVersion));
         _clearOrderDelta(); // 복원으로 전체가 서버와 일치 → 이전 추적 정보 폐기
         lastHash={clients:ch, orders:oh, prices:ph, stock:sh};

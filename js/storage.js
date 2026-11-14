@@ -278,7 +278,8 @@ function normalizeBackupData(data) {
     return { clients: clients_out, orders: orders_out, stockItems: stock_out };
 }
 
-const debouncedSync = debounce(async () => {
+let _syncExcRetry = 0; // ★ v182: 예외로 실패한 동기화의 자동 재시도 횟수(성공하면 0으로 복귀)
+async function _debouncedSyncImpl() {
     if (!workspaceRef || !isConnected) { diagLog('⏭ 동기화 스킵', `workspaceRef=${!!workspaceRef}, isConnected=${isConnected}`); return; }  // 오프라인이거나 미연결 시 즉시 중단
     // ★ v99 fix: 이미 업로드 진행 중이면 중복 실행 차단 (이후 호출은 debounce 재예약으로 처리)
     if (_syncGuard) { diagLog('⏭ 동기화 스킵', `이미 진행 중 (_syncGuard, ${Math.round((Date.now()-_syncGuardSetAt)/1000)}초째)`); return; }
@@ -362,7 +363,9 @@ const debouncedSync = debounce(async () => {
     updates.writtenBy   = SESSION_ID;
     // ★ version: 업로드마다 단조 증가 (로컬 timestamp 기반)
     // _fbValueHandler에서 version이 로컬보다 작으면 서버 수신을 무시해 충돌 방지
-    updates.version = Date.now();
+    // ★ v180: 기기 시계가 달라도 다른 기기가 내 변경을 '낡은 데이터'로 무시하지 않도록, 마지막으로 본 version보다 항상 크게 한다.
+    //   (예전엔 Date.now()만 써서, 시계가 빠른 기기가 쓴 version보다 느린 기기의 version이 작으면 빠른 기기가 느린 기기의 변경을 시계 차이만큼 무시했다)
+    updates.version = Math.max(Date.now(), (parseInt(localStorage.getItem('ws_version') || '0', 10) || 0) + 1);
     // ★ v164: 업로드가 실패하면 version을 원래대로 되돌림 — 실패한 시도의 version이 남으면
     //   다른 기기의 정상 변경이 '서버 version이 낮다'며 무시될 수 있었음
     const _prevVer = localStorage.getItem('ws_version');
@@ -402,8 +405,10 @@ const debouncedSync = debounce(async () => {
         _beginErrorGrace(15000);
         return;
     }
-    _withTimeout(workspaceRef.update(updates), 8000, 'orders.update')
+    // ★ v182: update()가 동기적으로 던지는 예외(undefined/NaN 등)도 아래 .catch로 흘러가도록 Promise 안에서 호출 + 데이터 보정
+    _withTimeout(Promise.resolve().then(() => workspaceRef.update(_fbSanitize(updates, 'debouncedSync'))), 8000, 'orders.update')
         .then(() => {
+            _syncExcRetry = 0;
             diagLog('✅ 동기화 성공');
             // ★ v164: 이번에 올린 id만 추적에서 제거 — 업로드 중 새로 생긴 변경은 남겨 둔다
             _releaseOrderDeltaSnapshot(_deltaSnap);
@@ -431,6 +436,20 @@ const debouncedSync = debounce(async () => {
             // ★ 업로드 실패해도 보류됐던 타기기 변경 처리
             if (_pendingFbSnap) { const s = _pendingFbSnap; _pendingFbSnap = null; _fbValueHandler(s); }
         });
+}
+
+const debouncedSync = debounce(async () => {
+    // ★ v182: 업로드 준비 중 어떤 예외가 나도 _syncGuard가 잠긴 채 "동기화 중…"에 멈추지 않도록 보호
+    try {
+        await _debouncedSyncImpl();
+    } catch (e) {
+        diagLog('❌ 동기화 예외', String(e && e.message || e));
+        console.error('동기화 예외:', e);
+        lastHash.clients = ''; lastHash.orders = ''; lastHash.prices = ''; lastHash.stock = '';
+        _syncGuard = false;
+        setSyncStatus('error');
+        if (_syncExcRetry < 3 && isConnected) { _syncExcRetry++; setTimeout(() => debouncedSync(), 4000); }
+    }
 }, 800);
 
 // ─── 금액 입력 필드 콤마 자동 포매터 ───────────────────────────────────────

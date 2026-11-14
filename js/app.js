@@ -958,7 +958,8 @@ async function _flushSync() {
     updates.lastUpdated = nowIso;
     updates.writtenBy   = SESSION_ID;
     // ★ v99 fix: version 필드 포함 — _fbValueHandler의 stale 감지가 flushSync echo도 올바르게 처리
-    updates.version = Date.now();
+    // ★ v180: debouncedSync와 동일 — 마지막으로 본 version보다 항상 크게(기기 시계 차이로 변경이 무시되지 않도록)
+    updates.version = Math.max(Date.now(), (parseInt(localStorage.getItem('ws_version') || '0', 10) || 0) + 1);
     // ★ v164: 실패/중단 시 version 원복 (debouncedSync와 동일한 이유)
     const _prevVer = localStorage.getItem('ws_version');
     localStorage.setItem('ws_version', String(updates.version));
@@ -987,7 +988,7 @@ async function _flushSync() {
             if (updates.stockItems) lastHash.stock   = '';
         }
     }, 300);
-    _withTimeout(workspaceRef.update(updates), 5000, 'flushSync.update').then(() => {
+    _withTimeout(Promise.resolve().then(() => workspaceRef.update(_fbSanitize(updates, 'flushSync'))), 5000, 'flushSync.update').then(() => {
         clearInterval(_flushAbortCheck);
         _flushSyncInProgress = false;
         diagLog('✅ flushSync 성공');
@@ -1135,3 +1136,18 @@ window.addEventListener('pagehide', _flushSync);
         }, 80);
     });
 })();
+
+
+// ★ v182: 업로드 잠금(_syncGuard) 주기 워치독 — 예전엔 '백그라운드에서 돌아올 때'만 박제를 풀어서,
+//   앱을 켜 둔 채로 잠금이 풀리지 않으면 이후 모든 동기화가 멈춘 채 "동기화 중…"이 계속 표시됐다.
+setInterval(() => {
+    try {
+        if (_syncGuard && _syncGuardSetAt && (Date.now() - _syncGuardSetAt > 20000)) {
+            diagLog('🚨 워치독(주기): _syncGuard 박제 감지 → 강제 해제', `${Math.round((Date.now() - _syncGuardSetAt) / 1000)}초간 멈춰있었음`);
+            _syncGuard = false;
+            // 실패한 업로드가 다시 시도되도록 hash를 비우고 재예약
+            lastHash.clients = ''; lastHash.orders = ''; lastHash.prices = ''; lastHash.stock = '';
+            if (isConnected) { setSyncStatus('online'); debouncedSync(); } else { setSyncStatus('offline'); }
+        }
+    } catch (e) { /* 워치독은 절대 예외를 내지 않는다 */ }
+}, 10000);

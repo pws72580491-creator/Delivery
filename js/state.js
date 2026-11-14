@@ -229,6 +229,30 @@ function _withTimeout(promise, ms, label) {
     });
 }
 
+// ★ v182: Firebase는 undefined·NaN·Infinity가 하나라도 섞인 데이터를 올리면 update()가 '즉시 예외'를 던진다.
+//   이 예외는 Promise 체인 밖에서 발생해 .catch가 받지 못했고, 동기화 표시가 "동기화 중…"에 멈추며
+//   _syncGuard(업로드 잠금)가 풀리지 않아 그 뒤의 모든 업로드가 막혔다(재고 탭에서 자주 발생).
+//   업로드 직전에 문제 값을 찾아 진단 로그에 경로를 남기고, 해당 값을 제거(undefined)/비움(NaN→null)한 사본을 올린다.
+function _fbFindBad(v, path) {
+    if (v === undefined) return path || '(root)';
+    if (typeof v === 'number' && !isFinite(v)) return path || '(root)';
+    if (v && typeof v === 'object') {
+        for (const k of Object.keys(v)) {
+            const r = _fbFindBad(v[k], path + '/' + k);
+            if (r) return r;
+        }
+    }
+    return null;
+}
+function _fbSanitize(payload, label) {
+    let bad = null;
+    try { bad = _fbFindBad(payload, ''); } catch (e) { bad = null; }
+    if (!bad) return payload;
+    try { diagLog('⚠️ 업로드 데이터 보정', `${label || ''} ${bad} — undefined/NaN 값을 제거하고 업로드`); } catch (e) {}
+    console.warn('[업로드 데이터 보정]', label, bad);
+    return JSON.parse(JSON.stringify(payload)); // undefined는 제거, NaN/Infinity는 null(=필드 없음)
+}
+
 // ★ v108: 동기화 진단 로그
 // 백그라운드 복귀 후 동기화 오류 등이 발생하는 원인을 사용자가 직접 들여다볼 수 있도록
 // 핵심 동기화 이벤트(연결 상태 전환, 가드 설정/해제, 타임아웃 등)를 시각과 함께 남김.

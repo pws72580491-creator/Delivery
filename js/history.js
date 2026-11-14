@@ -860,7 +860,7 @@ function _applyOeditVoidUI(isVoid) {
     } else {
         sw.style.background   = 'var(--surf3)';
         sw.style.borderColor  = 'var(--border)';
-        knob.style.background = 'var(--text3)';
+        knob.style.background = 'var(--dim-fill)'; // ★ v183: 글자색(text3)이 아닌 채움색 — index.html 초기값과 동일
         knob.style.transform  = 'translateX(0)';
     }
 }

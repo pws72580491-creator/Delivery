@@ -9,6 +9,7 @@ function normStock(s) {
     // (Firebase 동기화 충돌로 qty 필드가 오래된 값으로 덮어써질 때 방지)
     // 단, after 값이 명확히 정의된 로그 항목만 신뢰 (after가 null/undefined인 오래된 항목 제외)
     let qty = Number(s.qty ?? 0);
+    if (!isFinite(qty)) qty = 0; // ★ v182: NaN이 들어가면 업로드가 막힘
     if (log.length > 0) {
         // log는 최신순(unshift) 정렬 — at 타임스탬프 기준으로 가장 최근 것 선택
         const validLogs = log.filter(l => l.at && l.after !== undefined && l.after !== null && !isNaN(Number(l.after)));
@@ -26,8 +27,8 @@ function normStock(s) {
         name:    s.name    || '',
         qty,
         unit:    s.unit    || '개',
-        low:     Number(s.low    ?? 10),
-        danger:  Number(s.danger ?? 3),
+        low:     isFinite(Number(s.low    ?? 10)) ? Number(s.low    ?? 10) : 10, // ★ v182: NaN 방지
+        danger:  isFinite(Number(s.danger ?? 3))  ? Number(s.danger ?? 3)  : 3,
         note:    s.note    || '',
         log,
         lastCarryDate: s.lastCarryDate || '',   // 이월 중복 방지: Firebase 동기화 후에도 유지
