@@ -352,13 +352,11 @@ async function _loadSharedClientsFromWs() {
         return;
     }
     const result = [];
-    const _fetchedOk = new Set(); // ★ v180: 공유 거래처 목록을 정상적으로 읽은 워크스페이스(읽기 실패와 '목록 없음'을 구분)
     await Promise.all(wsArr.map(async item => {
         const wsId    = item.wsId || item;
         const wsLabel = item.label || wsId;
         try {
             const snap = await firebase.database().ref(`workspaces/${wsId}/sharedClients`).get();
-            _fetchedOk.add(wsId);
             if (!snap.exists()) return;
             // sharedClients: string[] (공개 허용 거래처 이름 목록)
             const rawList = snap.val() || [];
@@ -390,19 +388,7 @@ async function _loadSharedClientsFromWs() {
     await Promise.all(wsArr.map(async item => {
         const wsId    = item.wsId || item;
         const wsLabel = item.label || wsId;
-        // ★ v180: 이미 등록된 리스너도 상대(A)가 공개하는 거래처 목록이 바뀌었으면 다시 등록한다.
-        //   예전엔 등록 때의 allowedNames를 계속 써서, A가 거래처를 새로 공개해도 앱을 완전히 다시 켜기 전까지
-        //   그 거래처의 대납 전표가 B에게 보이지 않았고, 공개를 해제해도 계속 보였다.
-        const _existing = _sharedOrdersListeners[wsId];
-        if (_existing) {
-            if (!_fetchedOk.has(wsId)) return; // 이번에 목록을 못 읽었으면 기존 리스너 유지
-            const _now = result.filter(r => r.wsId === wsId).map(r => r.name).sort().join('|');
-            const _old = (_existing.allowedNames || []).slice().sort().join('|');
-            if (_now === _old) return;          // 변경 없음
-            if (_existing.ref && _existing.cb) _existing.ref.off('value', _existing.cb);
-            delete _sharedOrdersListeners[wsId];
-            _sharedOrdersCache = _sharedOrdersCache.filter(o => o._sharedWsId !== wsId);
-        }
+        if (_sharedOrdersListeners[wsId]) return; // 이미 등록됨
 
         try {
             // 공개된 거래처 이름 목록 확인

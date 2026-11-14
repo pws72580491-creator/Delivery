@@ -958,8 +958,7 @@ async function _flushSync() {
     updates.lastUpdated = nowIso;
     updates.writtenBy   = SESSION_ID;
     // ★ v99 fix: version 필드 포함 — _fbValueHandler의 stale 감지가 flushSync echo도 올바르게 처리
-    // ★ v180: debouncedSync와 동일 — 마지막으로 본 version보다 항상 크게(기기 시계 차이로 변경이 무시되지 않도록)
-    updates.version = Math.max(Date.now(), (parseInt(localStorage.getItem('ws_version') || '0', 10) || 0) + 1);
+    updates.version = Date.now();
     // ★ v164: 실패/중단 시 version 원복 (debouncedSync와 동일한 이유)
     const _prevVer = localStorage.getItem('ws_version');
     localStorage.setItem('ws_version', String(updates.version));
