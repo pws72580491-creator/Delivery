@@ -49,8 +49,8 @@ function _renderTab(name) {
     } else if (name === 'settlement') {
         const st = document.getElementById('settlementTable');
         const sb = document.getElementById('settleToggleBtn');
-        if (st) st.style.display = settleListVisible ? 'block' : 'none';
-        if (sb) sb.textContent   = settleListVisible ? '숨기기' : '보이기';
+        if (st) st.style.display = 'none';     // ★ v184: 목록은 새 창에서만 보여준다
+        if (sb) sb.textContent   = '보이기';
         if (settleUnit === 'monthly')   renderSettlement();
         if (settleUnit === 'daily')     renderSettlementDaily();
         if (settleUnit === 'quarterly') renderSettlementQuarterly();
@@ -142,6 +142,7 @@ function toggleTheme() {
 // ─── 탭 ───
 
 function showTab(name) {
+    if (name !== 'stock' && typeof stockReorderExit === 'function') stockReorderExit(); // ★ v184: 순서 편집 중 다른 탭으로 가면 조용히 종료
     document.querySelectorAll('.tab, .pane').forEach(el => el.classList.remove('active'));
     const tab  = document.querySelector(`.tab[data-tab="${name}"]`);
     const pane = document.getElementById('pane-' + name);
@@ -177,8 +178,8 @@ function showTab(name) {
     if (name === 'settlement') {
         const st = document.getElementById('settlementTable');
         const sb = document.getElementById('settleToggleBtn');
-        if (st) st.style.display = settleListVisible ? 'block' : 'none';
-        if (sb) sb.textContent   = settleListVisible ? '숨기기' : '보이기';
+        if (st) st.style.display = 'none';     // ★ v184: 목록은 새 창에서만 보여준다
+        if (sb) sb.textContent   = '보이기';
     }
     if (name === 'stock') {
         const sdInput = document.getElementById('stockViewDate');
@@ -208,7 +209,7 @@ let _modalHistoryPushed = false;
 
 const _MODAL_IDS = [
     'payEditModal','partialPayModal',
-    'firebaseModal','detailModal','statementModal',
+    'firebaseModal','detailModal','statementModal','settleListModal',
     'clientEditModal','orderEditModal',
     'stockEditModal','stockAdjModal','stockLogModal',
     'bulkPayPopup','deliveryConfirmPopup',
@@ -269,7 +270,7 @@ window.addEventListener('popstate', () => {
 // 모달 외부 클릭 닫기 + 드롭다운 외부 클릭 닫기 (통합 핸들러)
 document.addEventListener('click', e => {
     // 모달 오버레이 직접 클릭 시 닫기
-    ['firebaseModal','detailModal','statementModal','partialPayModal','payEditModal','clientEditModal','orderEditModal','stockEditModal','stockAdjModal','stockLogModal'].forEach(id => {
+    ['firebaseModal','detailModal','statementModal','settleListModal','partialPayModal','payEditModal','clientEditModal','orderEditModal','stockEditModal','stockAdjModal','stockLogModal'].forEach(id => {
         const el = document.getElementById(id);
         if (el && e.target === el) closeModal(id);
     });

@@ -399,13 +399,7 @@ window.addEventListener('DOMContentLoaded', () => {
                             if (tb) tb.textContent = '숨기기';
                             renderClients();
                         }
-                        // 정산 목록이 숨겨져 있으면 자동 펼치기
-                        if (id === 'settleSearch' && !settleListVisible) {
-                            settleListVisible = true;
-                            if (target) target.style.display = 'block';
-                            const sb = document.getElementById('settleToggleBtn');
-                            if (sb) sb.textContent = '숨기기';
-                        }
+                        // ★ v184: 정산 목록은 새 창에서 보여주므로 검색창에 포커스해도 인라인으로 펼치지 않는다
                         if (target) {
                             target.scrollIntoView({ behavior: 'smooth', block: 'start' });
                         }

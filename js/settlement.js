@@ -39,8 +39,8 @@ function setSettleUnit(btn) {
     if (settleUnit === 'monthly') {
         const st = document.getElementById('settlementTable');
         const sb = document.getElementById('settleToggleBtn');
-        if (st) st.style.display = settleListVisible ? 'block' : 'none';
-        if (sb) sb.textContent = settleListVisible ? '숨기기' : '보이기';
+        if (st) st.style.display = 'none';     // ★ v184: 목록은 새 창에서만 보여준다
+        if (sb) sb.textContent = '보이기';
     }
     // 렌더
     _refreshSettlementIfActive();
@@ -145,7 +145,7 @@ function renderSettlement() {
         window._settleMap[key].paid += _actualPaid(o);
         window._settleMap[key].count++;
     });
-    if (settleListVisible) renderSettleTable();
+    if (_settleModalOpen()) renderSettleTable();
 }
 
 // ── 일별 정산 (날짜 선택 → 해당일 상세) ──
@@ -308,21 +308,41 @@ function renderSettlementQuarterly() {
         </div>`;
 }
 
+// ★ v184: '보이기'는 목록을 화면 안에서 펼치는 대신 새 창(모달)으로 연다.
+function _settleModalOpen() { return !!document.getElementById('settleListModal')?.classList.contains('open'); }
+
+function openSettleListModal(q) {
+    // 월 데이터가 아직 집계되지 않았으면 먼저 집계
+    if (!window._settleMap || !Object.keys(window._settleMap).length) renderSettlement();
+    const mi = document.getElementById('settleSearchModal');
+    if (mi) mi.value = q || '';
+    settleListVisible = true;
+    openModal('settleListModal');
+    renderSettleTable();
+}
+
+function closeSettleListModal() {
+    settleListVisible = false;
+    closeModal('settleListModal');
+}
+
 function toggleSettleList() {
-    settleListVisible = !settleListVisible;
-    const el = document.getElementById('settlementTable');
-    el.style.display = settleListVisible ? 'block' : 'none';
-    document.getElementById('settleToggleBtn').textContent = settleListVisible ? '숨기기' : '보이기';
-    if (settleListVisible) renderSettleTable();
+    if (_settleModalOpen()) closeSettleListModal(); else openSettleListModal('');
 }
 
 function renderSettleTable() {
-    const q   = document.getElementById('settleSearch').value;
+    // ★ v184: 목록은 새 창(settleListModal)에만 그린다. 창이 닫혀 있으면 아무것도 하지 않는다.
+    const _open = _settleModalOpen();
+    settleListVisible = _open;
+    if (!_open) return;
+    const q   = document.getElementById('settleSearchModal')?.value || '';
     const map = window._settleMap||{};
     const month = window._settleMonth||'';
     let entries = Object.entries(map).sort((a,b)=>a[0].localeCompare(b[0],'ko'));
     if (q) entries = entries.filter(([name])=>matchSearch(name,q));
-    const el = document.getElementById('settlementTable');
+    const el = document.getElementById('settleModalBody');
+    const _ttl = document.getElementById('settleListTitle');
+    if (_ttl) _ttl.textContent = '📋 거래처별 정산' + (month ? ' · ' + month : '');
     if (!entries.length) { el.innerHTML='<div class="empty"><div class="empty-text">해당 기간 내역이 없습니다</div></div>'; return; }
     el.innerHTML = `
         <p style="font-size:11px;color:var(--text2);margin-bottom:6px;">💡 거래처 클릭 시 상세 명세서 · ${entries.length}개 거래처</p>
@@ -357,18 +377,12 @@ function renderSettleTable() {
 }
 
 function onSettleSearch(q) {
-    // 검색어 있을 때 테이블 자동 노출
-    if (q && !settleListVisible) {
-        settleListVisible = true;
-        const el = document.getElementById('settlementTable');
-        el.style.display = 'block';
-        document.getElementById('settleToggleBtn').textContent = '숨기기';
-    }
-    // _settleMap이 비어있으면 renderSettlement 먼저 실행
-    if (!window._settleMap || !Object.keys(window._settleMap).length) {
-        renderSettlement();
-    }
-    renderSettleTable();
+    // ★ v184: 검색어를 입력하면 새 창을 열고 검색어를 넘긴다(입력창은 비움)
+    if (!q) return;
+    const inline = document.getElementById('settleSearch');
+    if (inline) inline.value = '';
+    if (inline) inline.blur();
+    openSettleListModal(q);
 }
 
 // ─── 거래명세표 공유 (카카오톡 / 시스템 공유 시트) ───

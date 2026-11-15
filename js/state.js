@@ -91,13 +91,21 @@ let tempGroups = [];
 let editingClientId = null;
 
 // ─── 재고 ───
-let stockItems     = (_loadJSON('p_stock') || []).map(si => si ? {
-    id: si.id || _uid(), name: (si.name || '').trim(), qty: Number(si.qty ?? 0),
-    unit: si.unit || '개', low: Number(si.low ?? 10), danger: Number(si.danger ?? 3),
-    note: si.note || '', log: Array.isArray(si.log) ? si.log : [],
-    lastCarryDate: si.lastCarryDate || undefined, // ★ v173: 예전엔 여기서 버려져 앱을 켤 때마다 이월 재계산이 다시 돌았음
-    updatedAt: si.updatedAt || new Date().toISOString()
-} : null).filter(Boolean);
+let stockItems     = (_loadJSON('p_stock') || []).map(si => {
+    if (!si) return null;
+    const o = {
+        id: si.id || _uid(), name: (si.name || '').trim(), qty: Number(si.qty ?? 0),
+        unit: si.unit || '개', low: Number(si.low ?? 10), danger: Number(si.danger ?? 3),
+        note: si.note || '', log: Array.isArray(si.log) ? si.log : [],
+        updatedAt: si.updatedAt || new Date().toISOString()
+    };
+    // ★ v173: lastCarryDate는 예전엔 여기서 버려져 앱을 켤 때마다 이월 재계산이 다시 돌았음.
+    // ★ v184: 값이 없을 때 'undefined'를 넣던 것을 없앴다(undefined 필드가 업로드를 막는 원인 중 하나였음) + sortOrder(카드 순서) 보존.
+    if (si.lastCarryDate) o.lastCarryDate = si.lastCarryDate;
+    const _so = Number(si.sortOrder);
+    if (si.sortOrder !== undefined && si.sortOrder !== null && si.sortOrder !== '' && isFinite(_so)) o.sortOrder = _so;
+    return o;
+}).filter(Boolean);
 let stockSortMode  = 'name';
 // 최초 실행(null) 또는 '1'이면 ON — 기본값 ON
 let stockAutoDeduct = localStorage.getItem('stockAutoDeduct') !== '0';

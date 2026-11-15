@@ -22,7 +22,7 @@ function normStock(s) {
             qty = Number(latest.after);
         }
     }
-    return {
+    const _out = {
         id:      s.id      || _uid(),
         name:    s.name    || '',
         qty,
@@ -34,6 +34,10 @@ function normStock(s) {
         lastCarryDate: s.lastCarryDate || '',   // 이월 중복 방지: Firebase 동기화 후에도 유지
         updatedAt: s.updatedAt || new Date().toISOString()
     };
+    // ★ v184: 사용자가 정한 카드 순서(작을수록 위). 없으면 필드를 만들지 않는다(undefined가 업로드를 막지 않도록)
+    const _so = Number(s.sortOrder);
+    if (s.sortOrder !== undefined && s.sortOrder !== null && s.sortOrder !== '' && isFinite(_so)) _out.sortOrder = _so;
+    return _out;
 }
 
 // ─── 마이그레이션: 박스/판 단위 → 개 단위 (표시 라벨만 변경, 수량은 그대로 유지) ───
@@ -479,10 +483,211 @@ async function egQuickConfirm(id) {
           diff < 0 ? 'var(--red)' : 'var(--green)');
 }
 
+// ─── ★ v184: 재고 카드 순서 편집 ─────────────────────────────────────────
+//   카드를 길게(약 0.55초) 누르면 '순서 편집' 모드가 켜지고, ▲▼(⤒⤓)로 위아래로 옮긴다.
+//   순서는 품목마다 sortOrder(작을수록 위)로 저장되어 다른 기기와도 동기화된다.
+//   달걀 구역·기타 구역 안에서만 이동한다(기본 정렬 = 가나다 보기에서만 적용).
+const _STOCK_EGG_ORDER = ['왕란','특란','대란','중란'];
+const _STOCK_ETC_ORDER = [
+    '이른아침 왕란 30입','이른아침 특란 30입','이른아침 대란 30입','이른아침 초란 30입',
+    '이른아침 왕란 10입','이른아침 PURE특란 10입','이른아침 대란 10입',
+    '이른아침 PURE왕란 15입','이른아침 영양왕란 15입','이른아침 영양특란 10입',
+    '명품영양란 특란 30입',
+    '유정란 1번 10입','유정란 1번 30입',
+    '유정란 2번 10입','유정란 2번 15입','유정란 2번 30입',
+    '구운란 10입','구운란 벌크 30입','구운란 망 30입',
+    '메추리알 24알','깐메추리알 1kg'
+];
+let _stockReorderMode = false;   // 순서 편집 중
+let _stockReorderSel  = null;    // 방금 고른(누른) 품목 id
+let _stockClickBlockUntil = 0;   // 길게 누른 직후 따라오는 클릭 차단
+
+// 사용자 지정 순서 비교: 둘 다 있으면 숫자 순, 하나만 있으면 있는 쪽이 위, 둘 다 없으면 0(→ 기본 규칙)
+function _byUserOrder(a, b) {
+    const sa = Number.isFinite(a.sortOrder) ? a.sortOrder : null;
+    const sb = Number.isFinite(b.sortOrder) ? b.sortOrder : null;
+    if (sa !== null && sb !== null) return sa - sb;
+    if (sa !== null) return -1;
+    if (sb !== null) return 1;
+    return 0;
+}
+
+// 화면에 보이는 구역과 순서 (달걀 / 기타). 달걀 품목이 하나도 없으면 구역 이름 없이 한 덩어리.
+function _stockGroups(items) {
+    const eggItems = [], etcItems = [];
+    items.forEach(si => (_STOCK_EGG_ORDER.includes(si.name) ? eggItems : etcItems).push(si));
+    if (!eggItems.length) {
+        return [{ key: 'all', label: null,
+            arr: [...items].sort((a, b) => _byUserOrder(a, b) || a.name.localeCompare(b.name, 'ko')) }];
+    }
+    eggItems.sort((a, b) => _byUserOrder(a, b) || (_STOCK_EGG_ORDER.indexOf(a.name) - _STOCK_EGG_ORDER.indexOf(b.name)));
+    etcItems.sort((a, b) => {
+        const u = _byUserOrder(a, b);
+        if (u) return u;
+        const ai = _STOCK_ETC_ORDER.indexOf(a.name);
+        const bi = _STOCK_ETC_ORDER.indexOf(b.name);
+        if (ai === -1 && bi === -1) return a.name.localeCompare(b.name, 'ko');
+        if (ai === -1) return 1;
+        if (bi === -1) return -1;
+        return ai - bi;
+    });
+    const g = [{ key: 'egg', label: '🥚 달걀 품목', arr: eggItems }];
+    if (etcItems.length) g.push({ key: 'etc', label: '📦 기타 품목', arr: etcItems });
+    return g;
+}
+
+function _stockSafeId(id) { return String(id).replace(/[^a-zA-Z0-9_-]/g, '_'); }
+
+function _stockShowFloat(on) {
+    const f = document.getElementById('stockReorderFloat');
+    if (f) f.style.display = on ? 'flex' : 'none';
+}
+
+// 편집 모드에서도 카드 내용은 그대로 보여준다. 고른 카드만 테두리로 강조하고, 이동 버튼은 화면 아래 고정 바에 둔다.
+function _stockInfoBar() {
+    return '<div class="eg-ro-bar">↕ <b>순서 편집 중</b> — 옮길 카드를 눌러 고르고, 아래 ▲▼ 버튼으로 이동하세요. (달걀·기타 구역 안에서 이동)</div>';
+}
+
+// 고른 카드 강조 + 하단 바(이름·이동 가능 여부) 갱신
+function _stockUpdateReorderUI() {
+    document.querySelectorAll('#stockList .eg-card').forEach(c => c.classList.toggle('eg-sel', c.dataset.sid === _stockReorderSel));
+    const si = stockItems.find(x => x.id === _stockReorderSel);
+    const nameEl = document.getElementById('stockReorderSelName');
+    if (nameEl) nameEl.textContent = si ? si.name : '카드를 눌러 선택';
+    let atTop = true, atBottom = true;
+    if (si) {
+        const g = _stockGroups([...stockItems]).find(g => g.arr.some(s => s.id === si.id));
+        if (g) { const i = g.arr.findIndex(s => s.id === si.id); atTop = i === 0; atBottom = i === g.arr.length - 1; }
+    }
+    [['roTop', atTop], ['roUp', atTop], ['roDown', atBottom], ['roBottom', atBottom]].forEach(([id, dis]) => {
+        const bt = document.getElementById(id); if (bt) bt.disabled = !si || dis;
+    });
+    _stockShowFloat(true);
+}
+
+function _stockScrollToRow(id) {
+    const card = document.getElementById('egcard-' + _stockSafeId(id));
+    const cont = document.getElementById('mainContent');
+    if (!card) return;
+    if (!cont) { card.scrollIntoView({ block: 'center' }); return; }
+    // 위쪽은 고정 헤더, 아래쪽은 하단 이동 바 + 하단 메뉴에 가리지 않는 영역의 가운데로
+    const r = card.getBoundingClientRect(), c = cont.getBoundingClientRect();
+    const top    = c.top + 8;
+    const bottom = Math.min(c.bottom, window.innerHeight) - 150;
+    const target = top + Math.max(0, (bottom - top - r.height) / 2);   // 카드가 영역보다 크면 위쪽을 맞춤
+    cont.scrollTop += (r.top - target);
+}
+
+function stockReorderEnter(id) {
+    if (stockViewDate && stockViewDate < todayKST()) {
+        toast('📅 순서 변경은 오늘 날짜 재고에서만 할 수 있어요', 'var(--orange)');
+        return;
+    }
+    const qEl = document.getElementById('stockSearch'); if (qEl) qEl.value = '';
+    if (stockSortMode !== 'name') {
+        stockSortMode = 'name';
+        document.querySelectorAll('#pane-stock .sort-btn').forEach(b =>
+            b.classList.toggle('active', (b.getAttribute('onclick') || '').includes("'name'")));
+    }
+    _stockReorderMode = true;
+    _stockReorderSel  = id;
+    renderStock();
+    _stockScrollToRow(id);
+    // (안내는 목록 위쪽 설명 상자에 표시 — 토스트는 하단 '완료' 버튼을 가려서 쓰지 않는다)
+}
+
+function stockReorderSelect(id) {
+    _stockReorderSel = id;
+    _stockUpdateReorderUI();
+}
+
+function stockMoveSel(how) { if (_stockReorderSel) stockMove(_stockReorderSel, how); }
+
+function stockMove(id, how) {
+    const g = _stockGroups([...stockItems]).find(g => g.arr.some(s => s.id === id));
+    if (!g) return;
+    const arr = g.arr;
+    const i = arr.findIndex(s => s.id === id);
+    let j = i;
+    if      (how === 'up')     j = i - 1;
+    else if (how === 'down')   j = i + 1;
+    else if (how === 'top')    j = 0;
+    else if (how === 'bottom') j = arr.length - 1;
+    if (j < 0 || j >= arr.length || j === i) return;
+    const [it] = arr.splice(i, 1);
+    arr.splice(j, 0, it);
+    arr.forEach((s, k) => { s.sortOrder = (k + 1) * 10; });   // 구역 전체에 순번을 매겨 다른 기기에서도 같은 순서가 되게 함 (카드 내용은 건드리지 않음)
+    _stockReorderSel = id;
+    saveData(); _markDirty('stock');
+    renderStock();
+    _stockScrollToRow(id);
+}
+
+function stockReorderDone() {
+    const sel = _stockReorderSel;
+    _stockReorderMode = false;
+    _stockShowFloat(false);
+    renderStock();
+    if (sel) document.getElementById('egcard-' + _stockSafeId(sel))?.scrollIntoView({ block: 'center' });
+    toast('✔ 카드 순서가 저장되었습니다', 'var(--green)', 2200);
+}
+
+// 다른 탭으로 갈 때(조용히 종료)
+function stockReorderExit() {
+    if (!_stockReorderMode) { _stockShowFloat(false); return; }
+    _stockReorderMode = false;
+    _stockShowFloat(false);
+}
+
+// 길게 누르기 감지 (카드 어디든 · 스크롤하려고 움직이면 취소)
+(function _initStockLongPress() {
+    const LONG_MS = 550, MOVE_PX = 10;
+    let timer = null, sx = 0, sy = 0, sid = null;
+    const clear = () => { if (timer) { clearTimeout(timer); timer = null; } };
+    document.addEventListener('pointerdown', e => {
+        if (_stockReorderMode) return;
+        if (e.pointerType === 'mouse' && e.button !== 0) return;
+        const card = e.target.closest && e.target.closest('#stockList .eg-card');
+        if (!card) return;
+        sx = e.clientX; sy = e.clientY; sid = card.dataset.sid;
+        clear();
+        timer = setTimeout(() => {
+            timer = null;
+            _stockClickBlockUntil = Infinity;               // 손을 뗄 때까지(+여유) 따라오는 클릭 차단
+            try { if (navigator.vibrate) navigator.vibrate(25); } catch (_) {}
+            stockReorderEnter(sid);
+        }, LONG_MS);
+    }, { passive: true });
+    document.addEventListener('pointermove', e => {
+        if (timer && (Math.abs(e.clientX - sx) > MOVE_PX || Math.abs(e.clientY - sy) > MOVE_PX)) clear();
+    }, { passive: true });
+    document.addEventListener('pointerup', () => {
+        clear();
+        if (_stockClickBlockUntil === Infinity) _stockClickBlockUntil = Date.now() + 250;
+    }, true);
+    document.addEventListener('pointercancel', () => {
+        clear();
+        if (_stockClickBlockUntil === Infinity) _stockClickBlockUntil = Date.now() + 250;
+    }, true);
+    window.addEventListener('scroll', clear, { passive: true, capture: true });
+    document.addEventListener('click', e => {
+        if (Date.now() < _stockClickBlockUntil) { e.stopPropagation(); e.preventDefault(); return; }
+        if (_stockReorderMode) {                       // 편집 중에는 카드를 누르면 '선택'만 한다
+            const card = e.target.closest && e.target.closest('#stockList .eg-card');
+            if (card) { e.stopPropagation(); e.preventDefault(); stockReorderSelect(card.dataset.sid); }
+        }
+    }, true);
+    document.addEventListener('contextmenu', e => {
+        if (e.target.closest && e.target.closest('#stockList .eg-card')) e.preventDefault();
+    });
+})();
+
 function renderStock() {
     const q   = (document.getElementById('stockSearch')?.value || '').trim();
     let items = stockItems.filter(s => !q || matchSearch(s.name, q));
     const isHistory = !!(stockViewDate && stockViewDate < todayKST());
+    // ★ v184: 순서 편집은 '오늘 · 검색 없음 · 기본(가나다) 정렬'에서만 — 조건이 깨지면 편집 모드를 끈다
+    if (_stockReorderMode && (isHistory || q || stockSortMode !== 'name')) { _stockReorderMode = false; _stockShowFloat(false); }
     // 과거 조회 시 재고량 기준으로 정렬을 위해 임시 qty 스냅샷 사용
     const snapItems = isHistory
         ? items.map(s => ({ ...s, qty: getStockAtDate(s, stockViewDate) }))
@@ -540,47 +745,23 @@ function renderStock() {
         _egQuickState = {};
         return;
     }
-    const EGG_ORDER = ['왕란','특란','대란','중란'];
-    const ETC_ORDER = [
-        '이른아침 왕란 30입','이른아침 특란 30입','이른아침 대란 30입','이른아침 초란 30입',
-        '이른아침 왕란 10입','이른아침 PURE특란 10입','이른아침 대란 10입',
-        '이른아침 PURE왕란 15입','이른아침 영양왕란 15입','이른아침 영양특란 10입',
-        '명품영양란 특란 30입',
-        '유정란 1번 10입','유정란 1번 30입',
-        '유정란 2번 10입','유정란 2번 15입','유정란 2번 30입',
-        '구운란 10입','구운란 벌크 30입','구운란 망 30입',
-        '메추리알 24알','깐메추리알 1kg'
-    ];
-    const eggItems  = [];
-    const etcItems  = [];
-    if (!q && stockSortMode === 'name') {
-        items.forEach(si => {
-            if (EGG_ORDER.includes(si.name)) eggItems.push(si);
-            else etcItems.push(si);
-        });
-        eggItems.sort((a,b) => EGG_ORDER.indexOf(a.name) - EGG_ORDER.indexOf(b.name));
-        etcItems.sort((a, b) => {
-            const ai = ETC_ORDER.indexOf(a.name);
-            const bi = ETC_ORDER.indexOf(b.name);
-            if (ai === -1 && bi === -1) return a.name.localeCompare(b.name, 'ko');
-            if (ai === -1) return 1;
-            if (bi === -1) return -1;
-            return ai - bi;
-        });
-    }
+    // ★ v184: 달걀/기타 구역 나눔·정렬은 _stockGroups()가 담당 — 사용자가 정한 순서(sortOrder)가 있으면 그것을 우선
+    const _nameMode = (!q && stockSortMode === 'name');
+    const _ro = !!(_stockReorderMode && _nameMode);
+    el.classList.toggle('eg-reordering', _ro);
     const parts = [];
-    if (!q && stockSortMode === 'name' && eggItems.length > 0) {
-        parts.push('<div class="eg-section-label">🥚 달걀 품목</div>');
-        parts.push(...eggItems.map(_egCardHTML));
-        if (etcItems.length > 0) {
-            parts.push('<div class="eg-section-label" style="margin-top:8px;">📦 기타 품목</div>');
-            parts.push(...etcItems.map(_egCardHTML));
-        }
+    if (_ro) parts.push(_stockInfoBar());
+    if (_nameMode) {
+        _stockGroups(items).forEach(g => {
+            if (g.label) parts.push(`<div class="eg-section-label"${g.key === 'etc' ? ' style="margin-top:8px;"' : ''}>${g.label}</div>`);
+            parts.push(...g.arr.map(_egCardHTML));
+        });
     } else {
         parts.push(...items.map(_egCardHTML));
     }
     el.innerHTML = parts.join('');
     _egQuickState = {};
+    if (_ro) _stockUpdateReorderUI(); else _stockShowFloat(false);
 }
 
 function setStockSort(mode, btn) {
