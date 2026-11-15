@@ -13,7 +13,7 @@
     <meta name="apple-mobile-web-app-title" content="납품관리">
     <link rel="apple-touch-icon" href="./icon-192.png">
     <link rel="manifest" href="./manifest.json">
-    <title>납품 관리 Pro v183</title>
+    <title>납품 관리 Pro v185</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js" defer></script>
@@ -62,7 +62,7 @@
             <div class="logo-icon">📦</div>
             <div>
                 <div class="logo-text">납품 관리 Pro</div>
-                <div class="logo-sub">v183 · PWA 앱 설치 지원</div>
+                <div class="logo-sub">v185 · PWA 앱 설치 지원</div>
             </div>
         </div>
         <div class="header-btns">
@@ -644,7 +644,7 @@
     <div class="card">
         <div class="card-title">앱 정보</div>
         <div style="font-size:13px;color:var(--text2);line-height:2;margin-bottom:12px;">
-            버전: <strong style="color:var(--accent);">v183</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
+            버전: <strong style="color:var(--accent);">v185</strong> &nbsp;·&nbsp; PWA 앱 설치 지원<br>
             거래처: <span id="infoClients">0</span>개 &nbsp;·&nbsp;
             납품내역: <span id="infoOrders">0</span>건
         </div>
@@ -658,7 +658,15 @@
             <div id="changelogList" style="display:flex;flex-direction:column;gap:6px;">
                 <!-- 현재 버전 -->
                 <div class="changelog-item">
-                    <span class="changelog-ver" style="color:var(--green);">v183</span>
+                    <span class="changelog-ver" style="color:var(--green);">v185</span>
+                    <span class="changelog-desc">재고 카드 순서 편집 화면 개선 — 편집 중에도 재고 탭의 품목 카드(이전재고·입고·출고·현재재고·입고/출고/이력/수정 버튼)를 원래 모양 그대로 보여줍니다(v184는 간단한 줄 목록으로 바꿔 보여줬음). 길게 눌러 편집 모드를 켜면 눌러서 고른 카드가 테두리로 강조되고, 화면 아래 고정 바(품목 이름 · ⤒ ▲ ▼ ⤓ · 완료)로 이동합니다. 편집 중에는 카드를 누르면 "선택"만 되고 입고·출고·수정 같은 카드 동작은 실행되지 않아 실수로 재고가 바뀌지 않으며, 이동한 카드는 화면 가운데로 따라옵니다. 카드 내용·수량·이력은 바뀌지 않고 순서 값(sortOrder)만 저장됩니다.</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v184</span>
+                    <span class="changelog-desc">① 재고 카드 순서 편집 — 재고 탭에서 카드를 약 0.5초 길게 누르면 "순서 편집" 모드가 켜지고, 품목을 눌러 고른 뒤 ▲ ▼ (한 칸) · ⤒ ⤓ (맨 위·맨 아래)로 옮길 수 있습니다. 하단의 "순서 편집 완료"로 끝내며, 달걀 구역·기타 구역 안에서 이동합니다. 순서는 품목마다 저장되어 다른 기기와도 동기화됩니다(기본 가나다 보기·오늘 날짜에서만 적용, 새로 등록한 품목은 구역 맨 아래). 길게 누른 채 손가락을 움직이면(스크롤) 켜지지 않고, 재고순 등 다른 정렬에서 길게 누르면 가나다순으로 자동 전환합니다. ② 정산 탭 "보이기" — 목록을 화면 안에서 펼치는 대신 새 창으로 엽니다. 5개 열(거래처·건수·매출·수금·미수)이 가로 스크롤 없이 한 화면에 보이고, 새 창에서 검색할 수 있으며, 거래처를 누르면 명세서가 그 위에 열리고 닫으면 목록으로 돌아옵니다(뒤로가기도 한 겹씩 닫힘). 위쪽 검색창에 입력해도 새 창이 열려 검색어를 넘깁니다. ③ 앱을 다시 켤 때 재고 목록을 불러오는 부분이 값이 없는 항목에 undefined를 넣던 것을 수정(업로드가 막히는 원인 중 하나) — 새 순서 값도 이 단계에서 사라지지 않도록 함.</span>
+                </div>
+                <div class="changelog-item">
+                    <span class="changelog-ver">v183</span>
                     <span class="changelog-desc">리뷰 반영 + 통합. ① 공유(대납) 리스너: 목록 갱신이 같은 순간에 두 번 겹쳐 불리면(앱 시작·백그라운드 복귀·연결이 겹칠 때) 리스너가 중복 등록돼, 해제되지 않은 쪽이 옛 공개 목록으로 대납 전표를 계속 덮어쓸 수 있던 문제 수정 — 이미 읽은 목록을 그대로 쓰고 등록 직전에 다시 확인해 한 번만 등록, 재등록 때 목록을 한 번 더 읽다 실패해 리스너가 사라지던 경우와 목록 비교 시 중복 이름 때문에 재등록이 반복되던 경우도 해소. ② version을 항상 "마지막으로 본 값보다 크게" 올리는 규칙을 나머지 업로드에도 적용 — 백업 복원, 연결 직후 업로드 2곳(예전엔 Date.now()로 ws_version을 더 낮은 값으로 덮어쓸 수 있었음). ③ 백업 만들기·복원 때도 undefined/NaN 값을 보정해 올림(v182 업로드 보정과 동일). ④ 다크모드: 타인거래 스위치를 껐다 켜면 손잡이 색이 달라지던 곳(글자색을 직접 지정한 1곳)을 채움색으로 통일.</span>
                 </div>
                 <div class="changelog-item">
@@ -1704,11 +1712,34 @@
     <input type="hidden" id="qpOrderId">
 </div>
 
+<!-- ★ v184: 거래처별 정산 목록 (새 창) — 거래처를 누르면 명세서가 이 창 위에 열리고, 닫으면 이 목록으로 돌아옴 -->
+<div class="modal-overlay" id="settleListModal">
+    <div class="modal-sheet settle-list-sheet">
+        <div class="modal-handle"></div>
+        <div class="modal-title" id="settleListTitle" style="margin-bottom:10px;">📋 거래처별 정산</div>
+        <input type="text" class="form-input" id="settleSearchModal" placeholder="🔍 거래처 검색… (초성 가능: ㄱ,ㄴ,ㅅ…)" autocomplete="off" oninput="renderSettleTable()" ondblclick="this.select()" style="margin-bottom:10px;">
+        <div id="settleModalBody"></div>
+        <button class="btn btn-ghost btn-full" style="margin-top:12px;" onclick="closeSettleListModal()">닫기</button>
+    </div>
+</div>
+
 <div class="modal-overlay" id="statementModal">
     <div class="modal-sheet">
         <div class="modal-handle"></div>
         <div id="statementContent"></div>
         <button class="btn btn-ghost btn-full" style="margin-top:14px;" onclick="closeModal('statementModal')">닫기</button>
+    </div>
+</div>
+
+<!-- ★ v184: 재고 카드 순서 편집 완료 버튼(편집 중에만 표시) -->
+<div id="stockReorderFloat" class="eg-ro-float" style="display:none;">
+    <div class="eg-ro-tool">
+        <span class="eg-ro-sel" id="stockReorderSelName">카드를 눌러 선택</span>
+        <button class="eg-ro-btn" id="roTop"    title="맨 위로"   onclick="stockMoveSel('top')">⤒</button>
+        <button class="eg-ro-btn" id="roUp"     title="위로"      onclick="stockMoveSel('up')">▲</button>
+        <button class="eg-ro-btn" id="roDown"   title="아래로"    onclick="stockMoveSel('down')">▼</button>
+        <button class="eg-ro-btn" id="roBottom" title="맨 아래로" onclick="stockMoveSel('bottom')">⤓</button>
+        <button class="btn btn-primary btn-sm eg-ro-done" onclick="stockReorderDone()">완료</button>
     </div>
 </div>
 
